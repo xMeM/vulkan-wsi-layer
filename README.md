@@ -35,8 +35,7 @@ git clone https://github.com/KhronosGroup/Vulkan-Loader.git
 mkdir Vulkan-Loader/build
 cd Vulkan-Loader/build
 ../scripts/update_deps.py
-make -C Vulkan-Headers install
-cmake -C helper.cmake .. -DBUILD_WSI_HEADLESS_SUPPORT=ON
+cmake -C helper.cmake ..
 make
 make install
 ```

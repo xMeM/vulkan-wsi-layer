@@ -88,6 +88,7 @@ device_private_data &device_private_data::create(VkDevice dev, PFN_vkGetDevicePr
       new device_private_data(dev, get_proc, instance_private_data::get(get_key(phys_dev)), set_loader_data);
    scoped_mutex lock(g_data_lock);
    g_device_data[get_key(dev)] = dev_data;
+   return *dev_data;
 }
 
 device_private_data &device_private_data::get(void *key)
