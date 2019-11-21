@@ -29,11 +29,15 @@
 
 #define DISPATCH_TABLE_ENTRY(x) PFN_vk##x x;
 
-#define INSTANCE_ENTRYPOINTS_LIST(V)         \
-   V(GetInstanceProcAddr)                    \
-   V(GetPhysicalDeviceProperties)            \
-   V(GetPhysicalDeviceImageFormatProperties) \
-   V(EnumerateDeviceExtensionProperties)
+#define INSTANCE_ENTRYPOINTS_LIST(V)          \
+   V(GetInstanceProcAddr)                     \
+   V(GetPhysicalDeviceProperties)             \
+   V(GetPhysicalDeviceImageFormatProperties)  \
+   V(EnumerateDeviceExtensionProperties)      \
+   V(GetPhysicalDeviceSurfaceCapabilitiesKHR) \
+   V(GetPhysicalDeviceSurfaceFormatsKHR)      \
+   V(GetPhysicalDeviceSurfacePresentModesKHR) \
+   V(GetPhysicalDeviceSurfaceSupportKHR)
 
 namespace layer
 {

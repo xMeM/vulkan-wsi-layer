@@ -27,8 +27,6 @@
 #include <cstring>
 #include <vulkan/vk_layer.h>
 
-#include <wsi/surface_properties.hpp>
-
 #include "private_data.hpp"
 #include "surface_api.hpp"
 #include "swapchain_api.hpp"

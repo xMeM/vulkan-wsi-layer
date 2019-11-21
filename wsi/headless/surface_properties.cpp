@@ -43,6 +43,12 @@ namespace wsi
 namespace headless
 {
 
+surface_properties& surface_properties::get_instance()
+{
+   static surface_properties instance;
+   return instance;
+}
+
 VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                                       VkSurfaceCapabilitiesKHR *surface_capabilities)
 {

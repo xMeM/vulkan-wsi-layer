@@ -24,7 +24,9 @@
 
 #include <cassert>
 
-#include <wsi/headless/surface_properties.hpp>
+#include <wsi/wsi_factory.hpp>
+
+#include "private_data.hpp"
 #include "surface_api.hpp"
 
 extern "C"
@@ -36,11 +38,14 @@ extern "C"
    VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
       VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
    {
-      assert(physicalDevice);
-      assert(surface);
-      assert(pSurfaceCapabilities);
+      wsi::surface_properties *props = wsi::get_surface_properties(surface);
+      if (props)
+      {
+         return props->get_surface_capabilities(physicalDevice, surface, pSurfaceCapabilities);
+      }
 
-      return wsi::headless::surface_properties::get_surface_capabilities(physicalDevice, surface, pSurfaceCapabilities);
+      return layer::instance_private_data::get(layer::get_key(physicalDevice))
+         .disp.GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, pSurfaceCapabilities);
    }
 
    /**
@@ -51,10 +56,14 @@ extern "C"
                                                                       uint32_t *pSurfaceFormatCount,
                                                                       VkSurfaceFormatKHR *pSurfaceFormats)
    {
-      assert(physicalDevice);
-      assert(surface);
+      wsi::surface_properties *props = wsi::get_surface_properties(surface);
+      if (props)
+      {
+         return props->get_surface_formats(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats);
+      }
 
-      return wsi::headless::surface_properties::get_surface_formats(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats);
+      return layer::instance_private_data::get(layer::get_key(physicalDevice))
+         .disp.GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats);
    }
 
    /**
@@ -65,11 +74,14 @@ extern "C"
                                                                            uint32_t *pPresentModeCount,
                                                                            VkPresentModeKHR *pPresentModes)
    {
-      assert(physicalDevice);
-      assert(surface);
-      assert(pPresentModeCount);
+      wsi::surface_properties *props = wsi::get_surface_properties(surface);
+      if (props)
+      {
+         return props->get_surface_present_modes(physicalDevice, surface, pPresentModeCount, pPresentModes);
+      }
 
-      return wsi::headless::surface_properties::get_surface_present_modes(physicalDevice, surface, pPresentModeCount, pPresentModes);
+      return layer::instance_private_data::get(layer::get_key(physicalDevice))
+         .disp.GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, pPresentModeCount, pPresentModes);
    }
 
    /**
@@ -79,13 +91,16 @@ extern "C"
                                                                       uint32_t queueFamilyIndex, VkSurfaceKHR surface,
                                                                       VkBool32 *pSupported)
    {
-      assert(physicalDevice);
-      assert(surface);
-      assert(pSupported);
-
+      wsi::surface_properties *props = wsi::get_surface_properties(surface);
       /* We assume that presentation to surface is supported by default */
-      *pSupported = VK_TRUE;
-      return VK_SUCCESS;
+      if (props)
+      {
+         *pSupported = VK_TRUE;
+         return VK_SUCCESS;
+      }
+
+      return layer::instance_private_data::get(layer::get_key(physicalDevice))
+         .disp.GetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface, pSupported);
    }
 
 } /* extern "C" */

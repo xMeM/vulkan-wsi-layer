@@ -38,26 +38,26 @@ namespace wsi
 /**
  * @brief The base surface property query interface.
  */
-template <typename T>
-struct surface_properties
+class surface_properties
 {
-   static VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                            VkSurfaceCapabilitiesKHR *surface_capabilities)
-   {
-      return T::get_surface_capabilities(physical_device, surface, surface_capabilities);
-   }
+public:
+   /**
+    * Implementation of vkGetPhysicalDeviceSurfaceCapabilitiesKHR for the specific VkSurface type.
+    */
+   virtual VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                             VkSurfaceCapabilitiesKHR *surface_capabilities) = 0;
 
-   static VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                       uint32_t *surface_format_count, VkSurfaceFormatKHR *surface_formats)
-   {
-      return T::get_surface_formats(physical_device, surface, surface_format_count, surface_formats);
-   }
+   /**
+    * Implementation of vkGetPhysicalDeviceSurfaceFormatsKHR for the specific VkSurface type.
+    */
+   virtual VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                        uint32_t *surface_format_count, VkSurfaceFormatKHR *surface_formats) = 0;
 
-   static VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                             uint32_t *present_mode_count, VkPresentModeKHR *present_modes)
-   {
-      return T::get_surface_present_modes(physical_device, surface, present_mode_count, present_modes);
-   }
+   /**
+    * Implementation of vkGetPhysicalDeviceSurfacePresentModesKHR for the specific VkSurface type.
+    */
+   virtual VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                              uint32_t *present_mode_count, VkPresentModeKHR *present_modes) = 0;
 };
 
 } /* namespace wsi */

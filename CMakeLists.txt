@@ -47,6 +47,7 @@ add_library(${PROJECT_NAME} SHARED
    layer/swapchain_api.cpp
    util/timed_semaphore.cpp
    wsi/swapchain_base.cpp
+   wsi/wsi_factory.cpp
    wsi/headless/surface_properties.cpp
    wsi/headless/swapchain.cpp)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 11)

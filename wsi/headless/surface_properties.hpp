@@ -33,16 +33,19 @@ namespace wsi
 namespace headless
 {
 
-struct surface_properties
+class surface_properties : public wsi::surface_properties
 {
-   static VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                            VkSurfaceCapabilitiesKHR *pSurfaceCapabilities);
+public:
+   VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                     VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
 
-   static VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *surfaceFormatCount,
-                                       VkSurfaceFormatKHR *surfaceFormats);
+   VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *surfaceFormatCount,
+                                VkSurfaceFormatKHR *surfaceFormats) override;
 
-   static VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                             uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes);
+   VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                      uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;
+
+   static surface_properties &get_instance();
 };
 
 } /* namespace headless */

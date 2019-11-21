@@ -31,9 +31,8 @@
 #include <cassert>
 #include <cstdlib>
 #include <new>
-#include <vulkan/vk_icd.h>
 
-#include <wsi/headless/swapchain.hpp>
+#include <wsi/wsi_factory.hpp>
 
 #include "private_data.hpp"
 #include "swapchain_api.hpp"
@@ -48,27 +47,8 @@ extern "C"
    {
       assert(pSwapchain != nullptr);
 
-      wsi::swapchain_base *sc = nullptr;
-
-      VkIcdSurfaceBase *surface_base = reinterpret_cast<VkIcdSurfaceBase *>(pSwapchainCreateInfo->surface);
-      assert(VK_ICD_WSI_PLATFORM_HEADLESS == (int)surface_base->platform);
-
-      void *memory = nullptr;
-      if (pAllocator)
-      {
-         memory = static_cast<wsi::headless::swapchain *>(
-            pAllocator->pfnAllocation(pAllocator->pUserData, sizeof(wsi::headless::swapchain),
-                                      alignof(wsi::headless::swapchain), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
-      }
-      else
-      {
-         memory = static_cast<wsi::headless::swapchain *>(malloc(sizeof(wsi::headless::swapchain)));
-      }
-
-      if (memory)
-      {
-         sc = new (memory) wsi::headless::swapchain(layer::device_private_data::get(layer::get_key(device)), pAllocator);
-      }
+      wsi::swapchain_base *sc = wsi::allocate_surface_swapchain(
+         pSwapchainCreateInfo->surface, layer::device_private_data::get(layer::get_key(device)), pAllocator);
 
       if (sc == nullptr)
       {
@@ -79,17 +59,7 @@ extern "C"
       if (result != VK_SUCCESS)
       {
          /* Error occured during initialization, need to free allocated memory. */
-         sc->~swapchain_base();
-
-         if (pAllocator != nullptr)
-         {
-            pAllocator->pfnFree(pAllocator->pUserData, reinterpret_cast<void *>(sc));
-         }
-         else
-         {
-            free(reinterpret_cast<void *>(sc));
-         }
-
+         wsi::destroy_surface_swapchain(sc, pAllocator);
          return result;
       }
 
@@ -105,16 +75,7 @@ extern "C"
 
       wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
 
-      sc->~swapchain_base();
-
-      if (pAllocator != nullptr)
-      {
-         pAllocator->pfnFree(pAllocator->pUserData, reinterpret_cast<void *>(swapc));
-      }
-      else
-      {
-         free(reinterpret_cast<void *>(swapc));
-      }
+      wsi::destroy_surface_swapchain(sc, pAllocator);
    }
 
    VKAPI_ATTR VkResult wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc,
