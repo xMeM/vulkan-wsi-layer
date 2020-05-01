@@ -51,54 +51,41 @@
 namespace wsi
 {
 
-/**
- * @brief Per swapchain thread function that handles page flipping.
- * This thread should be running for the lifetime of the swapchain.
- * The thread simply calls the implementation's present_image() method.
- * There are 3 main cases we cover here:
- *
- * 1. On the first present of the swapchain if the swapchain has
- *    an ancestor we must wait for it to finish presenting.
- * 2. The normal use case where we do page flipping, in this
- *    case change the currently PRESENTED image with the oldest
- *    PENDING image.
- * 3. If the enqueued image is marked as FREE it means the
- *    descendant of the swapchain has started presenting so we
- *    should release the image and continue.
- *
- * The function always waits on the page_flip_semaphore of the
- * swapchain. Once it passes that we must wait for the fence of the
- * oldest pending image to be signalled, this means that the gpu has
- * finished rendering to it and we can present it. From there on the
- * logic splits into the above 3 cases and if an image has been
- * presented then the old one is marked as FREE and the free_image
- * semaphore of the swapchain will be posted.
- **/
-__attribute__((noreturn)) void *page_flip_thread(void *ptr)
+void swapchain_base::page_flip_thread()
 {
-   auto *sc = static_cast<swapchain_base *>(ptr);
-   wsi::swapchain_image *sc_images = sc->m_swapchain_images;
+   wsi::swapchain_image *sc_images = m_swapchain_images;
    VkResult vk_res = VK_SUCCESS;
    uint64_t timeout = UINT64_MAX;
+   constexpr uint64_t SEMAPHORE_TIMEOUT = 250000000; /* 250 ms. */
 
-   while (true)
+   /* No mutex is needed for the accesses to m_page_flip_thread_run variable as after the variable is
+    * initialized it is only ever changed to false. The while loop will make the thread read the
+    * value repeatedly, and the combination of semaphores and thread joins will force any changes to
+    * the variable to be visible to this thread.
+    */
+   while (m_page_flip_thread_run)
    {
       /* Waiting for the page_flip_semaphore which will be signalled once there is an
        * image to display.*/
-      sem_wait(&sc->m_page_flip_semaphore);
+      if ((vk_res = m_page_flip_semaphore.wait(SEMAPHORE_TIMEOUT)) == VK_TIMEOUT)
+      {
+         /* Image is not ready yet. */
+         continue;
+      }
+      assert(vk_res == VK_SUCCESS);
 
       /* We want to present the oldest queued for present image from our present queue,
        * which we can find at the sc->pending_buffer_pool.head index. */
-      uint32_t pending_index = sc->m_pending_buffer_pool.ring[sc->m_pending_buffer_pool.head];
-      sc->m_pending_buffer_pool.head = (sc->m_pending_buffer_pool.head + 1) % sc->m_pending_buffer_pool.size;
+      uint32_t pending_index = m_pending_buffer_pool.ring[m_pending_buffer_pool.head];
+      m_pending_buffer_pool.head = (m_pending_buffer_pool.head + 1) % m_pending_buffer_pool.size;
 
       /* We wait for the fence of the oldest pending image to be signalled. */
-      vk_res = sc->m_device_data.disp.WaitForFences(sc->m_device, 1, &sc_images[pending_index].present_fence, VK_TRUE,
+      vk_res = m_device_data.disp.WaitForFences(m_device, 1, &sc_images[pending_index].present_fence, VK_TRUE,
                                                     timeout);
       if (vk_res != VK_SUCCESS)
       {
-         sc->m_is_valid = false;
-         sc->m_free_image_semaphore.post();
+         m_is_valid = false;
+         m_free_image_semaphore.post();
          continue;
       }
 
@@ -106,31 +93,31 @@ __attribute__((noreturn)) void *page_flip_thread(void *ptr)
        * as FREE so we simply release it and continue. */
       if (sc_images[pending_index].status == swapchain_image::FREE)
       {
-         sc->destroy_image(sc_images[pending_index]);
-         sc->m_free_image_semaphore.post();
+         destroy_image(sc_images[pending_index]);
+         m_free_image_semaphore.post();
          continue;
       }
 
       /* First present of the swapchain. If it has an ancestor, wait until all the pending buffers
        * from the ancestor have finished page flipping before we set mode. */
-      if (sc->m_first_present)
+      if (m_first_present)
       {
-         if (sc->m_ancestor != VK_NULL_HANDLE)
+         if (m_ancestor != VK_NULL_HANDLE)
          {
-            auto *ancestor = reinterpret_cast<swapchain_base *>(sc->m_ancestor);
+            auto *ancestor = reinterpret_cast<swapchain_base *>(m_ancestor);
             ancestor->wait_for_pending_buffers();
          }
 
-         sem_post(&sc->m_start_present_semaphore);
+         sem_post(&m_start_present_semaphore);
 
-         sc->present_image(pending_index);
+         present_image(pending_index);
 
-         sc->m_first_present = false;
+         m_first_present = false;
       }
       /* The swapchain has already started presenting. */
       else
       {
-         sc->present_image(pending_index);
+         present_image(pending_index);
       }
    }
 }
@@ -161,6 +148,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_ancestor(VK_NULL_HANDLE)
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
+   , m_page_flip_thread_run(true)
 {
 }
 
@@ -289,7 +277,11 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    }
 
    /* Setup semaphore for signaling pageflip thread */
-   res = sem_init(&m_page_flip_semaphore, 0, 0);
+   result = m_page_flip_semaphore.init(0);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
 
    /* Only programming error can cause this to fail. */
    assert(res == 0);
@@ -309,11 +301,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    m_thread_sem_defined = true;
 
    /* Launch page flipping thread */
-   res = pthread_create(&m_page_flip_thread, NULL, page_flip_thread, static_cast<void *>(this));
-   if (res < 0)
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
+   m_page_flip_thread = std::thread(&swapchain_base::page_flip_thread, this);
+
    /* Release the swapchain images of the old swapchain in order
     * to free up memory for new swapchain. This is necessary especially
     * on platform with limited display memory size.
@@ -377,22 +366,16 @@ void swapchain_base::teardown()
 
    if (m_thread_sem_defined)
    {
-      res = pthread_cancel(m_page_flip_thread);
-      if (res != 0)
-      {
-         WSI_PRINT_ERROR("pthread_cancel failed for page_flip_thread %lu with %d\n", m_page_flip_thread, res);
-      }
+      /* Tell flip thread to end. */
+      m_page_flip_thread_run = false;
 
-      res = pthread_join(m_page_flip_thread, NULL);
-      if (res != 0)
+      if (m_page_flip_thread.joinable())
       {
-         WSI_PRINT_ERROR("pthread_join failed for page_flip_thread %lu with %d\n", m_page_flip_thread, res);
+         m_page_flip_thread.join();
       }
-
-      res = sem_destroy(&m_page_flip_semaphore);
-      if (res != 0)
+      else
       {
-         WSI_PRINT_ERROR("sem_destroy failed for page_flip_semaphore with %d\n", errno);
+         WSI_PRINT_ERROR("m_page_flip_thread is not joinable");
       }
 
       res = sem_destroy(&m_start_present_semaphore);
@@ -591,7 +574,7 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
       m_pending_buffer_pool.ring[m_pending_buffer_pool.tail] = image_index;
       m_pending_buffer_pool.tail = (m_pending_buffer_pool.tail + 1) % m_pending_buffer_pool.size;
 
-      sem_post(&m_page_flip_semaphore);
+      m_page_flip_semaphore.post();
 
       return VK_ERROR_OUT_OF_DATE_KHR;
    }
@@ -601,8 +584,7 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    m_pending_buffer_pool.ring[m_pending_buffer_pool.tail] = image_index;
    m_pending_buffer_pool.tail = (m_pending_buffer_pool.tail + 1) % m_pending_buffer_pool.size;
 
-   sem_post(&m_page_flip_semaphore);
-
+   m_page_flip_semaphore.post();
    return VK_SUCCESS;
 }
 

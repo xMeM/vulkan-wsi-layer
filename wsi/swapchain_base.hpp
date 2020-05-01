@@ -33,16 +33,13 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <vulkan/vulkan.h>
+#include <thread>
 
 #include <layer/private_data.hpp>
 #include <util/timed_semaphore.hpp>
 
 namespace wsi
 {
-
-/* Forward declare the page flip thread function so we can befriend it. */
-void *page_flip_thread(void *ptr);
-
 struct swapchain_image
 {
    enum status
@@ -136,14 +133,18 @@ public:
    VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index);
 
 protected:
-   friend void *page_flip_thread(void *ptr);
 
    layer::device_private_data &m_device_data;
 
    /**
     * @brief Handle to the page flip thread.
     */
-   pthread_t m_page_flip_thread;
+   std::thread m_page_flip_thread;
+
+   /**
+    * @brief Whether the page flip thread has to continue running or terminate.
+    */
+   bool m_page_flip_thread_run;
 
    /**
     * @brief In case we encounter threading or drm errors we need a way to
@@ -164,9 +165,9 @@ protected:
       uint32_t size;
    };
    /**
-    * @brief A semaphore to be signalled once a page flip even occurs.
+    * @brief A semaphore to be signalled once a page flip event occurs.
     */
-   sem_t m_page_flip_semaphore;
+   util::timed_semaphore m_page_flip_semaphore;
 
    /**
     * @brief A semaphore to be signalled once the swapchain has one frame on screen.
@@ -356,6 +357,32 @@ private:
     * This is kept private as waiting should be done via wait_for_free_buffer().
     */
    util::timed_semaphore m_free_image_semaphore;
+
+   /**
+    * @brief Per swapchain thread function that handles page flipping.
+    * 
+    * This thread should be running for the lifetime of the swapchain.
+    * The thread simply calls the implementation's present_image() method.
+    * There are 3 main cases we cover here:
+    *
+    * 1. On the first present of the swapchain if the swapchain has
+    *    an ancestor we must wait for it to finish presenting.
+    * 2. The normal use case where we do page flipping, in this
+    *    case change the currently PRESENTED image with the oldest
+    *    PENDING image.
+    * 3. If the enqueued image is marked as FREE it means the
+    *    descendant of the swapchain has started presenting so we
+    *    should release the image and continue.
+    *
+    * The function always waits on the page_flip_semaphore of the
+    * swapchain. Once it passes that we must wait for the fence of the
+    * oldest pending image to be signalled, this means that the gpu has
+    * finished rendering to it and we can present it. From there on the
+    * logic splits into the above 3 cases and if an image has been
+    * presented then the old one is marked as FREE and the free_image
+    * semaphore of the swapchain will be posted.
+    **/
+   void page_flip_thread();
 };
 
 } /* namespace wsi */
