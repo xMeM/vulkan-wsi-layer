@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2017-2019, 2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,6 +31,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <util/extension_list.hpp>
 
 namespace wsi
 {
@@ -42,22 +43,31 @@ class surface_properties
 {
 public:
    /**
-    * Implementation of vkGetPhysicalDeviceSurfaceCapabilitiesKHR for the specific VkSurface type.
+    * @brief Implementation of vkGetPhysicalDeviceSurfaceCapabilitiesKHR for the specific VkSurface type.
     */
    virtual VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                              VkSurfaceCapabilitiesKHR *surface_capabilities) = 0;
 
    /**
-    * Implementation of vkGetPhysicalDeviceSurfaceFormatsKHR for the specific VkSurface type.
+    * @brief Implementation of vkGetPhysicalDeviceSurfaceFormatsKHR for the specific VkSurface type.
     */
    virtual VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                         uint32_t *surface_format_count, VkSurfaceFormatKHR *surface_formats) = 0;
 
    /**
-    * Implementation of vkGetPhysicalDeviceSurfacePresentModesKHR for the specific VkSurface type.
+    * @brief Implementation of vkGetPhysicalDeviceSurfacePresentModesKHR for the specific VkSurface type.
     */
    virtual VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                               uint32_t *present_mode_count, VkPresentModeKHR *present_modes) = 0;
+
+   /**
+    * @brief Return the device extensions that this surface_properties implementation needs.
+    */
+   virtual const util::extension_list &get_required_device_extensions()
+   {
+      static const util::extension_list empty{util::allocator::get_generic()};
+      return empty;
+   }
 };
 
 } /* namespace wsi */

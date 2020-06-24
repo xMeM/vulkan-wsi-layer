@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,111 +24,218 @@
 
 #pragma once
 
-#include "vulkan/vulkan.h"
-#include "vulkan/vk_layer.h"
+#include "util/platform_set.hpp"
 
-#define DISPATCH_TABLE_ENTRY(x) PFN_vk##x x;
+#include <vulkan/vulkan.h>
+#include <vulkan/vk_layer.h>
+#include <vulkan/vk_icd.h>
 
-#define INSTANCE_ENTRYPOINTS_LIST(V)          \
-   V(GetInstanceProcAddr)                     \
-   V(GetPhysicalDeviceProperties)             \
-   V(GetPhysicalDeviceImageFormatProperties)  \
-   V(EnumerateDeviceExtensionProperties)      \
-   V(GetPhysicalDeviceSurfaceCapabilitiesKHR) \
-   V(GetPhysicalDeviceSurfaceFormatsKHR)      \
-   V(GetPhysicalDeviceSurfacePresentModesKHR) \
-   V(DestroyInstance)                         \
-   V(GetPhysicalDeviceSurfaceSupportKHR)
+#include <memory>
+#include <unordered_set>
+#include <cassert>
+#include <mutex>
+
+using scoped_mutex = std::lock_guard<std::mutex>;
 
 namespace layer
 {
 
-template <typename DispatchableType>
-inline void *get_key(DispatchableType dispatchable_object)
-{
-   return *(void **)dispatchable_object;
-}
+/* List of device entrypoints in the layer's instance dispatch table.
+ * Note that the Vulkan loader implements some of these entrypoints so the fact that these are non-null doesn't
+ * guarantee than we can safely call them. We still mark the entrypoints with REQUIRED() and OPTIONAL(). The layer
+ * fails if vkGetInstanceProcAddr returns null for entrypoints that are REQUIRED().
+ */
+#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL) \
+   REQUIRED(GetInstanceProcAddr)                      \
+   REQUIRED(DestroyInstance)                          \
+   REQUIRED(GetPhysicalDeviceProperties)              \
+   REQUIRED(GetPhysicalDeviceImageFormatProperties)   \
+   REQUIRED(EnumerateDeviceExtensionProperties)       \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)  \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)       \
+   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)  \
+   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)
 
 struct instance_dispatch_table
 {
-   instance_dispatch_table(VkInstance inst, PFN_vkGetInstanceProcAddr get_proc)
-   {
-#define DISPATCH_INIT(x) x = (PFN_vk##x)get_proc(inst, "vk" #x);
-      INSTANCE_ENTRYPOINTS_LIST(DISPATCH_INIT);
-#undef DISPATCH_INIT
-   }
+   VkResult populate(VkInstance instance, PFN_vkGetInstanceProcAddr get_proc);
 
-   INSTANCE_ENTRYPOINTS_LIST(DISPATCH_TABLE_ENTRY)
+#define DISPATCH_TABLE_ENTRY(x) PFN_vk##x x{};
+   INSTANCE_ENTRYPOINTS_LIST(DISPATCH_TABLE_ENTRY, DISPATCH_TABLE_ENTRY)
+#undef DISPATCH_TABLE_ENTRY
 };
 
-#define DEVICE_ENTRYPOINTS_LIST(V) \
-   V(GetDeviceProcAddr)            \
-   V(GetDeviceQueue)               \
-   V(QueueSubmit)                  \
-   V(QueueWaitIdle)                \
-   V(CreateCommandPool)            \
-   V(DestroyCommandPool)           \
-   V(AllocateCommandBuffers)       \
-   V(FreeCommandBuffers)           \
-   V(ResetCommandBuffer)           \
-   V(BeginCommandBuffer)           \
-   V(EndCommandBuffer)             \
-   V(CreateImage)                  \
-   V(DestroyImage)                 \
-   V(GetImageMemoryRequirements)   \
-   V(BindImageMemory)              \
-   V(AllocateMemory)               \
-   V(FreeMemory)                   \
-   V(CreateFence)                  \
-   V(DestroyFence)                 \
-   V(ResetFences)                  \
-   V(WaitForFences)
+/* List of device entrypoints in the layer's device dispatch table.
+ * The layer fails initializing a device instance when entrypoints marked with REQUIRED() are retrieved as null.
+ * The layer will instead tolerate retrieving a null for entrypoints marked as OPTIONAL(). Code in the layer needs to
+ * check these entrypoints are non-null before calling them.
+ *
+ * Note that we cannot rely on checking whether the physical device supports a particular extension as the Vulkan
+ * loader currently aggregates all extensions advertised by all implicit layers (in their JSON manifests) and adds
+ * them automatically to the output of vkEnumeratePhysicalDeviceProperties.
+ */
+#define DEVICE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL) \
+   REQUIRED(GetDeviceProcAddr)                      \
+   REQUIRED(GetDeviceQueue)                         \
+   REQUIRED(QueueSubmit)                            \
+   REQUIRED(QueueWaitIdle)                          \
+   REQUIRED(CreateCommandPool)                      \
+   REQUIRED(DestroyCommandPool)                     \
+   REQUIRED(AllocateCommandBuffers)                 \
+   REQUIRED(FreeCommandBuffers)                     \
+   REQUIRED(ResetCommandBuffer)                     \
+   REQUIRED(BeginCommandBuffer)                     \
+   REQUIRED(EndCommandBuffer)                       \
+   REQUIRED(CreateImage)                            \
+   REQUIRED(DestroyImage)                           \
+   REQUIRED(GetImageMemoryRequirements)             \
+   REQUIRED(BindImageMemory)                        \
+   REQUIRED(AllocateMemory)                         \
+   REQUIRED(FreeMemory)                             \
+   REQUIRED(CreateFence)                            \
+   REQUIRED(DestroyFence)                           \
+   REQUIRED(ResetFences)                            \
+   REQUIRED(WaitForFences)                          \
+   OPTIONAL(CreateSwapchainKHR)                     \
+   OPTIONAL(DestroySwapchainKHR)                    \
+   OPTIONAL(GetSwapchainImagesKHR)                  \
+   OPTIONAL(AcquireNextImageKHR)                    \
+   OPTIONAL(QueuePresentKHR)
 
 struct device_dispatch_table
 {
-   device_dispatch_table(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc)
-   {
-#define DISPATCH_INIT(x) x = (PFN_vk##x)get_proc(dev, "vk" #x);
-      DEVICE_ENTRYPOINTS_LIST(DISPATCH_INIT);
-#undef DISPATCH_INIT
-   }
+   VkResult populate(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc);
 
-   DEVICE_ENTRYPOINTS_LIST(DISPATCH_TABLE_ENTRY)
+#define DISPATCH_TABLE_ENTRY(x) PFN_vk##x x{};
+   DEVICE_ENTRYPOINTS_LIST(DISPATCH_TABLE_ENTRY, DISPATCH_TABLE_ENTRY)
+#undef DISPATCH_TABLE_ENTRY
 };
 
+/**
+ * @brief Layer "mirror object" for VkInstance.
+ */
 class instance_private_data
 {
 public:
    instance_private_data() = delete;
-   static instance_private_data &create(VkInstance inst, PFN_vkGetInstanceProcAddr get_proc,
-                                        PFN_vkSetInstanceLoaderData set_loader_data);
-   static instance_private_data &get(void *key);
+   instance_private_data(const instance_private_data &) = delete;
+   instance_private_data &operator=(const instance_private_data &) = delete;
+
+   instance_private_data(const instance_dispatch_table& table,
+                         PFN_vkSetInstanceLoaderData set_loader_data,
+                         util::wsi_platform_set enabled_layer_platforms);
+   static void set(VkInstance inst, std::unique_ptr<instance_private_data> inst_data);
+
+   /**
+    * @brief Get the mirror object that the layer associates to a given Vulkan instance.
+    */
+   static instance_private_data &get(VkInstance instance);
+
+   /**
+    * @brief Get the layer instance object associated to the VkInstance owning the specified VkPhysicalDevice.
+    */
+   static instance_private_data &get(VkPhysicalDevice phys_dev);
+
+   /**
+    * @brief Get the set of enabled platforms that are also supported by the layer.
+    */
+   const util::wsi_platform_set &get_enabled_platforms()
+   {
+      return enabled_layer_platforms;
+   }
+
+   /**
+    * @brief Check whether a surface command should be handled by the WSI layer.
+    *
+    * @param phys_dev Physical device involved in the Vulkan command.
+    * @param surface The surface involved in the Vulkan command.
+    *
+    * @retval @c true if the layer should handle commands for the specified surface, which may mean returning an error
+    * if the layer does not support @p surface 's platform.
+    *
+    * @retval @c false if the layer should call down to the layers and ICDs below to handle the surface commands.
+    */
+   bool should_layer_handle_surface(VkPhysicalDevice phys_dev, VkSurfaceKHR surface);
+
+   /**
+    * @brief Check whether the given surface is supported for presentation via the layer.
+    *
+    * @param surface A VK_KHR_surface surface.
+    *
+    * @return Whether the WSI layer supports this surface.
+    */
+   bool does_layer_support_surface(VkSurfaceKHR surface);
+
    static void destroy(VkInstance inst);
 
-   instance_dispatch_table disp;
-   PFN_vkSetInstanceLoaderData SetInstanceLoaderData;
+   const instance_dispatch_table disp;
 
 private:
-   instance_private_data(VkInstance inst, PFN_vkGetInstanceProcAddr get_proc,
-                         PFN_vkSetInstanceLoaderData set_loader_data);
+   /**
+    * @brief Check whether the given surface is already supported for presentation without the layer.
+    */
+   bool do_icds_support_surface(VkPhysicalDevice phys_dev, VkSurfaceKHR surface);
+
+   const PFN_vkSetInstanceLoaderData SetInstanceLoaderData;
+   const util::wsi_platform_set enabled_layer_platforms;
 };
 
 class device_private_data
 {
 public:
    device_private_data() = delete;
-   static device_private_data &create(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc, VkPhysicalDevice phys_dev,
-                                      PFN_vkSetDeviceLoaderData set_loader_data);
-   static device_private_data &get(void *key);
+   device_private_data(const device_private_data &) = delete;
+   device_private_data &operator=(const device_private_data &) = delete;
+
+   device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
+                       const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data);
+   static void set(VkDevice dev, std::unique_ptr<device_private_data> dev_data);
+
+   /**
+    * @brief Get the mirror object that the layer associates to a given Vulkan device.
+    */
+   static device_private_data &get(VkDevice device);
+
+   /**
+    * @brief Get the layer device object associated to the VkDevice owning the specified VkQueue.
+    */
+   static device_private_data &get(VkQueue queue);
+
+   void add_layer_swapchain(VkSwapchainKHR swapchain);
+
+   /**
+    * @brief Return whether all the provided swapchains are owned by us (the WSI Layer).
+    */
+   bool layer_owns_all_swapchains(const VkSwapchainKHR *swapchain, uint32_t swapchain_count) const;
+
+   /**
+    * @brief Check whether the given swapchain is owned by us (the WSI Layer).
+    */
+   bool layer_owns_swapchain(VkSwapchainKHR swapchain) const {
+      return layer_owns_all_swapchains(&swapchain, 1);
+   }
+
+   /**
+    * @brief Check whether the layer can create a swapchain for the given surface.
+    */
+   bool should_layer_create_swapchain(VkSurfaceKHR vk_surface);
+
+   /**
+    * @brief Check whether the ICDs or layers below support VK_KHR_swapchain.
+    */
+   bool can_icds_create_swapchain(VkSurfaceKHR vk_surface);
+
    static void destroy(VkDevice dev);
 
-   device_dispatch_table disp;
+   const device_dispatch_table disp;
    instance_private_data &instance_data;
-   PFN_vkSetDeviceLoaderData SetDeviceLoaderData;
+   const PFN_vkSetDeviceLoaderData SetDeviceLoaderData;
+   const VkPhysicalDevice physical_device;
+   const VkDevice device;
 
 private:
-   device_private_data(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc, instance_private_data &inst_data,
-                       PFN_vkSetDeviceLoaderData set_loader_data);
+   std::unordered_set<VkSwapchainKHR> swapchains;
+   mutable std::mutex swapchains_lock;
 };
 
 } /* namespace layer */

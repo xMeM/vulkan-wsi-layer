@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,92 +22,196 @@
  * SOFTWARE.
  */
 
-#include <cassert>
-#include <map>
-#include <mutex>
-
 #include "private_data.hpp"
 
-using scoped_mutex = std::lock_guard<std::mutex>;
+#include "wsi/wsi_factory.hpp"
+
+#include <unordered_map>
 
 namespace layer
 {
 
 static std::mutex g_data_lock;
-static std::map<void *, instance_private_data *> g_instance_data;
-static std::map<void *, device_private_data *> g_device_data;
+static std::unordered_map<void *, std::unique_ptr<instance_private_data>> g_instance_data;
+static std::unordered_map<void *, std::unique_ptr<device_private_data>> g_device_data;
 
-instance_private_data::instance_private_data(VkInstance inst, PFN_vkGetInstanceProcAddr get_proc,
-                                             PFN_vkSetInstanceLoaderData set_loader_data)
-   : disp(inst, get_proc)
+template <typename object_type, typename get_proc_type>
+static PFN_vkVoidFunction get_proc_helper(object_type obj, get_proc_type get_proc,
+                                          const char* proc_name, bool required, bool &ok)
+{
+   PFN_vkVoidFunction ret = get_proc(obj, proc_name);
+   if (nullptr == ret && required)
+   {
+      ok = false;
+   }
+   return ret;
+}
+
+VkResult instance_dispatch_table::populate(VkInstance instance, PFN_vkGetInstanceProcAddr get_proc)
+{
+   bool ok = true;
+#define REQUIRED(x) x = reinterpret_cast<PFN_vk##x>(get_proc_helper(instance, get_proc, "vk" #x, true, ok));
+#define OPTIONAL(x) x = reinterpret_cast<PFN_vk##x>(get_proc_helper(instance, get_proc, "vk" #x, false, ok));
+   INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL);
+#undef REQUIRED
+#undef OPTIONAL
+   return ok ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+}
+
+VkResult device_dispatch_table::populate(VkDevice device, PFN_vkGetDeviceProcAddr get_proc)
+{
+   bool ok = true;
+#define REQUIRED(x) x = reinterpret_cast<PFN_vk##x>(get_proc_helper(device, get_proc, "vk" #x, true, ok));
+#define OPTIONAL(x) x = reinterpret_cast<PFN_vk##x>(get_proc_helper(device, get_proc, "vk" #x, false, ok));
+   DEVICE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL);
+#undef REQUIRED
+#undef OPTIONAL
+   return ok ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+}
+
+instance_private_data::instance_private_data(const instance_dispatch_table& table,
+                                             PFN_vkSetInstanceLoaderData set_loader_data,
+                                             util::wsi_platform_set enabled_layer_platforms)
+   : disp(table)
    , SetInstanceLoaderData(set_loader_data)
+   , enabled_layer_platforms(enabled_layer_platforms)
 {
 }
 
-instance_private_data &instance_private_data::create(VkInstance inst, PFN_vkGetInstanceProcAddr get_proc,
-                                                     PFN_vkSetInstanceLoaderData set_loader_data)
+template <typename dispatchable_type>
+static inline void *get_key(dispatchable_type dispatchable_object)
 {
-   instance_private_data *inst_data = new instance_private_data(inst, get_proc, set_loader_data);
-   scoped_mutex lock(g_data_lock);
-   g_instance_data[get_key(inst)] = inst_data;
-   return *inst_data;
+   return *reinterpret_cast<void **>(dispatchable_object);
 }
 
-instance_private_data &instance_private_data::get(void *key)
+void instance_private_data::set(VkInstance inst, std::unique_ptr<instance_private_data> inst_data)
 {
    scoped_mutex lock(g_data_lock);
-   instance_private_data *data = g_instance_data[key];
-   assert(data);
-   return *data;
+   g_instance_data[get_key(inst)] = std::move(inst_data);
+}
+
+template <typename dispatchable_type>
+static instance_private_data &get_instance_private_data(dispatchable_type dispatchable_object)
+{
+   scoped_mutex lock(g_data_lock);
+   return *g_instance_data[get_key(dispatchable_object)];
+}
+
+instance_private_data &instance_private_data::get(VkInstance instance)
+{
+   return get_instance_private_data(instance);
+}
+
+instance_private_data &instance_private_data::get(VkPhysicalDevice phys_dev)
+{
+   return get_instance_private_data(phys_dev);
+}
+
+static VkIcdWsiPlatform get_platform_of_surface(VkSurfaceKHR surface)
+{
+   VkIcdSurfaceBase *surface_base = reinterpret_cast<VkIcdSurfaceBase *>(surface);
+   return surface_base->platform;
+}
+
+bool instance_private_data::does_layer_support_surface(VkSurfaceKHR surface)
+{
+   return enabled_layer_platforms.contains(get_platform_of_surface(surface));
+}
+
+bool instance_private_data::do_icds_support_surface(VkPhysicalDevice, VkSurfaceKHR)
+{
+   /* For now assume ICDs do not support VK_KHR_surface. This means that the layer will handle all the surfaces it can
+    * handle (even if the ICDs can handle the surface) and only call down for surfaces it cannot handle. In the future
+    * we may allow system integrators to configure which ICDs have precedence handling which platforms.
+    */
+   return false;
+}
+
+bool instance_private_data::should_layer_handle_surface(VkPhysicalDevice phys_dev, VkSurfaceKHR surface)
+{
+   /* If the layer cannot handle the surface, then necessarily the ICDs or layers below us must be able to do it:
+    * the fact that the surface exists means that the Vulkan loader created it. In turn, this means that someone
+    * among the ICDs and layers advertised support for it. If it's not us, then it must be one of the layers/ICDs
+    * below us. It is therefore safe to always return false (and therefore call-down) when layer_can_handle_surface
+    * is false.
+    */
+   bool icd_can_handle_surface = do_icds_support_surface(phys_dev, surface);
+   bool layer_can_handle_surface = does_layer_support_surface(surface);
+   bool ret = layer_can_handle_surface && !icd_can_handle_surface;
+   return ret;
 }
 
 void instance_private_data::destroy(VkInstance inst)
 {
-   instance_private_data *data;
+   scoped_mutex lock(g_data_lock);
+   g_instance_data.erase(get_key(inst));
+}
+
+device_private_data::device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
+                                         const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data)
+   : disp{table}
+   , instance_data{inst_data}
+   , SetDeviceLoaderData{set_loader_data}
+   , physical_device{phys_dev}
+   , device{dev}
+{
+}
+
+void device_private_data::set(VkDevice dev, std::unique_ptr<device_private_data> dev_data)
+{
+   scoped_mutex lock(g_data_lock);
+   g_device_data[get_key(dev)] = std::move(dev_data);
+}
+
+template <typename dispatchable_type>
+static device_private_data &get_device_private_data(dispatchable_type dispatchable_object)
+{
+   scoped_mutex lock(g_data_lock);
+   return *g_device_data[get_key(dispatchable_object)];
+}
+
+device_private_data &device_private_data::get(VkDevice device)
+{
+   return get_device_private_data(device);
+}
+
+device_private_data &device_private_data::get(VkQueue queue)
+{
+   return get_device_private_data(queue);
+}
+
+void device_private_data::add_layer_swapchain(VkSwapchainKHR swapchain)
+{
+   scoped_mutex lock(swapchains_lock);
+   swapchains.insert(swapchain);
+}
+
+bool device_private_data::layer_owns_all_swapchains(const VkSwapchainKHR *swapchain, uint32_t swapchain_count) const
+{
+   scoped_mutex lock(swapchains_lock);
+   for (uint32_t i = 0; i < swapchain_count; i++)
    {
-      scoped_mutex lock(g_data_lock);
-      data = g_instance_data[get_key(inst)];
-      assert(data);
-      g_instance_data.erase(get_key(inst));
+      if (swapchains.find(swapchain[i]) == swapchains.end())
+      {
+         return false;
+      }
    }
-   delete data;
+   return true;
 }
 
-device_private_data::device_private_data(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc,
-                                         instance_private_data &inst_data, PFN_vkSetDeviceLoaderData set_loader_data)
-   : disp(dev, get_proc)
-   , instance_data(inst_data)
-   , SetDeviceLoaderData(set_loader_data)
+bool device_private_data::should_layer_create_swapchain(VkSurfaceKHR vk_surface)
 {
+   return instance_data.should_layer_handle_surface(physical_device, vk_surface);
 }
 
-device_private_data &device_private_data::create(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc,
-                                                 VkPhysicalDevice phys_dev, PFN_vkSetDeviceLoaderData set_loader_data)
+bool device_private_data::can_icds_create_swapchain(VkSurfaceKHR vk_surface)
 {
-   device_private_data *dev_data =
-      new device_private_data(dev, get_proc, instance_private_data::get(get_key(phys_dev)), set_loader_data);
-   scoped_mutex lock(g_data_lock);
-   g_device_data[get_key(dev)] = dev_data;
-   return *dev_data;
-}
-
-device_private_data &device_private_data::get(void *key)
-{
-   scoped_mutex lock(g_data_lock);
-   device_private_data *data = g_device_data[key];
-   assert(data);
-   return *data;
+   return disp.CreateSwapchainKHR != nullptr;
 }
 
 void device_private_data::destroy(VkDevice dev)
 {
-   device_private_data *data;
-   {
-      scoped_mutex lock(g_data_lock);
-      data = g_device_data[get_key(dev)];
-      g_device_data.erase(get_key(dev));
-   }
-   delete data;
+   scoped_mutex lock(g_data_lock);
+   g_device_data.erase(get_key(dev));
 }
-
 } /* namespace layer */

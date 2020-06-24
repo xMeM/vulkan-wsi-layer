@@ -53,7 +53,7 @@ VkResult extension_list::add(const struct VkEnumerateInstanceExtensionProperties
 
 VkResult extension_list::add(VkPhysicalDevice dev)
 {
-   layer::instance_private_data &inst_data = layer::instance_private_data::get(layer::get_key(dev));
+   layer::instance_private_data &inst_data = layer::instance_private_data::get(dev);
    uint32_t count;
    VkResult m_error = inst_data.disp.EnumerateDeviceExtensionProperties(dev, nullptr, &count, nullptr);
 

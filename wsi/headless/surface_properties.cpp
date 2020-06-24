@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2017-2019, 2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -63,7 +63,7 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    surface_capabilities->minImageExtent = { 1, 1 };
    /* Ask the device for max */
    VkPhysicalDeviceProperties dev_props;
-   layer::instance_private_data::get(layer::get_key(physical_device)).disp.GetPhysicalDeviceProperties(physical_device, &dev_props);
+   layer::instance_private_data::get(physical_device).disp.GetPhysicalDeviceProperties(physical_device, &dev_props);
 
    surface_capabilities->maxImageExtent = { dev_props.limits.maxImageDimension2D,
                                             dev_props.limits.maxImageDimension2D };
@@ -101,7 +101,7 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
    {
       VkImageFormatProperties image_format_props;
 
-      res = layer::instance_private_data::get(layer::get_key(physical_device))
+      res = layer::instance_private_data::get(physical_device)
                .disp.GetPhysicalDeviceImageFormatProperties(
                   physical_device, static_cast<VkFormat>(id), VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, &image_format_props);

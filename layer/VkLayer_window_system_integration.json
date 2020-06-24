@@ -14,17 +14,17 @@
         "instance_extensions": [
             {
                 "name" : "VK_EXT_headless_surface",
-                "spec_version" : 1
+                "spec_version" : "1"
             },
             {
                 "name" : "VK_KHR_surface",
-                "spec_version" : 1
+                "spec_version" : "1"
             }
         ],
         "device_extensions": [
             {
                 "name" : "VK_KHR_swapchain",
-                "spec_version" : 1
+                "spec_version" : "1"
             }
         ],
         "enable_environment": {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,11 +25,15 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+
 #include <vulkan/vk_layer.h>
 
 #include "private_data.hpp"
 #include "surface_api.hpp"
 #include "swapchain_api.hpp"
+#include "util/extension_list.hpp"
+#include "util/custom_allocator.hpp"
+#include "wsi/wsi_factory.hpp"
 
 #define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION)
 
@@ -37,10 +41,7 @@ namespace layer
 {
 
 static const VkLayerProperties global_layer = {
-   "VK_LAYER_window_system_integration",
-   VK_LAYER_API_VERSION,
-   1,
-   "Window system integration layer",
+   "VK_LAYER_window_system_integration", VK_LAYER_API_VERSION, 1, "Window system integration layer",
 };
 static const VkExtensionProperties device_extension[] = { { VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                                                             VK_KHR_SWAPCHAIN_SPEC_VERSION } };
@@ -115,10 +116,7 @@ VKAPI_ATTR VkLayerDeviceCreateInfo *get_chain_info(const VkDeviceCreateInfo *pCr
    return chain_info;
 }
 
-/*
- * This is where we get our initialisation and construct our dispatch table. All layers must implement the function.
- * If you wish to intercept any device functions at all you need to implement vkCreateDevice.
- */
+/* This is where the layer is initialised and the instance dispatch table is constructed. */
 VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
                                     VkInstance *pInstance)
 {
@@ -131,8 +129,8 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   /* Retrieve the vkGetInstanceProcAddr and the vkCreateInstance function pointers for the next layer in the chain. */
    PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layerCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+
    PFN_vkCreateInstance fpCreateInstance = (PFN_vkCreateInstance)fpGetInstanceProcAddr(nullptr, "vkCreateInstance");
    if (nullptr == fpCreateInstance)
    {
@@ -142,11 +140,55 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
    /* Advance the link info for the next element on the chain. */
    layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
 
-   /* Now call create instance on the chain further down the list. */
-   VkResult ret = fpCreateInstance(pCreateInfo, pAllocator, pInstance);
+   /* The layer needs some Vulkan 1.1 functionality in order to operate correctly.
+    * We thus change the application info to require this API version, if necessary.
+    * This may have consequences for ICDs whose behaviour depends on apiVersion.
+    */
+   const uint32_t minimum_required_vulkan_version = VK_API_VERSION_1_1;
+   VkApplicationInfo modified_app_info{};
+   if (nullptr != pCreateInfo->pApplicationInfo)
+   {
+      modified_app_info = *pCreateInfo->pApplicationInfo;
+      if (modified_app_info.apiVersion < minimum_required_vulkan_version)
+      {
+         modified_app_info.apiVersion = minimum_required_vulkan_version;
+      }
+   }
+   else
+   {
+      modified_app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+      modified_app_info.apiVersion = minimum_required_vulkan_version;
+   }
 
-   instance_private_data::create(*pInstance, fpGetInstanceProcAddr, loader_callback);
-   return ret;
+   VkInstanceCreateInfo modified_info = *pCreateInfo;
+   modified_info.pApplicationInfo = &modified_app_info;
+
+   /* Now call create instance on the chain further down the list.
+    * Note that we do not remove the extensions that the layer supports from modified_info.ppEnabledExtensionNames.
+    * Layers have to abide the rule that vkCreateInstance must not generate an error for unrecognized extension names.
+    * Also, the loader filters the extension list to ensure that ICDs do not see extensions that they do not support.
+    */
+   VkResult result;
+   result = fpCreateInstance(&modified_info, pAllocator, pInstance);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   instance_dispatch_table table;
+   result = table.populate(*pInstance, fpGetInstanceProcAddr);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   /* Find all the platforms that the layer can handle based on pCreateInfo->ppEnabledExtensionNames. */
+   auto layer_platforms_to_enable = wsi::find_enabled_layer_platforms(pCreateInfo);
+
+   std::unique_ptr<instance_private_data> inst_data{
+      new instance_private_data{table, loader_callback, layer_platforms_to_enable}};
+   instance_private_data::set(*pInstance, std::move(inst_data));
+   return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
@@ -173,134 +215,170 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    /* Advance the link info for the next element on the chain. */
    layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
 
+   /* Copy the extension to a util::extension_list. */
+   util::allocator allocator{pAllocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND};
+   util::extension_list enabled_extensions{allocator};
+   VkResult result;
+   result = enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   /* Add the extensions required by the platforms that are being enabled in the layer. */
+   auto &inst_data = instance_private_data::get(physicalDevice);
+   const util::wsi_platform_set& enabled_platforms = inst_data.get_enabled_platforms();
+   result = wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   util::vector<const char *> modified_enabled_extensions{allocator};
+   if (!enabled_extensions.get_extension_strings(modified_enabled_extensions))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
    /* Now call create device on the chain further down the list. */
-   VkResult ret = fpCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
+   VkDeviceCreateInfo modified_info = *pCreateInfo;
+   modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
+   modified_info.enabledExtensionCount = modified_enabled_extensions.size();
+   result = fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
 
-   device_private_data::create(*pDevice, fpGetDeviceProcAddr, physicalDevice, loader_callback);
+   device_dispatch_table table;
+   result = table.populate(*pDevice, fpGetDeviceProcAddr);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
 
-   return ret;
+   std::unique_ptr<device_private_data> device{new device_private_data{inst_data, physicalDevice, *pDevice,
+                                                                       table, loader_callback}};
+   device_private_data::set(*pDevice, std::move(device));
+   return VK_SUCCESS;
 }
 
 } /* namespace layer */
 
-extern "C"
+extern "C" {
+VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName);
+
+VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstanceProcAddr(VkInstance instance,
+                                                                                         const char *funcName);
+
+/* Clean up the dispatch table for this instance. */
+VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL wsi_layer_vkDestroyInstance(VkInstance instance,
+                                                                       const VkAllocationCallbacks *pAllocator)
 {
-   VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL
-   wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName);
+   assert(instance);
+   layer::instance_private_data::get(instance).disp.DestroyInstance(instance, pAllocator);
+   layer::instance_private_data::destroy(instance);
+}
 
-   VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-   wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName);
+VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL wsi_layer_vkDestroyDevice(VkDevice device,
+                                                                     const VkAllocationCallbacks *pAllocator)
+{
+   layer::device_private_data::destroy(device);
+}
 
-   /* Clean up the dispatch table for this instance. */
-   VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL
-   wsi_layer_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)
-   {
-      assert(instance);
-      layer::instance_private_data::get(layer::get_key(instance))
-      .disp.DestroyInstance(instance, pAllocator);
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
+                                                                          const VkAllocationCallbacks *pAllocator,
+                                                                          VkInstance *pInstance)
+{
+   return layer::create_instance(pCreateInfo, pAllocator, pInstance);
+}
 
-      layer::instance_private_data::destroy(instance);
-   }
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkCreateDevice(VkPhysicalDevice physicalDevice,
+                                                                        const VkDeviceCreateInfo *pCreateInfo,
+                                                                        const VkAllocationCallbacks *pAllocator,
+                                                                        VkDevice *pDevice)
+{
+   return layer::create_device(physicalDevice, pCreateInfo, pAllocator, pDevice);
+}
 
-   VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL
-   wsi_layer_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
-   {
-      layer::device_private_data::destroy(device);
-   }
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
+vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct)
+{
+   assert(pVersionStruct);
+   assert(pVersionStruct->sType == LAYER_NEGOTIATE_INTERFACE_STRUCT);
 
-   VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-   wsi_layer_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
-   {
-      return layer::create_instance(pCreateInfo, pAllocator, pInstance);
-   }
+   /* 2 is the minimum interface version which would utilize this function. */
+   assert(pVersionStruct->loaderLayerInterfaceVersion >= 2);
 
-   VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-   wsi_layer_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
-                            const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
-   {
-      return layer::create_device(physicalDevice, pCreateInfo, pAllocator, pDevice);
-   }
+   /* Set our requested interface version. Set to 2 for now to separate us from newer versions. */
+   pVersionStruct->loaderLayerInterfaceVersion = 2;
 
-   VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-   vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct)
-   {
-      assert(pVersionStruct);
-      assert(pVersionStruct->sType == LAYER_NEGOTIATE_INTERFACE_STRUCT);
+   /* Fill in struct values. */
+   pVersionStruct->pfnGetInstanceProcAddr = &wsi_layer_vkGetInstanceProcAddr;
+   pVersionStruct->pfnGetDeviceProcAddr = &wsi_layer_vkGetDeviceProcAddr;
+   pVersionStruct->pfnGetPhysicalDeviceProcAddr = nullptr;
 
-      /* 2 is the minimum interface version which would utilize this function. */
-      assert(pVersionStruct->loaderLayerInterfaceVersion >= 2);
+   return VK_SUCCESS;
+}
 
-      /* Set our requested interface version. Set to 2 for now to separate us from newer versions. */
-      pVersionStruct->loaderLayerInterfaceVersion = 2;
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkEnumerateDeviceExtensionProperties(
+   VkPhysicalDevice physicalDevice, const char *pLayerName, uint32_t *pCount, VkExtensionProperties *pProperties)
+{
+   if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
+      return layer::extension_properties(1, layer::device_extension, pCount, pProperties);
 
-      /* Fill in struct values. */
-      pVersionStruct->pfnGetInstanceProcAddr = &wsi_layer_vkGetInstanceProcAddr;
-      pVersionStruct->pfnGetDeviceProcAddr = &wsi_layer_vkGetDeviceProcAddr;
-      pVersionStruct->pfnGetPhysicalDeviceProcAddr = nullptr;
+   assert(physicalDevice);
+   return layer::instance_private_data::get(physicalDevice)
+      .disp.EnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pCount, pProperties);
+}
 
-      return VK_SUCCESS;
-   }
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkEnumerateInstanceExtensionProperties(
+   const char *pLayerName, uint32_t *pCount, VkExtensionProperties *pProperties)
+{
+   if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
+      return layer::extension_properties(1, layer::instance_extension, pCount, pProperties);
 
-   VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-   wsi_layer_vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char *pLayerName,
-                                                  uint32_t *pCount, VkExtensionProperties *pProperties)
-   {
-      if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
-         return layer::extension_properties(1, layer::device_extension, pCount, pProperties);
+   return VK_ERROR_LAYER_NOT_PRESENT;
+}
 
-      assert(physicalDevice);
-      return layer::instance_private_data::get(layer::get_key(physicalDevice))
-         .disp.EnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pCount, pProperties);
-   }
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
+wsi_layer_vkEnumerateInstanceLayerProperties(uint32_t *pCount, VkLayerProperties *pProperties)
+{
+   return layer::layer_properties(1, &layer::global_layer, pCount, pProperties);
+}
 
-   VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-   wsi_layer_vkEnumerateInstanceExtensionProperties(const char *pLayerName, uint32_t *pCount, VkExtensionProperties *pProperties)
-   {
-      if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
-         return layer::extension_properties(1, layer::instance_extension, pCount, pProperties);
-
-      return VK_ERROR_LAYER_NOT_PRESENT;
-   }
-
-   VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-   wsi_layer_vkEnumerateInstanceLayerProperties(uint32_t *pCount, VkLayerProperties *pProperties)
-   {
-      return layer::layer_properties(1, &layer::global_layer, pCount, pProperties);
-   }
-
-   #define GET_PROC_ADDR(func)      \
+#define GET_PROC_ADDR(func)      \
    if (!strcmp(funcName, #func)) \
       return (PFN_vkVoidFunction)&wsi_layer_##func;
 
-   VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL
-   wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName)
-   {
-      GET_PROC_ADDR(vkCreateSwapchainKHR);
-      GET_PROC_ADDR(vkDestroySwapchainKHR);
-      GET_PROC_ADDR(vkGetSwapchainImagesKHR);
-      GET_PROC_ADDR(vkAcquireNextImageKHR);
-      GET_PROC_ADDR(vkQueuePresentKHR);
+VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName)
+{
+   GET_PROC_ADDR(vkCreateSwapchainKHR);
+   GET_PROC_ADDR(vkDestroySwapchainKHR);
+   GET_PROC_ADDR(vkGetSwapchainImagesKHR);
+   GET_PROC_ADDR(vkAcquireNextImageKHR);
+   GET_PROC_ADDR(vkQueuePresentKHR);
 
-      return layer::device_private_data::get(layer::get_key(device)).disp.GetDeviceProcAddr(device, funcName);
-   }
+   return layer::device_private_data::get(device).disp.GetDeviceProcAddr(device, funcName);
+}
 
-   VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
-   wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName)
-   {
-      GET_PROC_ADDR(vkGetDeviceProcAddr);
-      GET_PROC_ADDR(vkGetInstanceProcAddr);
-      GET_PROC_ADDR(vkCreateInstance);
-      GET_PROC_ADDR(vkDestroyInstance);
-      GET_PROC_ADDR(vkCreateDevice);
-      GET_PROC_ADDR(vkDestroyDevice);
-      GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceSupportKHR);
-      GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
-      GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
-      GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
-      GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
-      GET_PROC_ADDR(vkEnumerateInstanceExtensionProperties);
-      GET_PROC_ADDR(vkEnumerateInstanceLayerProperties);
+VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstanceProcAddr(VkInstance instance,
+                                                                                         const char *funcName)
+{
+   GET_PROC_ADDR(vkGetDeviceProcAddr);
+   GET_PROC_ADDR(vkGetInstanceProcAddr);
+   GET_PROC_ADDR(vkCreateInstance);
+   GET_PROC_ADDR(vkDestroyInstance);
+   GET_PROC_ADDR(vkCreateDevice);
+   GET_PROC_ADDR(vkDestroyDevice);
+   GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceSupportKHR);
+   GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+   GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
+   GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
+   GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
+   GET_PROC_ADDR(vkEnumerateInstanceExtensionProperties);
+   GET_PROC_ADDR(vkEnumerateInstanceLayerProperties);
 
-      return layer::instance_private_data::get(layer::get_key(instance)).disp.GetInstanceProcAddr(instance, funcName);
-   }
+   return layer::instance_private_data::get(instance).disp.GetInstanceProcAddr(instance, funcName);
+}
 } /* extern "C" */
