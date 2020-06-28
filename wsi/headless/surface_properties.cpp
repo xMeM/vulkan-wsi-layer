@@ -93,10 +93,11 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
 
    VkResult res = VK_SUCCESS;
    /* Construct a list of all formats supported by the driver - for color attachment */
-   VkFormat formats[VK_FORMAT_RANGE_SIZE];
+   constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
+   VkFormat formats[max_core_1_0_formats];
    uint32_t format_count = 0;
 
-   for (int id = 0; id < VK_FORMAT_RANGE_SIZE; id++)
+   for (int id = 0; id < max_core_1_0_formats; id++)
    {
       VkImageFormatProperties image_format_props;
 
