@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -37,6 +37,7 @@
 
 #include <layer/private_data.hpp>
 #include <util/timed_semaphore.hpp>
+#include <util/custom_allocator.hpp>
 
 namespace wsi
 {
@@ -52,12 +53,12 @@ struct swapchain_image
    };
 
    /* Implementation specific data */
-   void *data;
+   void *data{nullptr};
 
-   VkImage image;
-   status status;
+   VkImage image{VK_NULL_HANDLE};
+   status status{swapchain_image::INVALID};
 
-   VkFence present_fence;
+   VkFence present_fence{VK_NULL_HANDLE};
 };
 
 /**
@@ -191,25 +192,20 @@ protected:
     * @brief In order to present the images in a FIFO order we implement
     * a ring buffer to hold the images queued for presentation. Since the
     * two pointers (head and tail) are used by different
-    * therads and we do not allow the application to acquire more images
+    * threads and we do not allow the application to acquire more images
     * than we have we eliminate race conditions.
     */
    ring_buffer m_pending_buffer_pool;
 
    /**
-    * @brief The number of swapchain images.
-    */
-   uint32_t m_num_swapchain_images;
-
-   /**
-    * @brief Array of images in the swapchain.
-    */
-   swapchain_image *m_swapchain_images;
-
-   /**
     * @brief User provided memory allocation callbacks.
     */
    const VkAllocationCallbacks *m_alloc_callbacks;
+
+   /**
+    * @brief Vector of images in the swapchain.
+    */
+   util::vector<swapchain_image> m_swapchain_images;
 
    /**
     * @brief Handle to the surface object this swapchain will present images to.

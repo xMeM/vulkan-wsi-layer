@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -53,7 +53,7 @@ namespace wsi
 
 void swapchain_base::page_flip_thread()
 {
-   wsi::swapchain_image *sc_images = m_swapchain_images;
+   auto &sc_images = m_swapchain_images;
    VkResult vk_res = VK_SUCCESS;
    uint64_t timeout = UINT64_MAX;
    constexpr uint64_t SEMAPHORE_TIMEOUT = 250000000; /* 250 ms. */
@@ -140,9 +140,8 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_thread_sem_defined(false)
    , m_first_present(true)
    , m_pending_buffer_pool{ nullptr, 0, 0, 0 }
-   , m_num_swapchain_images(0)
-   , m_swapchain_images(nullptr)
    , m_alloc_callbacks(allocator)
+   , m_swapchain_images(util::allocator(m_alloc_callbacks, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT))
    , m_surface(VK_NULL_HANDLE)
    , m_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
    , m_descendant(VK_NULL_HANDLE)
@@ -180,51 +179,20 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   m_num_swapchain_images = swapchain_create_info->minImageCount;
-
-   size_t images_alloc_size = sizeof(swapchain_image) * m_num_swapchain_images;
-   if (m_alloc_callbacks != nullptr)
-   {
-      m_swapchain_images = static_cast<swapchain_image *>(m_alloc_callbacks->pfnAllocation(
-         m_alloc_callbacks->pUserData, images_alloc_size, alignof(swapchain_image), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-   }
-   else
-   {
-      m_swapchain_images = static_cast<swapchain_image *>(malloc(images_alloc_size));
-   }
-
-   if (m_swapchain_images == nullptr)
-   {
-      m_num_swapchain_images = 0;
+   /* Init image to invalid values. */
+   if (!m_swapchain_images.try_resize(swapchain_create_info->minImageCount))
       return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
-
-   /* We have allocated images, we can call the platform init function if something needs to be done. */
-   result = init_platform(device, swapchain_create_info);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
-   for (uint32_t i = 0; i < m_num_swapchain_images; ++i)
-   {
-      /* Init image to invalid values. */
-      m_swapchain_images[i].image = VK_NULL_HANDLE;
-      m_swapchain_images[i].present_fence = VK_NULL_HANDLE;
-      m_swapchain_images[i].status = swapchain_image::INVALID;
-      m_swapchain_images[i].data = nullptr;
-   }
 
    /* Initialize ring buffer. */
    if (m_alloc_callbacks != nullptr)
    {
       m_pending_buffer_pool.ring = static_cast<uint32_t *>(
-         m_alloc_callbacks->pfnAllocation(m_alloc_callbacks->pUserData, sizeof(uint32_t) * m_num_swapchain_images,
+         m_alloc_callbacks->pfnAllocation(m_alloc_callbacks->pUserData, sizeof(uint32_t) * m_swapchain_images.size(),
                                           alignof(uint32_t), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
    }
    else
    {
-      m_pending_buffer_pool.ring = static_cast<uint32_t *>(malloc(sizeof(uint32_t) * m_num_swapchain_images));
+      m_pending_buffer_pool.ring = static_cast<uint32_t *>(malloc(sizeof(uint32_t) * m_swapchain_images.size()));
    }
 
    if (m_pending_buffer_pool.ring == nullptr)
@@ -234,7 +202,14 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
 
    m_pending_buffer_pool.head = 0;
    m_pending_buffer_pool.tail = 0;
-   m_pending_buffer_pool.size = m_num_swapchain_images;
+   m_pending_buffer_pool.size = m_swapchain_images.size();
+
+   /* We have allocated images, we can call the platform init function if something needs to be done. */
+   result = init_platform(device, swapchain_create_info);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
 
    VkImageCreateInfo image_create_info = {};
    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -253,16 +228,16 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    image_create_info.pQueueFamilyIndices = swapchain_create_info->pQueueFamilyIndices;
    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-   result = m_free_image_semaphore.init(m_num_swapchain_images);
+   result = m_free_image_semaphore.init(m_swapchain_images.size());
    if (result != VK_SUCCESS)
    {
       assert(result == VK_ERROR_OUT_OF_HOST_MEMORY);
       return result;
    }
 
-   for (unsigned i = 0; i < m_num_swapchain_images; i++)
+   for (auto& img : m_swapchain_images)
    {
-      result = create_image(image_create_info, m_swapchain_images[i]);
+      result = create_image(image_create_info, img);
       if (result != VK_SUCCESS)
       {
          return result;
@@ -330,10 +305,10 @@ void swapchain_base::teardown()
    if (m_descendant != VK_NULL_HANDLE)
    {
       auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
-      for (uint32_t i = 0; i < desc->m_num_swapchain_images; ++i)
+      for (auto& img : desc->m_swapchain_images)
       {
-         if (desc->m_swapchain_images[i].status == swapchain_image::PRESENTED ||
-             desc->m_swapchain_images[i].status == swapchain_image::PENDING)
+         if (img.status == swapchain_image::PRESENTED ||
+             img.status == swapchain_image::PENDING)
          {
             /* Here we wait for the start_present_semaphore, once this semaphore is up,
              * the descendant has finished waiting, we don't want to delete vkImages and vkFences
@@ -389,28 +364,13 @@ void swapchain_base::teardown()
       auto *sc = reinterpret_cast<swapchain_base *>(m_ancestor);
       sc->clear_descendant();
    }
-
    /* Release the images array. */
-   if (m_swapchain_images != nullptr)
+   for (auto& img : m_swapchain_images)
    {
-
-      for (uint32_t i = 0; i < m_num_swapchain_images; ++i)
-      {
-         /* Call implementation specific release */
-         destroy_image(m_swapchain_images[i]);
-      }
-
-      if (m_alloc_callbacks != nullptr)
-      {
-         m_alloc_callbacks->pfnFree(m_alloc_callbacks->pUserData, m_swapchain_images);
-      }
-      else
-      {
-         free(m_swapchain_images);
-      }
+      /* Call implementation specific release */
+      destroy_image(img);
    }
 
-   /* Free ring buffer. */
    if (m_pending_buffer_pool.ring != nullptr)
    {
       if (m_alloc_callbacks != nullptr)
@@ -438,7 +398,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    }
 
    uint32_t i;
-   for (i = 0; i < m_num_swapchain_images; ++i)
+   for (i = 0; i < m_swapchain_images.size(); ++i)
    {
       if (m_swapchain_images[i].status == swapchain_image::FREE)
       {
@@ -448,7 +408,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
       }
    }
 
-   assert(i < m_num_swapchain_images);
+   assert(i < m_swapchain_images.size());
 
    if (VK_NULL_HANDLE != semaphore || VK_NULL_HANDLE != fence)
    {
@@ -474,13 +434,13 @@ VkResult swapchain_base::get_swapchain_images(uint32_t *swapchain_image_count, V
    if (swapchain_images == nullptr)
    {
       /* Return the number of swapchain images. */
-      *swapchain_image_count = m_num_swapchain_images;
+      *swapchain_image_count = m_swapchain_images.size();
 
       return VK_SUCCESS;
    }
    else
    {
-      assert(m_num_swapchain_images > 0);
+      assert(m_swapchain_images.size() > 0);
       assert(*swapchain_image_count > 0);
 
       /* Populate array, write actual number of images returned. */
@@ -492,7 +452,7 @@ VkResult swapchain_base::get_swapchain_images(uint32_t *swapchain_image_count, V
 
          current_image++;
 
-         if (current_image == m_num_swapchain_images)
+         if (current_image == m_swapchain_images.size())
          {
             *swapchain_image_count = current_image;
 
@@ -517,10 +477,10 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    if (m_descendant != VK_NULL_HANDLE)
    {
       auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
-      for (uint32_t i = 0; i < desc->m_num_swapchain_images; ++i)
+      for (auto& img : desc->m_swapchain_images)
       {
-         if (desc->m_swapchain_images[i].status == swapchain_image::PRESENTED ||
-             desc->m_swapchain_images[i].status == swapchain_image::PENDING)
+         if (img.status == swapchain_image::PRESENTED ||
+             img.status == swapchain_image::PENDING)
          {
             descendent_started_presenting = true;
             break;
@@ -583,11 +543,11 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
 
 void swapchain_base::deprecate(VkSwapchainKHR descendant)
 {
-   for (unsigned i = 0; i < m_num_swapchain_images; i++)
+   for (auto& img : m_swapchain_images)
    {
-      if (m_swapchain_images[i].status == swapchain_image::FREE)
+      if (img.status == swapchain_image::FREE)
       {
-         destroy_image(m_swapchain_images[i]);
+         destroy_image(img);
       }
    }
 
@@ -600,9 +560,9 @@ void swapchain_base::wait_for_pending_buffers()
    int num_acquired_images = 0;
    int wait;
 
-   for (uint32_t i = 0; i < m_num_swapchain_images; ++i)
+   for (auto& img : m_swapchain_images)
    {
-      if (m_swapchain_images[i].status == swapchain_image::ACQUIRED)
+      if (img.status == swapchain_image::ACQUIRED)
       {
          ++num_acquired_images;
       }
@@ -611,7 +571,7 @@ void swapchain_base::wait_for_pending_buffers()
    /* Once all the pending buffers are flipped, the swapchain should have images
     * in ACQUIRED (application fails to queue them back for presentation), FREE
     * and one and only one in PRESENTED. */
-   wait = m_num_swapchain_images - num_acquired_images - 1;
+   wait = m_swapchain_images.size() - num_acquired_images - 1;
 
    while (wait > 0)
    {
