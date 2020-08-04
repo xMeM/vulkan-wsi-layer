@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -320,14 +320,10 @@ void swapchain_base::teardown()
    if (m_queue != VK_NULL_HANDLE)
    {
       /* Make sure the vkFences are done signaling. */
-      vkQueueWaitIdle(m_queue);
+      m_device_data.disp.QueueWaitIdle(m_queue);
    }
 
-   /* Make sure the vkFences are done signaling. */
-   m_device_data.disp.QueueWaitIdle(m_queue);
-
    /* We are safe to destroy everything. */
-
    if (m_thread_sem_defined)
    {
       /* Tell flip thread to end. */

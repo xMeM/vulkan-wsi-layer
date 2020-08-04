@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -44,6 +44,18 @@ static void default_free(void *, void *pMemory)
 
 namespace util
 {
+
+const allocator& allocator::get_generic()
+{
+   static allocator generic{nullptr, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND};
+   return generic;
+}
+
+
+allocator::allocator(const allocator& other, VkSystemAllocationScope new_scope)
+   : allocator{other.get_original_callbacks(), new_scope}
+{
+}
 
 /* If callbacks is already populated by vulkan then use those specified as default. */
 allocator::allocator(const VkAllocationCallbacks *callbacks, VkSystemAllocationScope scope)

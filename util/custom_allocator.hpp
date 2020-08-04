@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,12 +41,22 @@ class allocator
 {
 public:
    /**
+    * @brief Get an allocator that can be used if VkAllocationCallbacks are not provided.
+    */
+   static const allocator& get_generic();
+
+   /**
     * @brief Construct a new wrapper for the given VK callbacks and scope.
     * @param callbacks Pointer to allocation callbacks. If this is @c nullptr, then default
     *   allocation callbacks are used. These can be accessed through #m_callbacks.
     * @param scope The scope to use for this allocator.
     */
    allocator(const VkAllocationCallbacks *callbacks, VkSystemAllocationScope scope);
+
+   /**
+    * @brief Copy the given allocator, but change the allocation scope.
+    */
+   allocator(const allocator& other, VkSystemAllocationScope new_scope);
 
    /**
     * @brief Get a pointer to the allocation callbacks provided while constructing this object.

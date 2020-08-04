@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Arm Limited.
+# Copyright (c) 2019-2021 Arm Limited.
 #
 # SPDX-License-Identifier: MIT
 #
@@ -26,10 +26,12 @@ project(VkLayer_window_system_integration CXX)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(VULKAN_PKG_CONFIG vulkan)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pthread")
 if (DEFINED DEBUG)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
 endif()
+
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-undefined")
 
 if(NOT DEFINED VULKAN_CXX_INCLUDE)
    set(VULKAN_CXX_INCLUDE ${VULKAN_PKG_CONFIG_INCLUDEDIR})
@@ -49,6 +51,7 @@ add_library(${PROJECT_NAME} SHARED
    layer/swapchain_api.cpp
    util/timed_semaphore.cpp
    util/custom_allocator.cpp
+   util/extension_list.cpp
    wsi/swapchain_base.cpp
    wsi/wsi_factory.cpp
    wsi/headless/surface_properties.cpp
