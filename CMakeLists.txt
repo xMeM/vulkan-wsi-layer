@@ -27,7 +27,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(VULKAN_PKG_CONFIG vulkan)
 
 # Disable C++ exceptions.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -Wall")
 
 if(NOT DEFINED VULKAN_CXX_INCLUDE)
    set(VULKAN_CXX_INCLUDE ${VULKAN_PKG_CONFIG_INCLUDEDIR})

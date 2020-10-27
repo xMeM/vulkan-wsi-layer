@@ -136,6 +136,7 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
 
 swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *allocator)
    : m_device_data(dev_data)
+   , m_page_flip_thread_run(true)
    , m_thread_sem_defined(false)
    , m_first_present(true)
    , m_pending_buffer_pool{ nullptr, 0, 0, 0 }
@@ -148,7 +149,6 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_ancestor(VK_NULL_HANDLE)
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
-   , m_page_flip_thread_run(true)
 {
 }
 
@@ -281,13 +281,6 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    if (result != VK_SUCCESS)
    {
       return result;
-   }
-
-   /* Only programming error can cause this to fail. */
-   assert(res == 0);
-   if (res != 0)
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
    res = sem_init(&m_start_present_semaphore, 0, 0);
