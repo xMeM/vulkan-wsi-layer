@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,7 +59,7 @@ VKAPI_ATTR VkResult extension_properties(const uint32_t count, const VkExtension
    }
 
    size = *pCount < count ? *pCount : count;
-   memcpy(pProp, layer_ext, size * sizeof(VkLayerProperties));
+   memcpy(pProp, layer_ext, size * sizeof(VkExtensionProperties));
    *pCount = size;
    if (size < count)
    {
@@ -195,6 +195,10 @@ extern "C"
    VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL
    wsi_layer_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)
    {
+      assert(instance);
+      layer::instance_private_data::get(layer::get_key(instance))
+      .disp.DestroyInstance(instance, pAllocator);
+
       layer::instance_private_data::destroy(instance);
    }
 

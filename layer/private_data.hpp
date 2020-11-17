@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -37,6 +37,7 @@
    V(GetPhysicalDeviceSurfaceCapabilitiesKHR) \
    V(GetPhysicalDeviceSurfaceFormatsKHR)      \
    V(GetPhysicalDeviceSurfacePresentModesKHR) \
+   V(DestroyInstance)                         \
    V(GetPhysicalDeviceSurfaceSupportKHR)
 
 namespace layer
