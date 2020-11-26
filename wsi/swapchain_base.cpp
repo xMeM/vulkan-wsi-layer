@@ -322,9 +322,15 @@ void swapchain_base::teardown()
    }
 
    /* If descendant started presenting, there is no pending buffer in the swapchain. */
-   if (descendent_started_presenting == false)
+   if (m_is_valid && descendent_started_presenting == false)
    {
       wait_for_pending_buffers();
+   }
+
+   if (m_queue != VK_NULL_HANDLE)
+   {
+      /* Make sure the vkFences are done signaling. */
+      vkQueueWaitIdle(m_queue);
    }
 
    /* Make sure the vkFences are done signaling. */

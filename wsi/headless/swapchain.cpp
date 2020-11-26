@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -61,7 +61,10 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create, wsi::swa
 {
    VkResult res = VK_SUCCESS;
    res = m_device_data.disp.CreateImage(m_device, &image_create, nullptr, &image.image);
-   assert(VK_SUCCESS == res);
+   if (res != VK_SUCCESS)
+   {
+      return res;
+   }
 
    VkMemoryRequirements memory_requirements;
    m_device_data.disp.GetImageMemoryRequirements(m_device, image.image, &memory_requirements);
