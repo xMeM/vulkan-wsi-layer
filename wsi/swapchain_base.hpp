@@ -200,7 +200,7 @@ protected:
    /**
     * @brief User provided memory allocation callbacks.
     */
-   const VkAllocationCallbacks *m_alloc_callbacks;
+   const util::allocator m_allocator;
 
    /**
     * @brief Vector of images in the swapchain.
@@ -243,7 +243,15 @@ protected:
     */
    VkQueue m_queue;
 
-   /*
+   /**
+    * @brief Return the VkAllocationCallbacks passed in this object constructor.
+    */
+   const VkAllocationCallbacks *get_allocation_callbacks()
+   {
+      return m_allocator.get_original_callbacks();
+   }
+
+   /**
     * @brief Method to wait on all pending buffers to be displayed.
     */
    void wait_for_pending_buffers();

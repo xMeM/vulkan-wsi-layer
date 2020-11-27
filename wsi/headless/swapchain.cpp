@@ -88,19 +88,10 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create, wsi::swa
    image_data *data = nullptr;
 
    /* Create image_data */
-   if (m_alloc_callbacks != nullptr)
-   {
-      data = static_cast<image_data *>(m_alloc_callbacks->pfnAllocation(
-         m_alloc_callbacks->pUserData, sizeof(image_data), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-   }
-   else
-   {
-      data = static_cast<image_data *>(malloc(sizeof(image_data)));
-   }
-
+   data = m_allocator.create<image_data>(1);
    if (data == nullptr)
    {
-      m_device_data.disp.DestroyImage(m_device, image.image, m_alloc_callbacks);
+      m_device_data.disp.DestroyImage(m_device, image.image, get_allocation_callbacks());
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
    image.data = reinterpret_cast<void *>(data);
@@ -150,7 +141,7 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
 
       if (image.image != VK_NULL_HANDLE)
       {
-         m_device_data.disp.DestroyImage(m_device, image.image, m_alloc_callbacks);
+         m_device_data.disp.DestroyImage(m_device, image.image, get_allocation_callbacks());
          image.image = VK_NULL_HANDLE;
       }
    }
@@ -163,14 +154,7 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
          m_device_data.disp.FreeMemory(m_device, data->memory, nullptr);
          data->memory = VK_NULL_HANDLE;
       }
-      if (m_alloc_callbacks != nullptr)
-      {
-         m_alloc_callbacks->pfnFree(m_alloc_callbacks->pUserData, data);
-      }
-      else
-      {
-         free(data);
-      }
+      m_allocator.destroy(1, data);
       image.data = nullptr;
    }
 

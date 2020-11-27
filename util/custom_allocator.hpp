@@ -25,6 +25,7 @@
 #include <new>
 #include <vector>
 #include <string>
+#include <cassert>
 
 #include <vulkan/vulkan.h>
 
@@ -39,13 +40,37 @@ namespace util
 class allocator
 {
 public:
+   /**
+    * @brief Construct a new wrapper for the given VK callbacks and scope.
+    * @param callbacks Pointer to allocation callbacks. If this is @c nullptr, then default
+    *   allocation callbacks are used. These can be accessed through #m_callbacks.
+    * @param scope The scope to use for this allocator.
+    */
    allocator(const VkAllocationCallbacks *callbacks, VkSystemAllocationScope scope);
 
-   template <typename T, typename... arg_types>
-   T *create(arg_types &&... args) const;
+   /**
+    * @brief Get a pointer to the allocation callbacks provided while constructing this object.
+    * @return a copy of the #VkAllocationCallback argument provided in the allocator constructor
+    *   or @c nullptr if this argument was provided as @c nullptr.
+    * @note The #m_callbacks member is always populated with callable pointers for pfnAllocation,
+    *   pfnReallocation and pfnFree.
+    */
+   const VkAllocationCallbacks *get_original_callbacks() const;
 
+   /**
+    * @brief Helper method to allocate and construct objects with a custom allocator.
+    * @param num_objects Number of objects to create.
+    * @return Pointer to the newly created objects or @c nullptr if allocation failed.
+    */
+   template <typename T, typename... arg_types>
+   T *create(size_t num_objects, arg_types &&... args) const noexcept;
+
+   /**
+    * @brief Helper method to destroy and deallocate objects constructed with allocator::create().
+    * @param num_objects Number of objects to destroy.
+    */
    template <typename T>
-   void destroy(T *obj) const;
+   void destroy(size_t num_objects, T *obj) const noexcept;
 
    VkAllocationCallbacks m_callbacks;
    VkSystemAllocationScope m_scope;
@@ -118,48 +143,66 @@ bool operator!=(const custom_allocator<T> &, const custom_allocator<U> &)
    return false;
 }
 
-/**
- * @brief Helper method to allocate and construct objects with a custom allocator.
- * @return The new object or @c nullptr if allocation failed.
- */
 template <typename T, typename... arg_types>
-T *allocator::create(arg_types &&... args) const
+T *allocator::create(size_t num_objects, arg_types &&... args) const noexcept
 {
+   if (num_objects < 1)
+   {
+      return nullptr;
+   }
+
    custom_allocator<T> allocator(*this);
    T *ptr;
    try
    {
-      ptr = allocator.allocate(1);
+      ptr = allocator.allocate(num_objects);
    }
    catch (...)
    {
       return nullptr;
    }
 
+   size_t objects_constructed = 0;
    try
    {
-      new (ptr) T(std::forward<arg_types>(args)...);
+      while (objects_constructed < num_objects)
+      {
+         T *next_object = &ptr[objects_constructed];
+         new (next_object) T(std::forward<arg_types>(args)...);
+         objects_constructed++;
+      }
    }
    catch (...)
    {
       /* We catch all exceptions thrown while constructing the object, not just
        * std::bad_alloc.
        */
-      allocator.deallocate(ptr, 1);
+      while (objects_constructed > 0)
+      {
+         objects_constructed--;
+         ptr[objects_constructed].~T();
+      }
+      allocator.deallocate(ptr, num_objects);
       return nullptr;
    }
    return ptr;
 }
 
-/**
- * @brief Helper method to destroy and deallocate objects constructed with create_custom().
- */
 template <typename T>
-void allocator::destroy(T *obj) const
+void allocator::destroy(size_t num_objects, T *objects) const noexcept
 {
-   obj->~T();
+   assert((objects == nullptr) == (num_objects == 0));
+   if (num_objects == 0)
+   {
+      return;
+   }
+
    custom_allocator<T> allocator(*this);
-   allocator.deallocate(obj, 1);
+   for (size_t i = 0; i < num_objects; i++)
+   {
+      objects[i].~T();
+   }
+   allocator.deallocate(objects, num_objects);
 }
 
 template <typename T>

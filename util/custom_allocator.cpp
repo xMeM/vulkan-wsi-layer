@@ -62,4 +62,9 @@ allocator::allocator(const VkAllocationCallbacks *callbacks, VkSystemAllocationS
    }
 }
 
+const VkAllocationCallbacks *allocator::get_original_callbacks() const
+{
+   return m_callbacks.pfnAllocation == default_allocation ? nullptr : &m_callbacks;
+}
+
 } /* namespace util */

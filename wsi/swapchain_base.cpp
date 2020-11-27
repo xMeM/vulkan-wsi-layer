@@ -134,14 +134,14 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
    m_free_image_semaphore.post();
 }
 
-swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *allocator)
+swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *callbacks)
    : m_device_data(dev_data)
    , m_page_flip_thread_run(true)
    , m_thread_sem_defined(false)
    , m_first_present(true)
    , m_pending_buffer_pool{ nullptr, 0, 0, 0 }
-   , m_alloc_callbacks(allocator)
-   , m_swapchain_images(util::allocator(m_alloc_callbacks, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT))
+   , m_allocator(callbacks, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT)
+   , m_swapchain_images(m_allocator)
    , m_surface(VK_NULL_HANDLE)
    , m_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
    , m_descendant(VK_NULL_HANDLE)
@@ -184,17 +184,7 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    /* Initialize ring buffer. */
-   if (m_alloc_callbacks != nullptr)
-   {
-      m_pending_buffer_pool.ring = static_cast<uint32_t *>(
-         m_alloc_callbacks->pfnAllocation(m_alloc_callbacks->pUserData, sizeof(uint32_t) * m_swapchain_images.size(),
-                                          alignof(uint32_t), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-   }
-   else
-   {
-      m_pending_buffer_pool.ring = static_cast<uint32_t *>(malloc(sizeof(uint32_t) * m_swapchain_images.size()));
-   }
-
+   m_pending_buffer_pool.ring = m_allocator.create<uint32_t>(m_swapchain_images.size(), 0);
    if (m_pending_buffer_pool.ring == nullptr)
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -377,17 +367,7 @@ void swapchain_base::teardown()
       destroy_image(img);
    }
 
-   if (m_pending_buffer_pool.ring != nullptr)
-   {
-      if (m_alloc_callbacks != nullptr)
-      {
-         m_alloc_callbacks->pfnFree(m_alloc_callbacks->pUserData, m_pending_buffer_pool.ring);
-      }
-      else
-      {
-         free(m_pending_buffer_pool.ring);
-      }
-   }
+   m_allocator.destroy(m_swapchain_images.size(), m_pending_buffer_pool.ring);
 }
 
 VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t *image_index)
