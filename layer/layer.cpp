@@ -60,7 +60,7 @@ VKAPI_ATTR VkResult extension_properties(const uint32_t count, const VkExtension
    }
 
    size = *pCount < count ? *pCount : count;
-   memcpy(pProp, layer_ext, size * sizeof(VkExtensionProperties));
+   memcpy(pProp, layer_ext, size * sizeof(*pProp));
    *pCount = size;
    if (size < count)
    {
@@ -82,7 +82,7 @@ VKAPI_ATTR VkResult layer_properties(const uint32_t count, const VkLayerProperti
    }
 
    size = *pCount < count ? *pCount : count;
-   memcpy(pProp, layer_prop, size * sizeof(VkLayerProperties));
+   memcpy(pProp, layer_prop, size * sizeof(*pProp));
    *pCount = size;
    if (size < count)
    {
@@ -333,12 +333,14 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkEnumerateDeviceExtens
 }
 
 VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkEnumerateInstanceExtensionProperties(
-   const char *pLayerName, uint32_t *pCount, VkExtensionProperties *pProperties)
+   const VkEnumerateInstanceExtensionPropertiesChain *chain, const char *pLayerName,
+   uint32_t *pCount, VkExtensionProperties *pProperties)
 {
    if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
       return layer::extension_properties(1, layer::instance_extension, pCount, pProperties);
 
-   return VK_ERROR_LAYER_NOT_PRESENT;
+   assert(chain);
+   return chain->CallDown(pLayerName, pCount, pProperties);
 }
 
 VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
@@ -365,6 +367,12 @@ VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDe
 VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstanceProcAddr(VkInstance instance,
                                                                                          const char *funcName)
 {
+   PFN_vkVoidFunction wsi_func = wsi::get_proc_addr(funcName);
+   if (wsi_func)
+   {
+      return wsi_func;
+   }
+
    GET_PROC_ADDR(vkGetDeviceProcAddr);
    GET_PROC_ADDR(vkGetInstanceProcAddr);
    GET_PROC_ADDR(vkCreateInstance);
@@ -376,7 +384,6 @@ VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstance
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
    GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
-   GET_PROC_ADDR(vkEnumerateInstanceExtensionProperties);
    GET_PROC_ADDR(vkEnumerateInstanceLayerProperties);
 
    return layer::instance_private_data::get(instance).disp.GetInstanceProcAddr(instance, funcName);

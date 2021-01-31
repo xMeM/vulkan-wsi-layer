@@ -95,4 +95,17 @@ util::wsi_platform_set find_enabled_layer_platforms(const VkInstanceCreateInfo *
 VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util::wsi_platform_set enabled_platforms,
                                           util::extension_list &extensions_to_enable);
 
+/**
+ * @brief Return a function pointer for surface specific functions.
+ *
+ * @details This function iterates through the supported platforms and queries them for the
+ * implementation of the @p name function.
+ *
+ * @param name The name of the target function
+ *
+ * @return A pointer to the implementation of the @p name function or null pointer in case this
+ *         function isn't implemented for any platform.
+ */
+PFN_vkVoidFunction get_proc_addr(const char *name);
+
 } // namespace wsi

@@ -179,6 +179,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
+   m_present_mode = swapchain_create_info->presentMode;
+
    /* Init image to invalid values. */
    if (!m_swapchain_images.try_resize(swapchain_create_info->minImageCount))
       return VK_ERROR_OUT_OF_HOST_MEMORY;

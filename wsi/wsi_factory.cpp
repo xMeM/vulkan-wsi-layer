@@ -35,7 +35,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+
 #include <vulkan/vk_icd.h>
+
+#if BUILD_WSI_WAYLAND
+#include <vulkan/vulkan_wayland.h>
+#include "wayland/surface_properties.hpp"
+#include "wayland/swapchain.hpp"
+#endif
 
 namespace wsi
 {
@@ -45,7 +52,10 @@ static struct wsi_extension
    VkExtensionProperties extension;
    VkIcdWsiPlatform platform;
 } const supported_wsi_extensions[] = {
-   { { VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME, VK_EXT_HEADLESS_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_HEADLESS }
+   { { VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME, VK_EXT_HEADLESS_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_HEADLESS },
+#if BUILD_WSI_WAYLAND
+   { { VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_WAYLAND },
+#endif
 };
 
 static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
@@ -54,6 +64,10 @@ static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
    {
    case VK_ICD_WSI_PLATFORM_HEADLESS:
       return &headless::surface_properties::get_instance();
+#if BUILD_WSI_WAYLAND
+   case VK_ICD_WSI_PLATFORM_WAYLAND:
+      return &wayland::surface_properties::get_instance();
+#endif
    default:
       return nullptr;
    }
@@ -87,6 +101,10 @@ swapchain_base *allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_p
    {
    case VK_ICD_WSI_PLATFORM_HEADLESS:
       return allocate_swapchain<wsi::headless::swapchain>(dev_data, pAllocator);
+#if BUILD_WSI_WAYLAND
+   case VK_ICD_WSI_PLATFORM_WAYLAND:
+      return allocate_swapchain<wsi::wayland::swapchain>(dev_data, pAllocator);
+#endif
    default:
       return nullptr;
    }
@@ -163,6 +181,23 @@ void destroy_surface_swapchain(swapchain_base *swapchain, const VkAllocationCall
       swapchain->~swapchain_base();
       pAllocator->pfnFree(pAllocator->pUserData, reinterpret_cast<void *>(swapchain));
    }
+}
+
+PFN_vkVoidFunction get_proc_addr(const char *name)
+{
+   /*
+    * Note that we here assume that there are no two get_proc_addr implementations
+    * that handle the same function name.
+    */
+   for (const auto &wsi_ext : supported_wsi_extensions)
+   {
+      PFN_vkVoidFunction func = get_surface_properties(wsi_ext.platform)->get_proc_addr(name);
+      if (func)
+      {
+         return func;
+      }
+   }
+   return nullptr;
 }
 
 } // namespace wsi

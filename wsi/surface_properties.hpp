@@ -31,7 +31,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <util/extension_list.hpp>
+#include "util/extension_list.hpp"
 
 namespace wsi
 {
@@ -68,6 +68,14 @@ public:
       static const util::extension_list empty{util::allocator::get_generic()};
       return empty;
    }
+
+   /**
+    * @brief Implements vkGetProcAddr for entrypoints specific to the surface type.
+    */
+    virtual PFN_vkVoidFunction get_proc_addr(const char *name)
+    {
+       return nullptr;
+    }
 };
 
 } /* namespace wsi */

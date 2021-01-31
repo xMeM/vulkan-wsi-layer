@@ -45,16 +45,17 @@ namespace layer
  * guarantee than we can safely call them. We still mark the entrypoints with REQUIRED() and OPTIONAL(). The layer
  * fails if vkGetInstanceProcAddr returns null for entrypoints that are REQUIRED().
  */
-#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL) \
-   REQUIRED(GetInstanceProcAddr)                      \
-   REQUIRED(DestroyInstance)                          \
-   REQUIRED(GetPhysicalDeviceProperties)              \
-   REQUIRED(GetPhysicalDeviceImageFormatProperties)   \
-   REQUIRED(EnumerateDeviceExtensionProperties)       \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)  \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)       \
-   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)  \
-   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)
+#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL)   \
+   REQUIRED(GetInstanceProcAddr)                        \
+   REQUIRED(DestroyInstance)                            \
+   REQUIRED(GetPhysicalDeviceProperties)                \
+   REQUIRED(GetPhysicalDeviceImageFormatProperties)     \
+   REQUIRED(EnumerateDeviceExtensionProperties)         \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)    \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)         \
+   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)    \
+   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)         \
+   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR)
 
 struct instance_dispatch_table
 {
@@ -100,7 +101,8 @@ struct instance_dispatch_table
    OPTIONAL(DestroySwapchainKHR)                    \
    OPTIONAL(GetSwapchainImagesKHR)                  \
    OPTIONAL(AcquireNextImageKHR)                    \
-   OPTIONAL(QueuePresentKHR)
+   OPTIONAL(QueuePresentKHR)                        \
+   OPTIONAL(GetMemoryFdPropertiesKHR)
 
 struct device_dispatch_table
 {

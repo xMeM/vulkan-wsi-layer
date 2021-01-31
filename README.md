@@ -12,14 +12,14 @@ ICD; instead, the implementation of these extensions are shared across vendors
 for mutual benefit.
 
 The project currently implements support for `VK_EXT_headless_surface` and
-its dependencies. We hope to extend support for further platforms such as Wayland
-and direct-to-display rendering in the future.
+its dependencies. Experimental support for `VK_KHR_wayland_surface` can be
+enabled via a build option [as explained below](#building-with-wayland-support).
 
 ## Building
 
 ### Dependencies
 
-* [CMake](https://cmake.org) version 2.8.11 or above.
+* [CMake](https://cmake.org) version 3.4.3 or above.
 * C++11 compiler.
 * Vulkan® loader and associated headers with support for the
   `VK_EXT_headless_surface` extension.
@@ -58,6 +58,23 @@ then the build steps are straightforward:
 cmake . -Bbuild
 make -C build
 ```
+
+#### Building with Wayland support
+
+In order to build with Wayland support the `BUILD_WSI_WAYLAND` build option
+must be used, the `SELECT_EXTERNAL_ALLOCATOR` option has to be set to
+an allocator (currently only ion is supported) and the `KERNEL_DIR` option must
+be defined as the root of the Linux kernel source.
+
+```
+cmake . -DVULKAN_CXX_INCLUDE="path/to/vulkan-header" \
+        -DBUILD_WSI_WAYLAND=1 \
+        -DSELECT_EXTERNAL_ALLOCATOR=ion \
+        -DKERNEL_DIR="path/to/linux-kernel-source"
+```
+
+Wayland support is still **EXPERIMENTAL**. What this means in practice is that
+the support is incomplete and not ready for prime time.
 
 ## Installation
 

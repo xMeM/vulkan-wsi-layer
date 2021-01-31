@@ -1,5 +1,5 @@
 {
-    "file_format_version" : "1.0.0",
+    "file_format_version" : "1.1.2",
     "layer" : {
         "name": "VK_LAYER_window_system_integration",
         "type": "GLOBAL",
@@ -11,15 +11,13 @@
             "vkGetInstanceProcAddr": "wsi_layer_vkGetInstanceProcAddr",
             "vkGetDeviceProcAddr": "wsi_layer_vkGetDeviceProcAddr"
         },
+        "pre_instance_functions" : {
+            "vkEnumerateInstanceExtensionProperties" : "wsi_layer_vkEnumerateInstanceExtensionProperties"
+        },
         "instance_extensions": [
-            {
-                "name" : "VK_EXT_headless_surface",
-                "spec_version" : "1"
-            },
-            {
-                "name" : "VK_KHR_surface",
-                "spec_version" : "1"
-            }
+            {"name" : "VK_EXT_headless_surface", "spec_version" : "1"},
+            {"name" : "VK_KHR_wayland_surface", "spec_version" : "1"},
+            {"name" : "VK_KHR_surface", "spec_version" : "1"}
         ],
         "device_extensions": [
             {
@@ -28,10 +26,10 @@
             }
         ],
         "enable_environment": {
-            "ENABLE_HEADLESS_SURFACE": "1"
+            "ENABLE_WSI_LAYER": "1"
         },
         "disable_environment": {
-            "DISABLE_HEADLESS_SURFACE": "1"
+            "DISABLE_WSI_LAYER": "1"
         }
     }
 }
