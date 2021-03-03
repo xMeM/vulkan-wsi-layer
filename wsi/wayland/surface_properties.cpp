@@ -164,7 +164,7 @@ static const char *required_device_extensions[] = {
 
 static std::unique_ptr<util::extension_list> populate_device_extensions()
 {
-   std::unique_ptr<util::extension_list> ret;
+   std::unique_ptr<util::extension_list> ret(new util::extension_list(util::allocator::get_generic()));
    ret->add(required_device_extensions, NELEMS(required_device_extensions));
 
    return ret;
