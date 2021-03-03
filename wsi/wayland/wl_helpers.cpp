@@ -22,27 +22,104 @@
  * SOFTWARE.
  */
 
-#include "swapchain_wl_helpers.hpp"
+#include "wl_helpers.hpp"
 
-#include <wayland-client.h>
-#include <linux-dmabuf-unstable-v1-client-protocol.h>
-#include <string.h>
-#include <assert.h>
+#include <cstring>
+#include <memory>
 #include <poll.h>
 #include <errno.h>
+#include <cassert>
+
+#include "wl_object_owner.hpp"
+
+struct formats_vector
+{
+   util::vector<drm_format_pair> *formats{nullptr};
+   bool is_out_of_memory{false};
+};
+
+namespace
+{
+   /* Handler for format event of the zwp_linux_dmabuf_v1 interface. */
+   extern "C" void dma_buf_format_handler(void *data,
+                                          struct zwp_linux_dmabuf_v1 *dma_buf,
+                                          uint32_t drm_format) {}
+
+   /* Handler for modifier event of the zwp_linux_dmabuf_v1 interface. */
+   extern "C" void dma_buf_modifier_handler(void *data,
+                                            struct zwp_linux_dmabuf_v1 *dma_buf,
+                                            uint32_t drm_format, uint32_t modifier_hi,
+                                            uint32_t modifier_low)
+   {
+      auto *drm_supported_formats = reinterpret_cast<formats_vector *>(data);
+
+      drm_format_pair format = {};
+      format.fourcc = drm_format;
+      format.modifier = (static_cast<uint64_t>(modifier_hi) << 32) | modifier_low;
+
+      if (!drm_supported_formats->formats->try_push_back(format))
+      {
+         drm_supported_formats->is_out_of_memory = true;
+      }
+   }
+}
+
+VkResult get_supported_formats_and_modifiers(
+   wl_display* display, zwp_linux_dmabuf_v1 *dmabuf_interface,
+   util::vector<drm_format_pair> &supported_formats)
+{
+   formats_vector drm_supported_formats;
+   drm_supported_formats.formats = &supported_formats;
+
+   const zwp_linux_dmabuf_v1_listener dma_buf_listener = {
+      .format = dma_buf_format_handler, .modifier = dma_buf_modifier_handler,
+   };
+   int res = zwp_linux_dmabuf_v1_add_listener(dmabuf_interface, &dma_buf_listener,
+                                              &drm_supported_formats);
+   if (res < 0)
+   {
+      WSI_PRINT_ERROR("Failed to add zwp_linux_dmabuf_v1 listener.\n");
+      return VK_ERROR_UNKNOWN;
+   }
+
+   /* Get all modifier events. */
+   res = wl_display_roundtrip(display);
+   if (res < 0)
+   {
+      WSI_PRINT_ERROR("Roundtrip failed.\n");
+      return VK_ERROR_UNKNOWN;
+   }
+
+   if (drm_supported_formats.is_out_of_memory)
+   {
+      WSI_PRINT_ERROR("Host got out of memory.\n");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   return VK_SUCCESS;
+}
 
 extern "C" {
 
    void registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
                          uint32_t version)
    {
-      zwp_linux_dmabuf_v1 **dmabuf_interface = (zwp_linux_dmabuf_v1 **)data;
+      auto dmabuf_interface = reinterpret_cast<wsi::wayland::zwp_linux_dmabuf_v1_owner* >(data);
 
       if (!strcmp(interface, "zwp_linux_dmabuf_v1"))
       {
-         *dmabuf_interface =
-            (zwp_linux_dmabuf_v1 *)wl_registry_bind(wl_registry, name, &zwp_linux_dmabuf_v1_interface, version);
-         assert(*dmabuf_interface);
+         version = ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION;
+         zwp_linux_dmabuf_v1 *dmabuf_interface_obj =
+            reinterpret_cast<zwp_linux_dmabuf_v1 *>(wl_registry_bind(
+               wl_registry, name, &zwp_linux_dmabuf_v1_interface, version));
+
+         if (dmabuf_interface_obj == nullptr)
+         {
+            WSI_PRINT_ERROR("Failed to get zwp_linux_dmabuf_v1 interface.\n");
+            return;
+         }
+
+         dmabuf_interface->reset(dmabuf_interface_obj);
       }
    }
 

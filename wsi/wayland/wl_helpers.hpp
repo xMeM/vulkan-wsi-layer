@@ -24,7 +24,38 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <wayland-client.h>
+#include <linux-dmabuf-unstable-v1-client-protocol.h>
+#include "util/custom_allocator.hpp"
+
+#if VULKAN_WSI_DEBUG > 0
+#define WSI_PRINT_ERROR(...) fprintf(stderr, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#else
+#define WSI_PRINT_ERROR(...) (void)0
+#endif
+
+struct drm_format_pair
+{
+   uint32_t fourcc;
+   uint64_t modifier;
+};
+
+/*
+ * @brief Get supported formats and modifiers using the zwp_linux_dmabuf_v1 interface.
+ *
+ * @param[in]  display               The wl_display that is being used.
+ * @param[in]  dmabuf_interface      Object of the zwp_linux_dmabuf_v1 interface.
+ * @param[out] supported_formats     Vector which will contain the supported drm
+ *                                   formats and their modifiers.
+ *
+ * @retval VK_SUCCESS                    Indicates success.
+ * @retval VK_ERROR_UNKNOWN              Indicates one of the Wayland functions failed.
+ * @retval VK_ERROR_OUT_OF_DEVICE_MEMORY Indicates the host went out of memory.
+ */
+VkResult get_supported_formats_and_modifiers(
+   struct wl_display* display, struct zwp_linux_dmabuf_v1 *dmabuf_interface,
+   util::vector<drm_format_pair> &supported_formats);
 
 extern "C" {
    void registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,

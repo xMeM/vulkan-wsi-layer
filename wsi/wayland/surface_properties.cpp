@@ -22,18 +22,21 @@
  * SOFTWARE.
  */
 
-extern "C" {
+#define VK_USE_PLATFORM_WAYLAND_KHR 1
+
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
-}
 
 #include <cassert>
 #include <cstdlib>
 #include <algorithm>
 #include <array>
-#include <string.h>
+#include <cstring>
 #include "surface_properties.hpp"
 #include "layer/private_data.hpp"
+#include "wl_helpers.hpp"
+#include "wl_object_owner.hpp"
+#include "util/drm/drm_utils.hpp"
 
 #define NELEMS(x) (sizeof(x) / sizeof(x[0]))
 
@@ -41,6 +44,16 @@ namespace wsi
 {
 namespace wayland
 {
+
+struct vk_format_hasher
+{
+   size_t operator()(const VkFormat format) const
+   {
+      return std::hash<uint64_t>()(static_cast<uint64_t>(format));
+   }
+};
+
+using vk_format_set = std::unordered_set<VkFormat, vk_format_hasher>;
 
 surface_properties &surface_properties::get_instance()
 {
@@ -85,34 +98,125 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    return VK_SUCCESS;
 }
 
+static void get_vk_supported_formats(const util::vector<drm_format_pair> &drm_supported_formats,
+                                     vk_format_set &vk_supported_formats)
+{
+   for (const auto &drm_format : drm_supported_formats)
+   {
+      const VkFormat vk_format = util::drm::drm_to_vk_format(drm_format.fourcc);
+      if (vk_format != VK_FORMAT_UNDEFINED)
+      {
+         const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
+         if (srgb_vk_format != VK_FORMAT_UNDEFINED)
+         {
+            vk_supported_formats.insert({srgb_vk_format, vk_format});
+         }
+         else
+         {
+            vk_supported_formats.insert(vk_format);
+         }
+      }
+   }
+}
+
+/*
+ * @brief Query a surface's supported formats from the compositor.
+ *
+ * @details A wl_registry is created in order to get a zwp_linux_dmabuf_v1 object.
+ * Then a listener is attached to that object in order to get the supported formats
+ * from the server. The supported formats are stored in @p vk_supported_formats.
+ *
+ * @param[in]  surface                  The surface, which the supported formats
+ *                                      are for.
+ * @param[out] vk_supported_formats     unordered_set which will store the supported
+ *                                      formats.
+ *
+ * @retval VK_SUCCESS                    Indicates success.
+ * @retval VK_ERROR_SURFACE_LOST_KHR     Indicates one of the Wayland functions failed.
+ * @retval VK_ERROR_OUT_OF_DEVICE_MEMORY Indicates the host went out of memory.
+ */
+static VkResult query_supported_formats(
+   const VkSurfaceKHR surface, vk_format_set &vk_supported_formats)
+{
+   const VkIcdSurfaceWayland *vk_surf = reinterpret_cast<VkIcdSurfaceWayland *>(surface);
+   wl_display *display = vk_surf->display;
+
+   auto registry = registry_owner{wl_display_get_registry(display)};
+   if (registry.get() == nullptr)
+   {
+      WSI_PRINT_ERROR("Failed to get wl display registry.\n");
+      return VK_ERROR_SURFACE_LOST_KHR;
+   }
+
+   auto dmabuf_interface = zwp_linux_dmabuf_v1_owner{nullptr};
+   const wl_registry_listener registry_listener = { registry_handler };
+   int res = wl_registry_add_listener(registry.get(), &registry_listener, &dmabuf_interface);
+   if (res < 0)
+   {
+      WSI_PRINT_ERROR("Failed to add registry listener.\n");
+      return VK_ERROR_SURFACE_LOST_KHR;
+   }
+
+   /* Get the dma buf interface. */
+   res = wl_display_roundtrip(display);
+   if (res < 0)
+   {
+      WSI_PRINT_ERROR("Roundtrip failed.\n");
+      return VK_ERROR_SURFACE_LOST_KHR;
+   }
+
+   if (dmabuf_interface.get() == nullptr)
+   {
+      return VK_ERROR_SURFACE_LOST_KHR;
+   }
+
+   util::vector<drm_format_pair> drm_supported_formats(util::allocator::get_generic());
+   const VkResult ret = get_supported_formats_and_modifiers(display, dmabuf_interface.get(), drm_supported_formats);
+   if (ret != VK_SUCCESS)
+   {
+      return ret == VK_ERROR_UNKNOWN ? VK_ERROR_SURFACE_LOST_KHR : ret;
+   }
+
+   get_vk_supported_formats(drm_supported_formats, vk_supported_formats);
+
+   return ret;
+}
+
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                                  uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats)
 {
-
-   VkResult res = VK_SUCCESS;
-   /* TODO: Hardcoding a list of sensible formats, may be query it from compositor later. */
-   static std::array<const VkFormat, 2> formats = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB };
+   vk_format_set formats;
+   const auto query_res = query_supported_formats(surface, formats);
+   if (query_res != VK_SUCCESS)
+   {
+      return query_res;
+   }
 
    assert(surfaceFormatCount != nullptr);
-   res = VK_SUCCESS;
    if (nullptr == surfaceFormats)
    {
       *surfaceFormatCount = formats.size();
+      return VK_SUCCESS;
    }
-   else
-   {
-      if (formats.size() > *surfaceFormatCount)
-      {
-         res = VK_INCOMPLETE;
-      }
 
-      *surfaceFormatCount = std::min(*surfaceFormatCount, static_cast<uint32_t>(formats.size()));
-      for (uint32_t i = 0; i < *surfaceFormatCount; ++i)
-      {
-         surfaceFormats[i].format = formats[i];
-         surfaceFormats[i].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-      }
+   VkResult res = VK_SUCCESS;
+
+   if (formats.size() > *surfaceFormatCount)
+   {
+      res = VK_INCOMPLETE;
    }
+
+   uint32_t format_count = 0;
+   for (const auto &format : formats)
+   {
+      if (format_count >= *surfaceFormatCount)
+      {
+         break;
+      }
+      surfaceFormats[format_count].format = format;
+      surfaceFormats[format_count++].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+   }
+   *surfaceFormatCount = format_count;
 
    return res;
 }

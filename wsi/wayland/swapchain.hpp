@@ -28,10 +28,12 @@
 
 extern "C" {
 #include <vulkan/vk_icd.h>
-#include <util/wsialloc/wsialloc.h>
+}
+
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
-}
+#include "util/wsialloc/wsialloc.h"
+#include "wl_object_owner.hpp"
 
 namespace wsi
 {
@@ -105,7 +107,7 @@ private:
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;
-   struct zwp_linux_dmabuf_v1 *m_dmabuf_interface;
+   zwp_linux_dmabuf_v1_owner m_dmabuf_interface;
 
    /* The queue on which we dispatch the swapchain related events, mostly frame completion */
    struct wl_event_queue *m_surface_queue;

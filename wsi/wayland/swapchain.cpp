@@ -25,7 +25,7 @@
 #define VK_USE_PLATFORM_WAYLAND_KHR 1
 
 #include "swapchain.hpp"
-#include "swapchain_wl_helpers.hpp"
+#include "wl_helpers.hpp"
 
 #include <cstring>
 #include <cassert>
@@ -36,12 +36,6 @@
 #include <climits>
 
 #include "util/drm/drm_utils.hpp"
-
-#if VULKAN_WSI_DEBUG > 0
-#define WSI_PRINT_ERROR(...) fprintf(stderr, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
-#else
-#define WSI_PRINT_ERROR(...) (void)0
-#endif
 
 namespace wsi
 {
@@ -74,10 +68,7 @@ swapchain::~swapchain()
 {
    int res;
    teardown();
-   if (m_dmabuf_interface != nullptr)
-   {
-      zwp_linux_dmabuf_v1_destroy(m_dmabuf_interface);
-   }
+
    res = wsialloc_delete(&m_wsi_allocator);
    if (res != 0)
    {
@@ -120,17 +111,17 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   wl_registry *registry = wl_display_get_registry(m_display);
-   if (registry == nullptr)
+   auto registry = registry_owner{wl_display_get_registry(m_display)};
+   if (registry.get() == nullptr)
    {
       WSI_PRINT_ERROR("Failed to get wl display registry.\n");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   wl_proxy_set_queue((struct wl_proxy *)registry, m_surface_queue);
+   wl_proxy_set_queue((struct wl_proxy *)registry.get(), m_surface_queue);
 
    const wl_registry_listener registry_listener = { registry_handler };
-   int res = wl_registry_add_listener(registry, &registry_listener, &m_dmabuf_interface);
+   int res = wl_registry_add_listener(registry.get(), &registry_listener, &m_dmabuf_interface);
    if (res < 0)
    {
       WSI_PRINT_ERROR("Failed to add registry listener.\n");
@@ -144,10 +135,10 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   /* we should have the dma_buf interface by now */
-   assert(m_dmabuf_interface);
-
-   wl_registry_destroy(registry);
+   if (m_dmabuf_interface.get() == nullptr)
+   {
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
 
    res = wsialloc_new(-1, &m_wsi_allocator);
    if (res != 0)
@@ -396,7 +387,7 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
 
    /* create a wl_buffer using the dma_buf protocol */
    struct zwp_linux_buffer_params_v1 *params;
-   params = zwp_linux_dmabuf_v1_create_params(m_dmabuf_interface);
+   params = zwp_linux_dmabuf_v1_create_params(m_dmabuf_interface.get());
    zwp_linux_buffer_params_v1_add(params, image_data->buffer_fd, 0, image_data->offset, image_data->stride, 0, 0);
    wl_proxy_set_queue((struct wl_proxy *)params, m_surface_queue);
    res = zwp_linux_buffer_params_v1_add_listener(params, &params_listener, &image_data->buffer);

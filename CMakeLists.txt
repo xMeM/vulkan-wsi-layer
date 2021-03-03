@@ -96,7 +96,7 @@ endif()
 if(BUILD_WSI_WAYLAND)
    add_library(wayland_wsi STATIC
       wsi/wayland/surface_properties.cpp
-      wsi/wayland/swapchain_wl_helpers.cpp
+      wsi/wayland/wl_helpers.cpp
       wsi/wayland/swapchain.cpp)
 
    pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
