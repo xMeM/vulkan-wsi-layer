@@ -65,6 +65,7 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
    , m_dmabuf_interface(nullptr)
    , m_surface_queue(nullptr)
    , m_buffer_queue(nullptr)
+   , m_wsi_allocator()
    , m_present_pending(false)
 {
 }
@@ -90,69 +91,6 @@ swapchain::~swapchain()
    {
       wl_event_queue_destroy(m_buffer_queue);
    }
-}
-
-static void roundtrip_cb_done(void *data, wl_callback *cb, uint32_t cb_data)
-{
-   (void)cb_data;
-
-   bool *cb_recvd = reinterpret_cast<bool *>(data);
-   assert(cb_recvd);
-
-   *cb_recvd = true;
-}
-
-int swapchain::roundtrip()
-{
-   int res;
-   const wl_callback_listener listener = { roundtrip_cb_done };
-   bool cb_recvd = false;
-
-   wl_callback *cb = wl_display_sync(m_display);
-   if (!cb)
-   {
-      WSI_PRINT_ERROR("failed to create wl_display::sync callback\n");
-      res = -1;
-      goto exit;
-   }
-
-   wl_proxy_set_queue((wl_proxy *)cb, m_surface_queue);
-
-   res = wl_callback_add_listener(cb, &listener, &cb_recvd);
-   if (res == -1)
-   {
-      WSI_PRINT_ERROR("error setting wl_display::sync callback listener\n");
-      goto exit;
-   }
-
-   res = wl_display_flush(m_display);
-   if (res == -1)
-   {
-      WSI_PRINT_ERROR("error performing a flush on the display\n");
-      goto exit;
-   }
-   do
-   {
-      res = dispatch_queue(m_display, m_surface_queue, 1000);
-   } while (res > 0 && !cb_recvd);
-
-   if (res < 0)
-   {
-      WSI_PRINT_ERROR("error dispatching on the surface queue\n");
-      goto exit;
-   }
-   else if (res == 0)
-   {
-      WSI_PRINT_ERROR("timeout waiting for roundtrip callback\n");
-      goto exit;
-   }
-
-exit:
-   if (cb)
-   {
-      wl_callback_destroy(cb);
-   }
-   return res;
 }
 
 struct display_queue
@@ -199,7 +137,7 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   res = roundtrip();
+   res = wl_display_roundtrip_queue(m_display, m_surface_queue);
    if (res < 0)
    {
       WSI_PRINT_ERROR("Roundtrip failed.\n");
@@ -472,7 +410,7 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
 
    /* TODO: don't roundtrip - we should be able to send the create request now,
     * and only wait for it on first present. only do this once, not for all buffers created */
-   res = roundtrip();
+   res = wl_display_roundtrip_queue(m_display, m_surface_queue);
    if (res < 0)
    {
       result = VK_ERROR_INITIALIZATION_FAILED;

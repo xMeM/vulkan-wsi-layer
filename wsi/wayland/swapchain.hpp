@@ -82,13 +82,6 @@ protected:
    void destroy_image(swapchain_image &image) override;
 
    /**
-    * @brief Method to perform a rountrip to the Wayland compositor
-    *
-    * @return -1 on error. Otherwise non-negative.
-    */
-   int roundtrip();
-
-   /**
     * @brief Method to check if there are any free images
     *
     * @return true if any images are free, otherwise false.
