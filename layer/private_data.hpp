@@ -55,7 +55,8 @@ namespace layer
    OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)         \
    OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)    \
    OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)         \
-   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR)
+   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR) \
+   OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)
 
 struct instance_dispatch_table
 {
@@ -102,7 +103,8 @@ struct instance_dispatch_table
    OPTIONAL(GetSwapchainImagesKHR)                  \
    OPTIONAL(AcquireNextImageKHR)                    \
    OPTIONAL(QueuePresentKHR)                        \
-   OPTIONAL(GetMemoryFdPropertiesKHR)
+   OPTIONAL(GetMemoryFdPropertiesKHR)               \
+   OPTIONAL(BindImageMemory2KHR)
 
 struct device_dispatch_table
 {

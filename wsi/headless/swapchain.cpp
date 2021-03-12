@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -57,7 +57,7 @@ swapchain::~swapchain()
    teardown();
 }
 
-VkResult swapchain::create_image(const VkImageCreateInfo &image_create, wsi::swapchain_image &image)
+VkResult swapchain::create_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
 {
    VkResult res = VK_SUCCESS;
    res = m_device_data.disp.CreateImage(m_device, &image_create, nullptr, &image.image);

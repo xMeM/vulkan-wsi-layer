@@ -42,7 +42,8 @@
 /** Default alignment */
 #define WSIALLOCP_MIN_ALIGN_SZ (64u)
 
-struct ion_allocator {
+struct ion_allocator
+{
    /* File descriptor of /dev/ion. */
    int fd;
    /* Allocator heap id. */
@@ -221,43 +222,44 @@ int wsialloc_alloc(
    assert(new_fd != NULL);
    assert(offset != NULL);
 
-   int ret = 0;
    struct ion_allocator *ion = allocator->ptr;
 
-   if(modifier != NULL && *modifier != 0)
+   if (modifier != NULL && *modifier != 0)
    {
       return -ENOTSUP;
    }
 
-   size_t size = 0;
-
    /* Validate format and determine per-plane bits per pixel. */
    uint32_t nr_planes, bits_per_pixel[WSIALLOCP_MAX_PLANES];
-   ret = wsiallocp_get_fmt_info(fourcc, &nr_planes, bits_per_pixel);
+   int ret = wsiallocp_get_fmt_info(fourcc, &nr_planes, bits_per_pixel);
    if (ret != 0)
    {
       return ret;
    }
 
-   /* Only single plane formats supported. */
-   if (nr_planes != 1)
+   size_t size = 0;
+   for (uint32_t plane = 0; plane < nr_planes; plane++)
    {
-      return -ENOTSUP;
+      offset[plane] = size;
+
+      /* Assumes multiple of 8--rework otherwise. */
+      const uint32_t plane_bytes_per_pixel = bits_per_pixel[plane] / 8;
+      assert(plane_bytes_per_pixel * 8 == bits_per_pixel[plane]);
+
+      stride[plane] = round_size_up_to_align(width * plane_bytes_per_pixel);
+      size += stride[plane] * height;
    }
 
-   /* Assumes multiple of 8--rework otherwise. */
-   uint32_t plane0_bytes_per_pixel = bits_per_pixel[0] / 8;
-   assert(plane0_bytes_per_pixel * 8 == bits_per_pixel[0]);
-
-   *stride = round_size_up_to_align(width * plane0_bytes_per_pixel);
-   size = *stride * height;
-
-   *new_fd = allocate(ion->fd, size, ion->alloc_heap_id);
-   if (*new_fd < 0)
+   new_fd[0] = allocate(ion->fd, size, ion->alloc_heap_id);
+   if (new_fd[0] < 0)
    {
       return -errno;
    }
 
-   *offset = 0;
+   for (uint32_t plane = 1; plane < nr_planes; plane++)
+   {
+      new_fd[plane] = new_fd[0];
+   }
+
    return 0;
 }

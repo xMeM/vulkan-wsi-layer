@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -306,7 +306,7 @@ protected:
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
     * depending on the error that occured.
     */
-   virtual VkResult create_image(const VkImageCreateInfo &image_create_info, swapchain_image &image) = 0;
+   virtual VkResult create_image(VkImageCreateInfo image_create_info, swapchain_image &image) = 0;
 
    /**
     * @brief Method to present and image
@@ -364,7 +364,7 @@ private:
 
    /**
     * @brief Per swapchain thread function that handles page flipping.
-    * 
+    *
     * This thread should be running for the lifetime of the swapchain.
     * The thread simply calls the implementation's present_image() method.
     * There are 3 main cases we cover here:

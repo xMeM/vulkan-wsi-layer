@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2017-2019, 2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -72,7 +72,7 @@ protected:
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
     * depending on the error that occured.
     */
-   VkResult create_image(const VkImageCreateInfo &image_create_info, wsi::swapchain_image &image);
+   VkResult create_image(VkImageCreateInfo image_create_info, wsi::swapchain_image &image);
 
    /**
     * @brief Method to perform a present - just calls unpresent_image on headless
@@ -87,7 +87,7 @@ protected:
     *
     * @param image Handle to the image about to be released.
     */
-    void destroy_image(wsi::swapchain_image &image);
+   void destroy_image(wsi::swapchain_image &image);
 };
 
 } /* namespace headless */

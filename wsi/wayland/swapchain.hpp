@@ -67,7 +67,7 @@ protected:
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
     * depending on the error that occurred.
     */
-   VkResult create_image(const VkImageCreateInfo &image_create_info, swapchain_image &image) override;
+   VkResult create_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
 
    /**
     * @brief Method to present an image
@@ -103,7 +103,8 @@ protected:
 
 private:
    struct wayland_image_data;
-   VkResult allocate_image(const VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image);
+
+   VkResult allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image);
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;
@@ -126,6 +127,47 @@ private:
     * callback to indicate the server is ready for the next buffer.
     */
    bool m_present_pending;
+
+   /*
+    * @brief Allocate memory for an image plane.
+    *
+    * Allocates a VkDeviceMemory object from a given fd for an image plane. First
+    * it makes a call to get_fd_mem_type_index() to acquire the memory type for
+    * the given fd and then it allocates device memory by calling vkAllocateMemory().
+    *
+    * @param      fd     The plane's fd.
+    * @param[out] memory The allocated VkDeviceMemory object.
+    *
+    * @return VK_SUCCESS on success. If one of the functions that are being called
+    * fails its return value is returned. VK_ERROR_OUT_OF_HOST_MEMORY is returned
+    * when the host gets out of memory.
+    */
+   VkResult allocate_plane_memory(int fd, VkDeviceMemory *memory);
+
+   /*
+    * @brief Get the memory type which the specified file descriptor can be
+    * imported as.
+    *
+    * @param      fd      The given fd.
+    * @param[out] mem_idx The index of the supported memory type.
+    *
+    * @return VK_SUCCESS on success. On failure the error value of
+    * vkGetMemoryFdPropertiesKHR is returned.
+    */
+   VkResult get_fd_mem_type_index(int fd, uint32_t &mem_idx);
+
+   /*
+    * @brief Get the properties a format has when combined with a DRM modifier.
+    *
+    * @param      format            The target format.
+    * @param[out] format_props_list A vector which will store the supported properties
+    *                               for every modifier.
+    *
+    * @return VK_SUCCESS on success. VK_ERROR_OUT_OF_HOST_MEMORY is returned when
+    * the host gets out of memory.
+    */
+   VkResult get_drm_format_properties(
+      VkFormat format, util::vector<VkDrmFormatModifierPropertiesEXT> &format_props_list);
 };
 } // namespace wayland
 } // namespace wsi

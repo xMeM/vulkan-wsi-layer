@@ -27,6 +27,7 @@
 #include "swapchain.hpp"
 #include "wl_helpers.hpp"
 
+#include <stdint.h>
 #include <cstring>
 #include <cassert>
 #include <unistd.h>
@@ -34,8 +35,11 @@
 #include <cerrno>
 #include <cstdio>
 #include <climits>
+#include <functional>
 
 #include "util/drm/drm_utils.hpp"
+
+#define MAX_PLANES 4
 
 namespace wsi
 {
@@ -60,14 +64,23 @@ make_proxy_with_queue(T *object, wl_event_queue *queue)
    return std::unique_ptr<T, std::function<void(T *)>>(proxy, delete_proxy);
 }
 
+const VkImageAspectFlagBits plane_flag_bits[MAX_PLANES] = {
+   VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT,
+   VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT,
+   VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT,
+   VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT,
+};
+
 struct swapchain::wayland_image_data
 {
-   int buffer_fd;
-   int stride;
-   uint32_t offset;
+   int buffer_fd[MAX_PLANES];
+   int stride[MAX_PLANES];
+   uint32_t offset[MAX_PLANES];
 
    wl_buffer *buffer;
-   VkDeviceMemory memory;
+   VkDeviceMemory memory[MAX_PLANES];
+
+   uint32_t num_planes;
 };
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
@@ -136,7 +149,7 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   auto registry = registry_owner{wl_display_get_registry(display_proxy.get())};
+   auto registry = registry_owner{ wl_display_get_registry(display_proxy.get()) };
    if (registry == nullptr)
    {
       WSI_PRINT_ERROR("Failed to get wl display registry.\n");
@@ -173,17 +186,18 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    return VK_SUCCESS;
 }
 
-static void create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *params, struct wl_buffer *buffer)
+extern "C" void create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *params,
+                                 struct wl_buffer *buffer)
 {
-   struct wl_buffer **wayland_buffer = (struct wl_buffer **)data;
+   auto wayland_buffer = reinterpret_cast<wl_buffer **>(data);
    *wayland_buffer = buffer;
 }
 
 static const struct zwp_linux_buffer_params_v1_listener params_listener = { create_succeeded, NULL };
 
-static void buffer_release(void *data, struct wl_buffer *wayl_buffer)
+extern "C" void buffer_release(void *data, struct wl_buffer *wayl_buffer)
 {
-   swapchain *sc = (swapchain *)data;
+   auto sc = reinterpret_cast<swapchain *>(data);
    sc->release_buffer(wayl_buffer);
 }
 
@@ -192,8 +206,7 @@ void swapchain::release_buffer(struct wl_buffer *wayl_buffer)
    uint32_t i;
    for (i = 0; i < m_swapchain_images.size(); i++)
    {
-      wayland_image_data *data;
-      data = (wayland_image_data *)m_swapchain_images[i].data;
+      auto data = reinterpret_cast<wayland_image_data *>(m_swapchain_images[i].data);
       if (data->buffer == wayl_buffer)
       {
          unpresent_image(i);
@@ -207,14 +220,145 @@ void swapchain::release_buffer(struct wl_buffer *wayl_buffer)
 
 static struct wl_buffer_listener buffer_listener = { buffer_release };
 
-VkResult swapchain::allocate_image(const VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
+VkResult swapchain::allocate_plane_memory(int fd, VkDeviceMemory *memory)
+{
+   uint32_t mem_index = -1;
+   VkResult result = get_fd_mem_type_index(fd, mem_index);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   const off_t dma_buf_size = lseek(fd, 0, SEEK_END);
+   if (dma_buf_size < 0)
+   {
+      WSI_PRINT_ERROR("Failed to get DMA Buf size.\n");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   VkImportMemoryFdInfoKHR import_mem_info = {};
+   import_mem_info.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+   import_mem_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+   import_mem_info.fd = fd;
+
+   VkMemoryAllocateInfo alloc_info = {};
+   alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+   alloc_info.pNext = &import_mem_info;
+   alloc_info.allocationSize = static_cast<uint64_t>(dma_buf_size);
+   alloc_info.memoryTypeIndex = mem_index;
+
+   result = m_device_data.disp.AllocateMemory(
+      m_device, &alloc_info, get_allocation_callbacks(), memory);
+
+   if (result != VK_SUCCESS)
+   {
+      WSI_PRINT_ERROR("Failed to import memory.\n");
+      return result;
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult swapchain::get_fd_mem_type_index(int fd, uint32_t &mem_idx)
+{
+   VkMemoryFdPropertiesKHR mem_props = {};
+   mem_props.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+
+   VkResult result = m_device_data.disp.GetMemoryFdPropertiesKHR(
+      m_device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &mem_props);
+   if (result != VK_SUCCESS)
+   {
+      WSI_PRINT_ERROR("Error querying Fd properties.\n");
+      return result;
+   }
+
+   for (mem_idx = 0; mem_idx < VK_MAX_MEMORY_TYPES; mem_idx++)
+   {
+      if (mem_props.memoryTypeBits & (1 << mem_idx))
+      {
+         break;
+      }
+   }
+
+   assert(mem_idx < VK_MAX_MEMORY_TYPES);
+
+   return VK_SUCCESS;
+}
+
+VkResult swapchain::get_drm_format_properties(
+   VkFormat format, util::vector<VkDrmFormatModifierPropertiesEXT> &format_props_list)
+{
+   VkDrmFormatModifierPropertiesListEXT format_modifier_props = {};
+   format_modifier_props.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+
+   VkFormatProperties2KHR format_props = {};
+   format_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2_KHR;
+   format_props.pNext = &format_modifier_props;
+
+   m_device_data.instance_data.disp.GetPhysicalDeviceFormatProperties2KHR(
+      m_device_data.physical_device, format, &format_props);
+
+   if (!format_props_list.try_resize(format_modifier_props.drmFormatModifierCount))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   format_modifier_props.pDrmFormatModifierProperties = format_props_list.data();
+   m_device_data.instance_data.disp.GetPhysicalDeviceFormatProperties2KHR(
+      m_device_data.physical_device, format, &format_props);
+
+   return VK_SUCCESS;
+}
+
+static bool is_disjoint_supported(
+   const util::vector<VkDrmFormatModifierPropertiesEXT> &format_props, uint64_t modifier)
+{
+   for (const auto &prop : format_props)
+   {
+      if (prop.drmFormatModifier == modifier &&
+          prop.drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_DISJOINT_BIT)
+      {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+static uint32_t get_same_fd_index(int fd, int const *fds)
+{
+   uint32_t index = 0;
+   while (fd != fds[index])
+   {
+      index++;
+   }
+
+   return index;
+}
+
+VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
                                    VkImage *image)
 {
    VkResult result = VK_SUCCESS;
+   const uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
 
    image_data->buffer = nullptr;
-   image_data->buffer_fd = -1;
-   image_data->memory = VK_NULL_HANDLE;
+   image_data->num_planes = 0;
+   for (uint32_t plane = 0; plane < MAX_PLANES; plane++)
+   {
+      image_data->buffer_fd[plane] = -1;
+      image_data->memory[plane] = VK_NULL_HANDLE;
+   }
+
+   /* Query support for disjoint images. */
+   util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(m_allocator);
+   result = get_drm_format_properties(image_create_info.format, drm_format_props);
+   if (result != VK_SUCCESS)
+   {
+      WSI_PRINT_ERROR("Failed to get format properties.\n");
+      return result;
+   }
+   auto is_disjoint = is_disjoint_supported(drm_format_props, modifier);
 
    VkExternalImageFormatPropertiesKHR external_props = {};
    external_props.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR;
@@ -230,7 +374,7 @@ VkResult swapchain::allocate_image(const VkImageCreateInfo &image_create_info, w
       VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_mod_info = {};
       drm_mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
       drm_mod_info.pNext = &external_info;
-      drm_mod_info.drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
+      drm_mod_info.drmFormatModifier = modifier;
       drm_mod_info.sharingMode = image_create_info.sharingMode;
       drm_mod_info.queueFamilyIndexCount = image_create_info.queueFamilyIndexCount;
       drm_mod_info.pQueueFamilyIndices = image_create_info.pQueueFamilyIndices;
@@ -284,27 +428,51 @@ VkResult swapchain::allocate_image(const VkImageCreateInfo &image_create_info, w
    else
    {
       /* TODO: Handle Dedicated allocation bit. */
-      uint32_t fourcc = util::drm::vk_to_drm_format(image_create_info.format);
+      const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
 
-      int res =
+      const auto res =
          wsialloc_alloc(&m_wsi_allocator, fourcc, image_create_info.extent.width, image_create_info.extent.height,
-                        &image_data->stride, &image_data->buffer_fd, &image_data->offset, nullptr);
+                        image_data->stride, image_data->buffer_fd, image_data->offset, nullptr);
       if (res != 0)
       {
          WSI_PRINT_ERROR("Failed allocation of DMA Buffer.\n");
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
+
+      for (uint32_t plane = 0; plane < MAX_PLANES; plane++)
       {
-         assert(image_data->stride >= 0);
-         VkSubresourceLayout image_layout = {};
-         image_layout.offset = image_data->offset;
-         image_layout.rowPitch = static_cast<uint32_t>(image_data->stride);
+         if (image_data->buffer_fd[plane] == -1)
+         {
+            break;
+         }
+         image_data->num_planes++;
+      }
+
+      {
+         util::vector<VkSubresourceLayout> image_layout(m_allocator);
+         if (!image_layout.try_resize(image_data->num_planes))
+         {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+
+         for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
+         {
+            assert(image_data->stride[plane] >= 0);
+            image_layout[plane].offset = image_data->offset[plane];
+            image_layout[plane].rowPitch = static_cast<uint32_t>(image_data->stride[plane]);
+         }
+
+         if (is_disjoint)
+         {
+            image_create_info.flags |= VK_IMAGE_CREATE_DISJOINT_BIT;
+         }
+
          VkImageDrmFormatModifierExplicitCreateInfoEXT drm_mod_info = {};
          drm_mod_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
          drm_mod_info.pNext = image_create_info.pNext;
          drm_mod_info.drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
-         drm_mod_info.drmFormatModifierPlaneCount = 1;
-         drm_mod_info.pPlaneLayouts = &image_layout;
+         drm_mod_info.drmFormatModifierPlaneCount = image_data->num_planes;
+         drm_mod_info.pPlaneLayouts = image_layout.data();
 
          VkExternalMemoryImageCreateInfoKHR external_info = {};
          external_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR;
@@ -322,88 +490,87 @@ VkResult swapchain::allocate_image(const VkImageCreateInfo &image_create_info, w
          return result;
       }
       {
-         VkMemoryFdPropertiesKHR mem_props = {};
-         mem_props.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
-
-         result = m_device_data.disp.GetMemoryFdPropertiesKHR(m_device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-                                                              image_data->buffer_fd, &mem_props);
-         if (result != VK_SUCCESS)
+         if (is_disjoint)
          {
-            WSI_PRINT_ERROR("Error querying Fd properties.\n");
-            return result;
-         }
-
-         uint32_t mem_idx;
-         for (mem_idx = 0; mem_idx < VK_MAX_MEMORY_TYPES; mem_idx++)
-         {
-            if (mem_props.memoryTypeBits & (1 << mem_idx))
+            util::vector<VkBindImageMemoryInfo> bind_img_mem_infos(m_allocator);
+            if (!bind_img_mem_infos.try_resize(image_data->num_planes))
             {
-               break;
+               return VK_ERROR_OUT_OF_HOST_MEMORY;
             }
+
+            util::vector<VkBindImagePlaneMemoryInfo> bind_plane_mem_infos(m_allocator);
+            if (!bind_plane_mem_infos.try_resize(image_data->num_planes))
+            {
+               return VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+
+            for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
+            {
+               const auto fd_index = get_same_fd_index(image_data->buffer_fd[plane], image_data->buffer_fd);
+               if (fd_index == plane)
+               {
+                  result = allocate_plane_memory(image_data->buffer_fd[plane], &image_data->memory[fd_index]);
+                  if (result != VK_SUCCESS)
+                  {
+                     return result;
+                  }
+               }
+
+               bind_plane_mem_infos[plane].planeAspect = plane_flag_bits[plane];
+               bind_plane_mem_infos[plane].sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
+               bind_plane_mem_infos[plane].pNext = NULL;
+
+               bind_img_mem_infos[plane].sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+               bind_img_mem_infos[plane].pNext = &bind_plane_mem_infos[plane];
+               bind_img_mem_infos[plane].image = *image;
+               bind_img_mem_infos[plane].memory = image_data->memory[fd_index];
+            }
+
+            result = m_device_data.disp.BindImageMemory2KHR(m_device, bind_img_mem_infos.size(),
+                                                            bind_img_mem_infos.data());
          }
-         off_t dma_buf_size = lseek(image_data->buffer_fd, 0, SEEK_END);
-         if (dma_buf_size < 0)
+         else
          {
-            WSI_PRINT_ERROR("Failed to get DMA Buf size.\n");
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
+            /* Make sure one fd has been allocated. */
+            for (uint32_t plane = 1; plane < image_data->num_planes; plane++)
+            {
+               if (image_data->buffer_fd[plane] != image_data->buffer_fd[0])
+               {
+                  WSI_PRINT_ERROR("Different fds per plane for a non disjoint image.\n");
+                  return VK_ERROR_INITIALIZATION_FAILED;
+               }
+            }
+
+            result = allocate_plane_memory(image_data->buffer_fd[0], &image_data->memory[0]);
+            if (result != VK_SUCCESS)
+            {
+               return result;
+            }
+
+            result = m_device_data.disp.BindImageMemory(m_device, *image, image_data->memory[0], 0);
          }
-
-         VkImportMemoryFdInfoKHR import_mem_info = {};
-         import_mem_info.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
-         import_mem_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-         import_mem_info.fd = image_data->buffer_fd;
-
-         VkMemoryAllocateInfo alloc_info = {};
-         alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-         alloc_info.pNext = &import_mem_info;
-         alloc_info.allocationSize = static_cast<uint64_t>(dma_buf_size);
-         alloc_info.memoryTypeIndex = mem_idx;
-
-         result = m_device_data.disp.AllocateMemory(m_device, &alloc_info, get_allocation_callbacks(), &image_data->memory);
       }
-      if (result != VK_SUCCESS)
-      {
-         WSI_PRINT_ERROR("Failed to import memory.\n");
-         return result;
-      }
-      result = m_device_data.disp.BindImageMemory(m_device, *image, image_data->memory, 0);
    }
 
    return result;
 }
 
-VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swapchain_image &image)
+VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_image &image)
 {
-   uint32_t fourcc = util::drm::vk_to_drm_format(image_create_info.format);
-
-   int res;
-   VkResult result = VK_SUCCESS;
-
-   wayland_image_data *image_data = nullptr;
-   VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0 };
-
    /* Create image_data */
-   if (get_allocation_callbacks() != nullptr)
-   {
-      image_data = static_cast<wayland_image_data *>(
-         get_allocation_callbacks()->pfnAllocation(get_allocation_callbacks()->pUserData, sizeof(wayland_image_data),
-                                                   alignof(wayland_image_data), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-   }
-   else
-   {
-      image_data = static_cast<wayland_image_data *>(malloc(sizeof(wayland_image_data)));
-   }
+   auto image_data = m_allocator.create<wayland_image_data>(1);
    if (image_data == nullptr)
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
-   image.data = reinterpret_cast<void *>(image_data);
+   image.data = image_data;
    image.status = swapchain_image::FREE;
-   result = allocate_image(image_create_info, image_data, &image.image);
+   VkResult result = allocate_image(image_create_info, image_data, &image.image);
    if (result != VK_SUCCESS)
    {
       WSI_PRINT_ERROR("Failed to allocate image.\n");
+      destroy_image(image);
       return result;
    }
 
@@ -417,15 +584,22 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
    }
 
    zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(dmabuf_interface_proxy.get());
-   zwp_linux_buffer_params_v1_add(params, image_data->buffer_fd, 0, image_data->offset, image_data->stride, 0, 0);
-   res = zwp_linux_buffer_params_v1_add_listener(params, &params_listener, &image_data->buffer);
+
+   for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
+   {
+      zwp_linux_buffer_params_v1_add(params, image_data->buffer_fd[plane], plane,
+                                     image_data->offset[plane], image_data->stride[plane], 0, 0);
+   }
+
+   auto res = zwp_linux_buffer_params_v1_add_listener(params, &params_listener, &image_data->buffer);
    if (res < 0)
    {
       destroy_image(image);
       return VK_ERROR_INITIALIZATION_FAILED;
    }
-   zwp_linux_buffer_params_v1_create(params, image_create_info.extent.width, image_create_info.extent.height, fourcc,
-                                     0);
+   const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
+   zwp_linux_buffer_params_v1_create(params, image_create_info.extent.width,
+                                     image_create_info.extent.height, fourcc, 0);
 
    /* TODO: don't roundtrip - we should be able to send the create request now,
     * and only wait for it on first present. only do this once, not for all buffers created */
@@ -448,6 +622,7 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
    }
 
    /* Initialize presentation fence. */
+   VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0 };
    result = m_device_data.disp.CreateFence(m_device, &fenceInfo, get_allocation_callbacks(), &image.present_fence);
    if (result != VK_SUCCESS)
    {
@@ -571,23 +746,24 @@ void swapchain::destroy_image(swapchain_image &image)
       {
          wl_buffer_destroy(image_data->buffer);
       }
-      if (image_data->memory != VK_NULL_HANDLE)
+
+      for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
       {
-         m_device_data.disp.FreeMemory(m_device, image_data->memory, get_allocation_callbacks());
-      }
-      else if (image_data->buffer_fd >= 0)
-      {
-         close(image_data->buffer_fd);
+         if (image_data->memory[plane] != VK_NULL_HANDLE)
+         {
+            m_device_data.disp.FreeMemory(m_device, image_data->memory[plane], get_allocation_callbacks());
+         }
+         else if (image_data->buffer_fd[plane] >= 0)
+         {
+            const auto same_fd_index = get_same_fd_index(image_data->buffer_fd[plane], image_data->buffer_fd);
+            if (same_fd_index == plane)
+            {
+               close(image_data->buffer_fd[plane]);
+            }
+         }
       }
 
-      if (get_allocation_callbacks() != nullptr)
-      {
-         get_allocation_callbacks()->pfnFree(get_allocation_callbacks()->pUserData, image_data);
-      }
-      else
-      {
-         free(image_data);
-      }
+      m_allocator.destroy(1, image_data);
       image.data = nullptr;
    }
 
