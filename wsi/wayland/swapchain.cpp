@@ -42,6 +42,24 @@ namespace wsi
 namespace wayland
 {
 
+template <typename T>
+static std::unique_ptr<T, std::function<void(T *)>>
+make_proxy_with_queue(T *object, wl_event_queue *queue)
+{
+   auto proxy = reinterpret_cast<T *>(wl_proxy_create_wrapper(object));
+   if (proxy != nullptr)
+   {
+      wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(proxy), queue);
+   }
+
+   auto delete_proxy = [](T *proxy)
+   {
+      wl_proxy_wrapper_destroy(reinterpret_cast<wl_proxy *>(proxy));
+   };
+
+   return std::unique_ptr<T, std::function<void(T *)>>(proxy, delete_proxy);
+}
+
 struct swapchain::wayland_image_data
 {
    int buffer_fd;
@@ -111,14 +129,19 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   auto registry = registry_owner{wl_display_get_registry(m_display)};
-   if (registry.get() == nullptr)
+   auto display_proxy = make_proxy_with_queue(m_display, m_surface_queue);
+   if (display_proxy == nullptr)
+   {
+      WSI_PRINT_ERROR("Failed to create wl display proxy.\n");
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   auto registry = registry_owner{wl_display_get_registry(display_proxy.get())};
+   if (registry == nullptr)
    {
       WSI_PRINT_ERROR("Failed to get wl display registry.\n");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
-
-   wl_proxy_set_queue((struct wl_proxy *)registry.get(), m_surface_queue);
 
    const wl_registry_listener registry_listener = { registry_handler };
    int res = wl_registry_add_listener(registry.get(), &registry_listener, &m_dmabuf_interface);
@@ -372,8 +395,7 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
    }
    if (image_data == nullptr)
    {
-      result = VK_ERROR_OUT_OF_HOST_MEMORY;
-      goto out;
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
    image.data = reinterpret_cast<void *>(image_data);
@@ -382,19 +404,25 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
    if (result != VK_SUCCESS)
    {
       WSI_PRINT_ERROR("Failed to allocate image.\n");
-      goto out;
+      return result;
    }
 
    /* create a wl_buffer using the dma_buf protocol */
-   struct zwp_linux_buffer_params_v1 *params;
-   params = zwp_linux_dmabuf_v1_create_params(m_dmabuf_interface.get());
+   auto dmabuf_interface_proxy = make_proxy_with_queue(m_dmabuf_interface.get(), m_surface_queue);
+   if (dmabuf_interface_proxy == nullptr)
+   {
+      WSI_PRINT_ERROR("Failed to allocate dma-buf interface proxy.\n");
+      destroy_image(image);
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(dmabuf_interface_proxy.get());
    zwp_linux_buffer_params_v1_add(params, image_data->buffer_fd, 0, image_data->offset, image_data->stride, 0, 0);
-   wl_proxy_set_queue((struct wl_proxy *)params, m_surface_queue);
    res = zwp_linux_buffer_params_v1_add_listener(params, &params_listener, &image_data->buffer);
    if (res < 0)
    {
-      result = VK_ERROR_INITIALIZATION_FAILED;
-      goto out;
+      destroy_image(image);
+      return VK_ERROR_INITIALIZATION_FAILED;
    }
    zwp_linux_buffer_params_v1_create(params, image_create_info.extent.width, image_create_info.extent.height, fourcc,
                                      0);
@@ -404,31 +432,30 @@ VkResult swapchain::create_image(const VkImageCreateInfo &image_create_info, swa
    res = wl_display_roundtrip_queue(m_display, m_surface_queue);
    if (res < 0)
    {
-      result = VK_ERROR_INITIALIZATION_FAILED;
-      goto out;
+      destroy_image(image);
+      return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    /* should now have a wl_buffer */
    assert(image_data->buffer);
    zwp_linux_buffer_params_v1_destroy(params);
-   wl_proxy_set_queue((struct wl_proxy *)image_data->buffer, m_buffer_queue);
+   wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(image_data->buffer), m_buffer_queue);
    res = wl_buffer_add_listener(image_data->buffer, &buffer_listener, this);
    if (res < 0)
    {
-      result = VK_ERROR_INITIALIZATION_FAILED;
-      goto out;
+      destroy_image(image);
+      return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    /* Initialize presentation fence. */
    result = m_device_data.disp.CreateFence(m_device, &fenceInfo, get_allocation_callbacks(), &image.present_fence);
-
-out:
    if (result != VK_SUCCESS)
    {
       destroy_image(image);
       return result;
    }
-   return result;
+
+   return VK_SUCCESS;
 }
 
 static void frame_done(void *data, wl_callback *cb, uint32_t cb_data)
@@ -476,10 +503,17 @@ void swapchain::present_image(uint32_t pendingIndex)
    if (m_present_mode == VK_PRESENT_MODE_FIFO_KHR)
    {
       /* request a hint when we can present the _next_ frame */
-      wl_callback *cb = wl_surface_frame(m_surface);
-      if (cb)
+      auto surface_proxy = make_proxy_with_queue(m_surface, m_surface_queue);
+      if (surface_proxy == nullptr)
       {
-         wl_proxy_set_queue((wl_proxy *)cb, m_surface_queue);
+         WSI_PRINT_ERROR("failed to create wl_surface proxy\n");
+         m_is_valid = false;
+         return;
+      }
+
+      wl_callback *cb = wl_surface_frame(surface_proxy.get());
+      if (cb != nullptr)
+      {
          static const wl_callback_listener frame_listener = { frame_done };
          m_present_pending = true;
          wl_callback_add_listener(cb, &frame_listener, &m_present_pending);
