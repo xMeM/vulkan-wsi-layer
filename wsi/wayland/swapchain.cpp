@@ -38,6 +38,7 @@
 #include <functional>
 
 #include "util/drm/drm_utils.hpp"
+#include "util/log.hpp"
 
 #define MAX_PLANES 4
 
@@ -103,7 +104,7 @@ swapchain::~swapchain()
    res = wsialloc_delete(&m_wsi_allocator);
    if (res != 0)
    {
-      WSI_PRINT_ERROR("error deleting the allocator: %d\n", res);
+      WSI_LOG_ERROR("error deleting the allocator: %d", res);
    }
    if (m_surface_queue != nullptr)
    {
@@ -129,30 +130,31 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    m_surface = vk_surf->surface;
 
    m_surface_queue = wl_display_create_queue(m_display);
+
    if (m_surface_queue == nullptr)
    {
-      WSI_PRINT_ERROR("Failed to create wl surface display_queue.\n");
+      WSI_LOG_ERROR("Failed to create wl surface display_queue.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    m_buffer_queue = wl_display_create_queue(m_display);
    if (m_buffer_queue == nullptr)
    {
-      WSI_PRINT_ERROR("Failed to create wl buffer display_queue.\n");
+      WSI_LOG_ERROR("Failed to create wl buffer display_queue.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    auto display_proxy = make_proxy_with_queue(m_display, m_surface_queue);
    if (display_proxy == nullptr)
    {
-      WSI_PRINT_ERROR("Failed to create wl display proxy.\n");
+      WSI_LOG_ERROR("Failed to create wl display proxy.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    auto registry = registry_owner{ wl_display_get_registry(display_proxy.get()) };
    if (registry == nullptr)
    {
-      WSI_PRINT_ERROR("Failed to get wl display registry.\n");
+      WSI_LOG_ERROR("Failed to get wl display registry.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -160,14 +162,14 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    int res = wl_registry_add_listener(registry.get(), &registry_listener, &m_dmabuf_interface);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("Failed to add registry listener.\n");
+      WSI_LOG_ERROR("Failed to add registry listener.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    res = wl_display_roundtrip_queue(m_display, m_surface_queue);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("Roundtrip failed.\n");
+      WSI_LOG_ERROR("Roundtrip failed.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -179,7 +181,7 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    res = wsialloc_new(-1, &m_wsi_allocator);
    if (res != 0)
    {
-      WSI_PRINT_ERROR("Failed to create wsi allocator.\n");
+      WSI_LOG_ERROR("Failed to create wsi allocator.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -232,7 +234,7 @@ VkResult swapchain::allocate_plane_memory(int fd, VkDeviceMemory *memory)
    const off_t dma_buf_size = lseek(fd, 0, SEEK_END);
    if (dma_buf_size < 0)
    {
-      WSI_PRINT_ERROR("Failed to get DMA Buf size.\n");
+      WSI_LOG_ERROR("Failed to get DMA Buf size.");
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
@@ -252,7 +254,7 @@ VkResult swapchain::allocate_plane_memory(int fd, VkDeviceMemory *memory)
 
    if (result != VK_SUCCESS)
    {
-      WSI_PRINT_ERROR("Failed to import memory.\n");
+      WSI_LOG_ERROR("Failed to import memory.");
       return result;
    }
 
@@ -268,7 +270,7 @@ VkResult swapchain::get_fd_mem_type_index(int fd, uint32_t &mem_idx)
       m_device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &mem_props);
    if (result != VK_SUCCESS)
    {
-      WSI_PRINT_ERROR("Error querying Fd properties.\n");
+      WSI_LOG_ERROR("Error querying Fd properties.");
       return result;
    }
 
@@ -355,7 +357,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
    result = get_drm_format_properties(image_create_info.format, drm_format_props);
    if (result != VK_SUCCESS)
    {
-      WSI_PRINT_ERROR("Failed to get format properties.\n");
+      WSI_LOG_ERROR("Failed to get format properties.");
       return result;
    }
    auto is_disjoint = is_disjoint_supported(drm_format_props, modifier);
@@ -393,25 +395,25 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
    }
    if (result != VK_SUCCESS)
    {
-      WSI_PRINT_ERROR("Failed to get physical device format support.\n");
+      WSI_LOG_ERROR("Failed to get physical device format support.");
       return result;
    }
    if (format_props.imageFormatProperties.maxExtent.width < image_create_info.extent.width ||
        format_props.imageFormatProperties.maxExtent.height < image_create_info.extent.height ||
        format_props.imageFormatProperties.maxExtent.depth < image_create_info.extent.depth)
    {
-      WSI_PRINT_ERROR("Physical device does not support required extent.\n");
+      WSI_LOG_ERROR("Physical device does not support required extent.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
    if (format_props.imageFormatProperties.maxMipLevels < image_create_info.mipLevels ||
        format_props.imageFormatProperties.maxArrayLayers < image_create_info.arrayLayers)
    {
-      WSI_PRINT_ERROR("Physical device does not support required array layers or mip levels.\n");
+      WSI_LOG_ERROR("Physical device does not support required array layers or mip levels.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
    if ((format_props.imageFormatProperties.sampleCounts & image_create_info.samples) != image_create_info.samples)
    {
-      WSI_PRINT_ERROR("Physical device does not support required sample count.\n");
+      WSI_LOG_ERROR("Physical device does not support required sample count.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -422,7 +424,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
    if (!(external_props.externalMemoryProperties.externalMemoryFeatures &
          VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
    {
-      WSI_PRINT_ERROR("Export/Import not supported.\n");
+      WSI_LOG_ERROR("Export/Import not supported.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
    else
@@ -435,7 +437,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
                         image_data->stride, image_data->buffer_fd, image_data->offset, nullptr);
       if (res != 0)
       {
-         WSI_PRINT_ERROR("Failed allocation of DMA Buffer.\n");
+         WSI_LOG_ERROR("Failed allocation of DMA Buffer.");
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
 
@@ -486,7 +488,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       }
       if (result != VK_SUCCESS)
       {
-         WSI_PRINT_ERROR("Image creation failed.\n");
+         WSI_LOG_ERROR("Image creation failed.");
          return result;
       }
       {
@@ -536,7 +538,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
             {
                if (image_data->buffer_fd[plane] != image_data->buffer_fd[0])
                {
-                  WSI_PRINT_ERROR("Different fds per plane for a non disjoint image.\n");
+                  WSI_LOG_ERROR("Different fds per plane for a non disjoint image.");
                   return VK_ERROR_INITIALIZATION_FAILED;
                }
             }
@@ -569,7 +571,7 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
    VkResult result = allocate_image(image_create_info, image_data, &image.image);
    if (result != VK_SUCCESS)
    {
-      WSI_PRINT_ERROR("Failed to allocate image.\n");
+      WSI_LOG_ERROR("Failed to allocate image.");
       destroy_image(image);
       return result;
    }
@@ -578,7 +580,7 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
    auto dmabuf_interface_proxy = make_proxy_with_queue(m_dmabuf_interface.get(), m_surface_queue);
    if (dmabuf_interface_proxy == nullptr)
    {
-      WSI_PRINT_ERROR("Failed to allocate dma-buf interface proxy.\n");
+      WSI_LOG_ERROR("Failed to allocate dma-buf interface proxy.");
       destroy_image(image);
       return VK_ERROR_INITIALIZATION_FAILED;
    }
@@ -665,7 +667,7 @@ void swapchain::present_image(uint32_t pendingIndex)
 
       if (res <= 0)
       {
-         WSI_PRINT_ERROR("error waiting for Wayland compositor frame hint\n");
+         WSI_LOG_ERROR("error waiting for Wayland compositor frame hint");
          m_is_valid = false;
          /* try to present anyway */
       }
@@ -681,7 +683,7 @@ void swapchain::present_image(uint32_t pendingIndex)
       auto surface_proxy = make_proxy_with_queue(m_surface, m_surface_queue);
       if (surface_proxy == nullptr)
       {
-         WSI_PRINT_ERROR("failed to create wl_surface proxy\n");
+         WSI_LOG_ERROR("failed to create wl_surface proxy");
          m_is_valid = false;
          return;
       }
@@ -717,7 +719,7 @@ void swapchain::present_image(uint32_t pendingIndex)
    res = wl_display_flush(m_display);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("error flushing the display\n");
+      WSI_LOG_ERROR("error flushing the display");
       /* Setting the swapchain as invalid */
       m_is_valid = false;
    }

@@ -28,13 +28,6 @@
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include "util/custom_allocator.hpp"
-
-#if VULKAN_WSI_DEBUG > 0
-#define WSI_PRINT_ERROR(...) fprintf(stderr, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
-#else
-#define WSI_PRINT_ERROR(...) (void)0
-#endif
-
 struct drm_format_pair
 {
    uint32_t fourcc;

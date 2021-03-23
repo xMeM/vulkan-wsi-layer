@@ -32,6 +32,8 @@
 
 #include "wl_object_owner.hpp"
 
+#include "util/log.hpp"
+
 struct formats_vector
 {
    util::vector<drm_format_pair> *formats{nullptr};
@@ -78,7 +80,7 @@ VkResult get_supported_formats_and_modifiers(
                                               &drm_supported_formats);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("Failed to add zwp_linux_dmabuf_v1 listener.\n");
+      WSI_LOG_ERROR("Failed to add zwp_linux_dmabuf_v1 listener.");
       return VK_ERROR_UNKNOWN;
    }
 
@@ -86,13 +88,13 @@ VkResult get_supported_formats_and_modifiers(
    res = wl_display_roundtrip(display);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("Roundtrip failed.\n");
+      WSI_LOG_ERROR("Roundtrip failed.");
       return VK_ERROR_UNKNOWN;
    }
 
    if (drm_supported_formats.is_out_of_memory)
    {
-      WSI_PRINT_ERROR("Host got out of memory.\n");
+      WSI_LOG_ERROR("Host got out of memory.");
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
@@ -115,7 +117,7 @@ extern "C" {
 
          if (dmabuf_interface_obj == nullptr)
          {
-            WSI_PRINT_ERROR("Failed to get zwp_linux_dmabuf_v1 interface.\n");
+            WSI_LOG_ERROR("Failed to get zwp_linux_dmabuf_v1 interface.");
             return;
          }
 

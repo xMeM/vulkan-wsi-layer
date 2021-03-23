@@ -37,6 +37,7 @@
 #include "wl_helpers.hpp"
 #include "wl_object_owner.hpp"
 #include "util/drm/drm_utils.hpp"
+#include "util/log.hpp"
 
 #define NELEMS(x) (sizeof(x) / sizeof(x[0]))
 
@@ -144,7 +145,7 @@ static VkResult query_supported_formats(
    auto registry = registry_owner{wl_display_get_registry(display)};
    if (registry.get() == nullptr)
    {
-      WSI_PRINT_ERROR("Failed to get wl display registry.\n");
+      WSI_LOG_ERROR("Failed to get wl display registry.");
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 
@@ -153,7 +154,7 @@ static VkResult query_supported_formats(
    int res = wl_registry_add_listener(registry.get(), &registry_listener, &dmabuf_interface);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("Failed to add registry listener.\n");
+      WSI_LOG_ERROR("Failed to add registry listener.");
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 
@@ -161,7 +162,7 @@ static VkResult query_supported_formats(
    res = wl_display_roundtrip(display);
    if (res < 0)
    {
-      WSI_PRINT_ERROR("Roundtrip failed.\n");
+      WSI_LOG_ERROR("Roundtrip failed.");
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 

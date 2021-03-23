@@ -40,14 +40,9 @@
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 
+#include "util/log.hpp"
+
 #include "swapchain_base.hpp"
-
-#if VULKAN_WSI_DEBUG > 0
-#define WSI_PRINT_ERROR(...) fprintf(stderr, ##__VA_ARGS__)
-#else
-#define WSI_PRINT_ERROR(...) (void)0
-#endif
-
 namespace wsi
 {
 
@@ -337,13 +332,13 @@ void swapchain_base::teardown()
       }
       else
       {
-         WSI_PRINT_ERROR("m_page_flip_thread is not joinable");
+         WSI_LOG_ERROR("m_page_flip_thread is not joinable");
       }
 
       res = sem_destroy(&m_start_present_semaphore);
       if (res != 0)
       {
-         WSI_PRINT_ERROR("sem_destroy failed for start_present_semaphore with %d\n", errno);
+         WSI_LOG_ERROR("sem_destroy failed for start_present_semaphore with %d", errno);
       }
    }
 
@@ -597,7 +592,5 @@ VkResult swapchain_base::wait_for_free_buffer(uint64_t timeout)
 
    return retval;
 }
-
-#undef WSI_PRINT_ERROR
 
 } /* namespace wsi */
