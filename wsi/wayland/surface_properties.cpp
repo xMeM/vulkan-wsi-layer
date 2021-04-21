@@ -226,7 +226,7 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
 {
 
    VkResult res = VK_SUCCESS;
-   /* TODO: Check that FIFO is okay on Wayland */
+
    static std::array<const VkPresentModeKHR, 2> modes = {
       VK_PRESENT_MODE_FIFO_KHR,
       VK_PRESENT_MODE_MAILBOX_KHR,
