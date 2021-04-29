@@ -696,24 +696,6 @@ void swapchain::present_image(uint32_t pendingIndex)
          wl_callback_add_listener(cb, &frame_listener, &m_present_pending);
       }
    }
-   else
-   {
-      assert(m_present_mode == VK_PRESENT_MODE_MAILBOX_KHR);
-      /* weston only _queues_ wl_buffer::release events. This means when the
-       * compositor flushes the client it only sends the events if some other events
-       * have been posted.
-       *
-       * As such we have to request a sync callback - we discard it straight away
-       * as we don't actually need the callback, but it means the
-       * wl_buffer::release event is actually sent.
-       */
-      wl_callback *cb = wl_display_sync(m_display);
-      assert(cb);
-      if (cb)
-      {
-         wl_callback_destroy(cb);
-      }
-   }
 
    wl_surface_commit(m_surface);
    res = wl_display_flush(m_display);
