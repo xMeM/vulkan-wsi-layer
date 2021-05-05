@@ -61,16 +61,12 @@ extern "C" {
  */
 
 /**
- * @brief Union for allocator type.
+ * @brief Struct for allocator type.
  *
- * Allocators are usually file descriptors of the allocating device. However,
- * this interface provides the possibility to define private allocator structures.
+ * Represents a private allocator structures.
  */
-typedef union wsialloc_allocator
-{
-   void *ptr;
-   intptr_t fd;
-} wsialloc_allocator;
+struct wsialloc_allocator;
+typedef struct wsialloc_allocator wsialloc_allocator;
 
 /**
  * @brief Allocate and initialize a new WSI Allocator from an existing file descriptor.
@@ -83,11 +79,10 @@ typedef union wsialloc_allocator
  * @note The underlying implementation may choose to use @p external_fd or its own platform-specific allocation method.
  *
  * @param      external_fd file descriptor that the WSI Allocator could use for allocating new buffers
- * @param[out] allocator   a valid allocator for use in wsialloc functions
- * @retval     0           indicates success in creating the allocator
- * @retval     non-zero    indicates an error
+ *
+ * @return     Pointer to a wsialloc_allocator struct. A NULL return value indicates an error.
  */
-int wsialloc_new(int external_fd, wsialloc_allocator *allocator);
+wsialloc_allocator *wsialloc_new(int external_fd);
 
 /**
  * @brief Close down and free resources associated with a WSI Allocator

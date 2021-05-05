@@ -118,7 +118,7 @@ private:
    /**
     * @brief Handle to the WSI allocator.
     */
-   wsialloc_allocator m_wsi_allocator;
+   wsialloc_allocator *m_wsi_allocator;
 
    /**
     * @brief true when waiting for the server hint to present a buffer

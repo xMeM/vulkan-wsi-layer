@@ -91,7 +91,7 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
    , m_dmabuf_interface(nullptr)
    , m_surface_queue(nullptr)
    , m_buffer_queue(nullptr)
-   , m_wsi_allocator()
+   , m_wsi_allocator(nullptr)
    , m_present_pending(false)
 {
 }
@@ -101,11 +101,12 @@ swapchain::~swapchain()
    int res;
    teardown();
 
-   res = wsialloc_delete(&m_wsi_allocator);
+   res = wsialloc_delete(m_wsi_allocator);
    if (res != 0)
    {
       WSI_LOG_ERROR("error deleting the allocator: %d", res);
    }
+   m_wsi_allocator = nullptr;
    if (m_surface_queue != nullptr)
    {
       wl_event_queue_destroy(m_surface_queue);
@@ -178,8 +179,8 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   res = wsialloc_new(-1, &m_wsi_allocator);
-   if (res != 0)
+   m_wsi_allocator = wsialloc_new(-1);
+   if (nullptr == m_wsi_allocator)
    {
       WSI_LOG_ERROR("Failed to create wsi allocator.");
       return VK_ERROR_INITIALIZATION_FAILED;
@@ -433,7 +434,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
 
       const auto res =
-         wsialloc_alloc(&m_wsi_allocator, fourcc, image_create_info.extent.width, image_create_info.extent.height,
+         wsialloc_alloc(m_wsi_allocator, fourcc, image_create_info.extent.width, image_create_info.extent.height,
                         image_data->stride, image_data->buffer_fd, image_data->offset, nullptr);
       if (res != 0)
       {

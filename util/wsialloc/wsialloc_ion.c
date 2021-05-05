@@ -42,7 +42,7 @@
 /** Default alignment */
 #define WSIALLOCP_MIN_ALIGN_SZ (64u)
 
-struct ion_allocator
+struct wsialloc_allocator
 {
    /* File descriptor of /dev/ion. */
    int fd;
@@ -103,46 +103,37 @@ static uint64_t round_size_up_to_align(uint64_t size)
    return (size + WSIALLOCP_MIN_ALIGN_SZ - 1) & ~(WSIALLOCP_MIN_ALIGN_SZ - 1);
 }
 
-int wsialloc_new(int external_fd, wsialloc_allocator *allocator)
+wsialloc_allocator *wsialloc_new(int external_fd)
 {
    UNUSED(external_fd);
-   assert(allocator != NULL);
 
-   struct ion_allocator *ion = NULL;
-   int ret = 0;
-
-   allocator->ptr = ion = malloc(sizeof(*ion));
+   wsialloc_allocator *ion = NULL;
+   ion = malloc(sizeof(*ion));
    if (NULL == ion)
    {
-      ret = -ENOMEM;
       goto fail;
    }
 
    ion->fd = open("/dev/ion", O_RDONLY);
    if (ion->fd < 0)
    {
-      ret = -errno;
       goto fail;
    }
 
    ion->alloc_heap_id = find_alloc_heap_id(ion->fd);
    if (ion->alloc_heap_id < 0)
    {
-      ret = ion->alloc_heap_id;
       goto fail;
    }
 
-   return 0;
+   return ion;
 fail:
-   wsialloc_delete(allocator);
-   return ret;
+   wsialloc_delete(ion);
+   return NULL;
 }
 
-int wsialloc_delete(wsialloc_allocator *allocator)
+int wsialloc_delete(wsialloc_allocator *ion)
 {
-   assert(allocator != NULL);
-
-   struct ion_allocator *ion = allocator->ptr;
    int ret = 0;
 
    if (NULL == ion)
@@ -159,8 +150,6 @@ int wsialloc_delete(wsialloc_allocator *allocator)
    }
 
    free(ion);
-   allocator->ptr = NULL;
-
    return ret;
 }
 
@@ -205,7 +194,7 @@ static int wsiallocp_get_fmt_info(uint32_t fourcc_fmt, uint32_t *nr_planes, uint
 }
 
 int wsialloc_alloc(
-    wsialloc_allocator *allocator,
+    wsialloc_allocator *ion,
     uint32_t fourcc,
     uint32_t width,
     uint32_t height,
@@ -214,15 +203,13 @@ int wsialloc_alloc(
     uint32_t *offset,
     const uint64_t *modifier)
 {
-   assert(allocator != NULL);
+   assert(ion != NULL);
    assert(fourcc != 0);
    assert(width > 0);
    assert(height > 0);
    assert(stride != NULL);
    assert(new_fd != NULL);
    assert(offset != NULL);
-
-   struct ion_allocator *ion = allocator->ptr;
 
    if (modifier != NULL && *modifier != 0)
    {
