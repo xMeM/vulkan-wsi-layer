@@ -186,6 +186,16 @@ protected:
    sem_t m_start_present_semaphore;
 
    /**
+    * @brief A mutex to protect access to the statuses of the swapchain's images and
+    * any code paths that rely on this information. We use a recursive mutex as some
+    * functions such as 'destroy_image' both change an image's status and are called
+    * conditionally based on an image's status in some cases. A recursive mutex allows
+    * these functions to be called both with and without the mutex already locked in the
+    * same thread.
+    */
+   std::recursive_mutex m_image_status_mutex;
+
+   /**
     * @brief Defines if the pthread_t and sem_t members of the class are defined.
     *
     * As they are opaque types theer's no known invalid value that we ca initialize to,

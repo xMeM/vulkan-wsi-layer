@@ -84,6 +84,8 @@ void swapchain_base::page_flip_thread()
          continue;
       }
 
+      std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+
       /* If the descendant has started presenting the queue_present operation has marked the image
        * as FREE so we simply release it and continue. */
       if (sc_images[pending_index].status == swapchain_image::FREE)
@@ -92,6 +94,7 @@ void swapchain_base::page_flip_thread()
          m_free_image_semaphore.post();
          continue;
       }
+      image_status_lock.unlock();
 
       /* First present of the swapchain. If it has an ancestor, wait until all the pending buffers
        * from the ancestor have finished page flipping before we set mode. */
@@ -119,13 +122,15 @@ void swapchain_base::page_flip_thread()
 
 void swapchain_base::unpresent_image(uint32_t presented_index)
 {
+   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+
    m_swapchain_images[presented_index].status = swapchain_image::FREE;
 
    if (m_descendant != VK_NULL_HANDLE)
    {
       destroy_image(m_swapchain_images[presented_index]);
    }
-
+   image_status_lock.unlock();
    m_free_image_semaphore.post();
 }
 
@@ -283,7 +288,7 @@ void swapchain_base::teardown()
 {
    /* This method will block until all resources associated with this swapchain
     * are released. Images in the ACQUIRED or FREE state can be freed
-    * immediately. For images in the PRESENTED state, we will block until the
+    * immediately. For images in the PENDING state, we will block until the
     * presentation engine is finished with them. */
 
    int res;
@@ -376,6 +381,8 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
+   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+
    uint32_t i;
    for (i = 0; i < m_swapchain_images.size(); ++i)
    {
@@ -388,6 +395,8 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    }
 
    assert(i < m_swapchain_images.size());
+
+   image_status_lock.unlock();
 
    if (VK_NULL_HANDLE != semaphore || VK_NULL_HANDLE != fence)
    {
@@ -452,6 +461,7 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
 {
    VkResult result;
    bool descendent_started_presenting = false;
+   const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
 
    if (m_descendant != VK_NULL_HANDLE)
    {
@@ -505,7 +515,6 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
 
       m_pending_buffer_pool.ring[m_pending_buffer_pool.tail] = image_index;
       m_pending_buffer_pool.tail = (m_pending_buffer_pool.tail + 1) % m_pending_buffer_pool.size;
-
       m_page_flip_semaphore.post();
 
       return VK_ERROR_OUT_OF_DATE_KHR;
@@ -536,21 +545,21 @@ void swapchain_base::deprecate(VkSwapchainKHR descendant)
 
 void swapchain_base::wait_for_pending_buffers()
 {
-   int num_acquired_images = 0;
    int wait;
+   int pending_images = 0;
+
+   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
 
    for (auto& img : m_swapchain_images)
    {
-      if (img.status == swapchain_image::ACQUIRED)
+      if (img.status == swapchain_image::PENDING)
       {
-         ++num_acquired_images;
+         ++pending_images;
       }
    }
 
-   /* Once all the pending buffers are flipped, the swapchain should have images
-    * in ACQUIRED (application fails to queue them back for presentation), FREE
-    * and one and only one in PRESENTED. */
-   wait = m_swapchain_images.size() - num_acquired_images - 1;
+   wait = pending_images;
+   image_status_lock.unlock();
 
    while (wait > 0)
    {

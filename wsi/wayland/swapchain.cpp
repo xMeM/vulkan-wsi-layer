@@ -578,9 +578,14 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
+   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+
    image.data = image_data;
    image.status = swapchain_image::FREE;
    VkResult result = allocate_image(image_create_info, image_data, &image.image);
+
+   image_status_lock.unlock();
+
    if (result != VK_SUCCESS)
    {
       WSI_LOG_ERROR("Failed to allocate image.");
@@ -721,6 +726,8 @@ void swapchain::present_image(uint32_t pendingIndex)
 
 void swapchain::destroy_image(swapchain_image &image)
 {
+   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+
    if (image.status != swapchain_image::INVALID)
    {
       if (image.present_fence != VK_NULL_HANDLE)
@@ -734,7 +741,12 @@ void swapchain::destroy_image(swapchain_image &image)
          m_device_data.disp.DestroyImage(m_device, image.image, get_allocation_callbacks());
          image.image = VK_NULL_HANDLE;
       }
+
+      image.status = swapchain_image::INVALID;
    }
+
+   image_status_lock.unlock();
+
    if (image.data != nullptr)
    {
       auto image_data = reinterpret_cast<wayland_image_data *>(image.data);
@@ -762,8 +774,6 @@ void swapchain::destroy_image(swapchain_image &image)
       m_allocator.destroy(1, image_data);
       image.data = nullptr;
    }
-
-   image.status = swapchain_image::INVALID;
 }
 
 bool swapchain::free_image_found()

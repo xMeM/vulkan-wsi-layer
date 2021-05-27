@@ -60,6 +60,8 @@ swapchain::~swapchain()
 VkResult swapchain::create_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
 {
    VkResult res = VK_SUCCESS;
+   const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
+
    res = m_device_data.disp.CreateImage(m_device, &image_create, nullptr, &image.image);
    if (res != VK_SUCCESS)
    {
@@ -131,6 +133,7 @@ void swapchain::present_image(uint32_t pending_index)
 
 void swapchain::destroy_image(wsi::swapchain_image &image)
 {
+   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
    if (image.status != wsi::swapchain_image::INVALID)
    {
       if (image.present_fence != VK_NULL_HANDLE)
@@ -144,7 +147,11 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
          m_device_data.disp.DestroyImage(m_device, image.image, get_allocation_callbacks());
          image.image = VK_NULL_HANDLE;
       }
+
+      image.status = wsi::swapchain_image::INVALID;
    }
+
+   image_status_lock.unlock();
 
    if (image.data != nullptr)
    {
@@ -158,7 +165,6 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
       image.data = nullptr;
    }
 
-   image.status = wsi::swapchain_image::INVALID;
 }
 
 } /* namespace headless */
