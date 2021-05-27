@@ -47,16 +47,23 @@ public:
 
    /**
     * @brief Construct a new wrapper for the given VK callbacks and scope.
+    * @param scope The scope to use for this allocator.
     * @param callbacks Pointer to allocation callbacks. If this is @c nullptr, then default
     *   allocation callbacks are used. These can be accessed through #m_callbacks.
-    * @param scope The scope to use for this allocator.
     */
-   allocator(const VkAllocationCallbacks *callbacks, VkSystemAllocationScope scope);
+   allocator(VkSystemAllocationScope scope, const VkAllocationCallbacks *callbacks);
 
    /**
-    * @brief Copy the given allocator, but change the allocation scope.
+    * @brief Construct a new allocator that uses @p callbacks or @p allocator callbacks if the
+    *        @p callbacks are @c nullptr with the @c scope.
+    *
+    * @param other If @p callbacks is @c nullptr, the callbacks from this allocator will be used instead.
+    * @param new_scope The scope to use for allocations
+    * @param callbacks Pointer to allocation callbacks. If this is @c nullptr, then the callbacks
+    * from the @p allocator will be used.
     */
-   allocator(const allocator& other, VkSystemAllocationScope new_scope);
+   allocator(const allocator &other, VkSystemAllocationScope new_scope,
+             const VkAllocationCallbacks *callbacks = nullptr);
 
    /**
     * @brief Get a pointer to the allocation callbacks provided while constructing this object.

@@ -137,7 +137,7 @@ static void get_vk_supported_formats(const util::vector<drm_format_pair> &drm_su
  * @retval VK_ERROR_OUT_OF_DEVICE_MEMORY Indicates the host went out of memory.
  */
 static VkResult query_supported_formats(
-   const VkSurfaceKHR surface, vk_format_set &vk_supported_formats)
+   const VkSurfaceKHR surface, vk_format_set &vk_supported_formats, const util::allocator& allocator)
 {
    const VkIcdSurfaceWayland *vk_surf = reinterpret_cast<VkIcdSurfaceWayland *>(surface);
    wl_display *display = vk_surf->display;
@@ -171,7 +171,7 @@ static VkResult query_supported_formats(
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 
-   util::vector<drm_format_pair> drm_supported_formats(util::allocator::get_generic());
+   util::vector<drm_format_pair> drm_supported_formats{allocator};
    const VkResult ret = get_supported_formats_and_modifiers(display, dmabuf_interface.get(), drm_supported_formats);
    if (ret != VK_SUCCESS)
    {
@@ -187,7 +187,9 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
                                                  uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats)
 {
    vk_format_set formats;
-   const auto query_res = query_supported_formats(surface, formats);
+
+   auto &instance = layer::instance_private_data::get(physical_device);
+   const auto query_res = query_supported_formats(surface, formats, instance.get_allocator());
    if (query_res != VK_SUCCESS)
    {
       return query_res;

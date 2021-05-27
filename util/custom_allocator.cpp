@@ -47,18 +47,17 @@ namespace util
 
 const allocator& allocator::get_generic()
 {
-   static allocator generic{nullptr, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND};
+   static allocator generic{ VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, nullptr };
    return generic;
 }
 
-
-allocator::allocator(const allocator& other, VkSystemAllocationScope new_scope)
-   : allocator{other.get_original_callbacks(), new_scope}
+allocator::allocator(const allocator &other, VkSystemAllocationScope new_scope, const VkAllocationCallbacks *callbacks)
+   : allocator{ new_scope, callbacks == nullptr ? other.get_original_callbacks() : callbacks }
 {
 }
 
 /* If callbacks is already populated by vulkan then use those specified as default. */
-allocator::allocator(const VkAllocationCallbacks *callbacks, VkSystemAllocationScope scope)
+allocator::allocator(VkSystemAllocationScope scope, const VkAllocationCallbacks *callbacks)
 {
    m_scope = scope;
    if (callbacks != nullptr)

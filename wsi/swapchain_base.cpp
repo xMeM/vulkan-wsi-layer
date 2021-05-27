@@ -135,7 +135,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_thread_sem_defined(false)
    , m_first_present(true)
    , m_pending_buffer_pool{ nullptr, 0, 0, 0 }
-   , m_allocator(callbacks, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT)
+   , m_allocator(dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, callbacks)
    , m_swapchain_images(m_allocator)
    , m_surface(VK_NULL_HANDLE)
    , m_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)

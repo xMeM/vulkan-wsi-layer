@@ -133,6 +133,16 @@ public:
     */
    VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index);
 
+   /**
+    * @brief Get the allocator
+    *
+    * @return const util::allocator The allocator used in the swapchain
+    */
+   const util::allocator &get_allocator() const
+   {
+      return m_allocator;
+   }
+
 protected:
 
    layer::device_private_data &m_device_data;

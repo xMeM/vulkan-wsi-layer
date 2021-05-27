@@ -66,12 +66,19 @@ VKAPI_ATTR VkResult wsi_layer_vkCreateSwapchainKHR(VkDevice device,
    if (result != VK_SUCCESS)
    {
       /* Error occured during initialization, need to free allocated memory. */
-      wsi::destroy_surface_swapchain(sc, pAllocator);
+      wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
       return result;
    }
 
-   *pSwapchain = reinterpret_cast<VkSwapchainKHR>(sc);
-   device_data.add_layer_swapchain(*pSwapchain);
+   auto vulkan_swapchain = reinterpret_cast<VkSwapchainKHR>(sc);
+   result = device_data.add_layer_swapchain(vulkan_swapchain);
+   if (result != VK_SUCCESS)
+   {
+      wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
+      return result;
+   }
+
+   *pSwapchain = vulkan_swapchain;
    return result;
 }
 
@@ -87,7 +94,7 @@ VKAPI_ATTR void wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR 
 
    assert(swapc != VK_NULL_HANDLE);
    wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
-   wsi::destroy_surface_swapchain(sc, pAllocator);
+   wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
 }
 
 VKAPI_ATTR VkResult wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc,

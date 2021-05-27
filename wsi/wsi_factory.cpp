@@ -83,13 +83,8 @@ surface_properties *get_surface_properties(VkSurfaceKHR surface)
 template <typename swapchain_type>
 static swapchain_base *allocate_swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
 {
-   if (!pAllocator)
-   {
-      return new swapchain_type(dev_data, pAllocator);
-   }
-   void *memory = pAllocator->pfnAllocation(pAllocator->pUserData, sizeof(swapchain_type), alignof(swapchain_type),
-                                            VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-   return new (memory) swapchain_type(dev_data, pAllocator);
+   util::allocator alloc{ dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
+   return alloc.create<swapchain_type>(1, dev_data, pAllocator);
 }
 
 swapchain_base *allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_private_data &dev_data,
@@ -168,19 +163,13 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
    return VK_SUCCESS;
 }
 
-void destroy_surface_swapchain(swapchain_base *swapchain, const VkAllocationCallbacks *pAllocator)
+void destroy_surface_swapchain(swapchain_base *swapchain, layer::device_private_data &dev_data,
+                               const VkAllocationCallbacks *pAllocator)
 {
    assert(swapchain);
 
-   if (!pAllocator)
-   {
-      delete swapchain;
-   }
-   else
-   {
-      swapchain->~swapchain_base();
-      pAllocator->pfnFree(pAllocator->pUserData, reinterpret_cast<void *>(swapchain));
-   }
+   util::allocator alloc{ swapchain->get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
+   alloc.destroy(1, swapchain);
 }
 
 PFN_vkVoidFunction get_proc_addr(const char *name)

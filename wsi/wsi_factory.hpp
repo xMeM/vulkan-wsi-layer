@@ -63,9 +63,10 @@ swapchain_base *allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_p
  * @brief Destroys a swapchain and frees memory. Used with @ref allocate_surface_swapchain.
  *
  * @param swapchain  Pointer to the swapchain to destroy.
+ * @param dev_data   The device specific data.
  * @param pAllocator The allocator to use for freeing memory.
  */
-void destroy_surface_swapchain(swapchain_base *swapchain, const VkAllocationCallbacks *pAllocator);
+void destroy_surface_swapchain(swapchain_base *swapchain, layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator);
 
 /**
  * @brief Return which platforms the layer can handle for an instance constructed in the specified way.

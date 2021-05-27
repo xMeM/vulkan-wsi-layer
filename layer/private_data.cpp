@@ -23,17 +23,21 @@
  */
 
 #include "private_data.hpp"
-
 #include "wsi/wsi_factory.hpp"
-
-#include <unordered_map>
+#include "util/unordered_map.hpp"
+#include "util/log.hpp"
 
 namespace layer
 {
 
 static std::mutex g_data_lock;
-static std::unordered_map<void *, std::unique_ptr<instance_private_data>> g_instance_data;
-static std::unordered_map<void *, std::unique_ptr<device_private_data>> g_device_data;
+
+/* The dictionaries below use plain pointers to store the instance/device private data objects.
+ * This means that these objects are leaked if the application terminates without calling vkDestroyInstance
+ * or vkDestroyDevice. This is fine as it is the application's responsibility to call these.
+ */
+static util::unordered_map<void *, instance_private_data *> g_instance_data{ util::allocator::get_generic() };
+static util::unordered_map<void *, device_private_data *> g_device_data{ util::allocator::get_generic() };
 
 template <typename object_type, typename get_proc_type>
 static PFN_vkVoidFunction get_proc_helper(object_type obj, get_proc_type get_proc,
@@ -69,32 +73,93 @@ VkResult device_dispatch_table::populate(VkDevice device, PFN_vkGetDeviceProcAdd
    return ok ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
-instance_private_data::instance_private_data(const instance_dispatch_table& table,
+instance_private_data::instance_private_data(const instance_dispatch_table &table,
                                              PFN_vkSetInstanceLoaderData set_loader_data,
-                                             util::wsi_platform_set enabled_layer_platforms)
+                                             util::wsi_platform_set enabled_layer_platforms,
+                                             const util::allocator &alloc)
    : disp(table)
    , SetInstanceLoaderData(set_loader_data)
    , enabled_layer_platforms(enabled_layer_platforms)
+   , allocator(alloc)
 {
 }
 
+/**
+ * @brief Obtain the loader's dispatch table for the given dispatchable object.
+ * @note Dispatchable objects are structures that have a VkLayerDispatchTable as their first member.
+ */
 template <typename dispatchable_type>
 static inline void *get_key(dispatchable_type dispatchable_object)
 {
    return *reinterpret_cast<void **>(dispatchable_object);
 }
 
-void instance_private_data::set(VkInstance inst, std::unique_ptr<instance_private_data> inst_data)
+VkResult instance_private_data::associate(VkInstance instance, instance_dispatch_table &table,
+                                          PFN_vkSetInstanceLoaderData set_loader_data,
+                                          util::wsi_platform_set enabled_layer_platforms, const util::allocator &allocator)
 {
+   auto *instance_data =
+      allocator.create<instance_private_data>(1, table, set_loader_data, enabled_layer_platforms, allocator);
+
+   if (instance_data == nullptr)
+   {
+      WSI_LOG_ERROR("Instance private data for instance(%p) could not be allocated. Out of memory.",
+                    reinterpret_cast<void *>(instance));
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   const auto key = get_key(instance);
    scoped_mutex lock(g_data_lock);
-   g_instance_data[get_key(inst)] = std::move(inst_data);
+
+   auto it = g_instance_data.find(key);
+   if (it != g_instance_data.end())
+   {
+      WSI_LOG_WARNING("Hash collision when adding new instance (%p)", reinterpret_cast<void *>(instance));
+
+      destroy(it->second);
+      g_instance_data.erase(it);
+   }
+
+   auto result = g_instance_data.try_insert(std::make_pair(key, instance_data));
+   if (result.has_value())
+   {
+      return VK_SUCCESS;
+   }
+   else
+   {
+      WSI_LOG_WARNING("Failed to insert instance_private_data for instance (%p) as host is out of memory",
+                      reinterpret_cast<void *>(instance));
+
+      destroy(instance_data);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+}
+
+void instance_private_data::disassociate(VkInstance instance)
+{
+   assert(instance != VK_NULL_HANDLE);
+   instance_private_data *instance_data = nullptr;
+   {
+      scoped_mutex lock(g_data_lock);
+      auto it = g_instance_data.find(get_key(instance));
+      if (it == g_instance_data.end())
+      {
+         WSI_LOG_WARNING("Failed to find private data for instance (%p)", reinterpret_cast<void *>(instance));
+         return;
+      }
+
+      instance_data = it->second;
+      g_instance_data.erase(it);
+   }
+
+   destroy(instance_data);
 }
 
 template <typename dispatchable_type>
 static instance_private_data &get_instance_private_data(dispatchable_type dispatchable_object)
 {
    scoped_mutex lock(g_data_lock);
-   return *g_instance_data[get_key(dispatchable_object)];
+   return *g_instance_data.at(get_key(dispatchable_object));
 }
 
 instance_private_data &instance_private_data::get(VkInstance instance)
@@ -116,6 +181,14 @@ static VkIcdWsiPlatform get_platform_of_surface(VkSurfaceKHR surface)
 bool instance_private_data::does_layer_support_surface(VkSurfaceKHR surface)
 {
    return enabled_layer_platforms.contains(get_platform_of_surface(surface));
+}
+
+void instance_private_data::destroy(instance_private_data *instance_data)
+{
+   assert(instance_data);
+
+   auto alloc = instance_data->get_allocator();
+   alloc.destroy<instance_private_data>(1, instance_data);
 }
 
 bool instance_private_data::do_icds_support_surface(VkPhysicalDevice, VkSurfaceKHR)
@@ -141,33 +214,85 @@ bool instance_private_data::should_layer_handle_surface(VkPhysicalDevice phys_de
    return ret;
 }
 
-void instance_private_data::destroy(VkInstance inst)
-{
-   scoped_mutex lock(g_data_lock);
-   g_instance_data.erase(get_key(inst));
-}
-
 device_private_data::device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
-                                         const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data)
-   : disp{table}
-   , instance_data{inst_data}
-   , SetDeviceLoaderData{set_loader_data}
-   , physical_device{phys_dev}
-   , device{dev}
+                                         const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                                         const util::allocator &alloc)
+   : disp{ table }
+   , instance_data{ inst_data }
+   , SetDeviceLoaderData{ set_loader_data }
+   , physical_device{ phys_dev }
+   , device{ dev }
+   , allocator{ alloc }
+   , swapchains{ allocator }
 {
 }
 
-void device_private_data::set(VkDevice dev, std::unique_ptr<device_private_data> dev_data)
+VkResult device_private_data::associate(VkDevice dev, instance_private_data &inst_data, VkPhysicalDevice phys_dev,
+                                        const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                                        const util::allocator &allocator)
 {
+   auto *device_data =
+      allocator.create<device_private_data>(1, inst_data, phys_dev, dev, table, set_loader_data, allocator);
+
+   if (device_data == nullptr)
+   {
+      WSI_LOG_ERROR("Device private data for device(%p) could not be allocated. Out of memory.",
+                    reinterpret_cast<void *>(dev));
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   const auto key = get_key(dev);
    scoped_mutex lock(g_data_lock);
-   g_device_data[get_key(dev)] = std::move(dev_data);
+
+   auto it = g_device_data.find(key);
+   if (it != g_device_data.end())
+   {
+      WSI_LOG_WARNING("Hash collision when adding new device (%p)", reinterpret_cast<void *>(dev));
+      destroy(it->second);
+      g_device_data.erase(it);
+   }
+
+   auto result = g_device_data.try_insert(std::make_pair(key, device_data));
+   if (result.has_value())
+   {
+      return VK_SUCCESS;
+   }
+   else
+   {
+      WSI_LOG_WARNING("Failed to insert device_private_data for device (%p) as host is out of memory",
+                      reinterpret_cast<void *>(dev));
+
+      destroy(device_data);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+}
+
+void device_private_data::disassociate(VkDevice dev)
+{
+   assert(dev != VK_NULL_HANDLE);
+   device_private_data *device_data = nullptr;
+   {
+      scoped_mutex lock(g_data_lock);
+      auto it = g_device_data.find(get_key(dev));
+      if (it == g_device_data.end())
+      {
+         WSI_LOG_WARNING("Failed to find private data for device (%p)", reinterpret_cast<void *>(dev));
+         return;
+      }
+
+      device_data = it->second;
+      g_device_data.erase(it);
+   }
+
+   destroy(device_data);
 }
 
 template <typename dispatchable_type>
 static device_private_data &get_device_private_data(dispatchable_type dispatchable_object)
 {
    scoped_mutex lock(g_data_lock);
-   return *g_device_data[get_key(dispatchable_object)];
+
+   return *g_device_data.at(get_key(dispatchable_object));
 }
 
 device_private_data &device_private_data::get(VkDevice device)
@@ -180,10 +305,11 @@ device_private_data &device_private_data::get(VkQueue queue)
    return get_device_private_data(queue);
 }
 
-void device_private_data::add_layer_swapchain(VkSwapchainKHR swapchain)
+VkResult device_private_data::add_layer_swapchain(VkSwapchainKHR swapchain)
 {
    scoped_mutex lock(swapchains_lock);
-   swapchains.insert(swapchain);
+   auto result = swapchains.try_insert(swapchain);
+   return result.has_value() ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 bool device_private_data::layer_owns_all_swapchains(const VkSwapchainKHR *swapchain, uint32_t swapchain_count) const
@@ -209,9 +335,12 @@ bool device_private_data::can_icds_create_swapchain(VkSurfaceKHR vk_surface)
    return disp.CreateSwapchainKHR != nullptr;
 }
 
-void device_private_data::destroy(VkDevice dev)
+void device_private_data::destroy(device_private_data *device_data)
 {
-   scoped_mutex lock(g_data_lock);
-   g_device_data.erase(get_key(dev));
+   assert(device_data);
+
+   auto alloc = device_data->get_allocator();
+   alloc.destroy<device_private_data>(1, device_data);
 }
+
 } /* namespace layer */
