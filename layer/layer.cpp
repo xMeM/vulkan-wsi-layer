@@ -267,9 +267,10 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    }
 
    util::vector<const char *> modified_enabled_extensions{allocator};
-   if (!enabled_extensions.get_extension_strings(modified_enabled_extensions))
+   result = enabled_extensions.get_extension_strings(modified_enabled_extensions);
+   if (result != VK_SUCCESS)
    {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return result;
    }
 
    /* Now call create device on the chain further down the list. */

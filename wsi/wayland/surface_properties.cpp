@@ -283,17 +283,6 @@ const util::extension_list &surface_properties::get_required_device_extensions()
    return *device_extensions;
 }
 
-bool surface_properties::physical_device_supported(VkPhysicalDevice dev)
-{
-   static util::extension_list device_extensions{util::allocator::get_generic()};
-   device_extensions.add(dev);
-
-   static util::extension_list required_extensions{util::allocator::get_generic()};
-   required_extensions.add(required_device_extensions, NELEMS(required_device_extensions));
-
-   return device_extensions.contains(required_extensions);
-}
-
 /* TODO: Check for zwp_linux_dmabuf_v1 protocol in display */
 VkBool32 GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physical_device, uint32_t queue_index,
                                                         struct wl_display *display)

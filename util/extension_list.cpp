@@ -23,6 +23,7 @@
  */
 
 #include "extension_list.hpp"
+#include "util/custom_allocator.hpp"
 #include <layer/private_data.hpp>
 #include <string.h>
 #include <cassert>
@@ -36,87 +37,17 @@ extension_list::extension_list(const util::allocator& allocator)
 {
 }
 
-VkResult extension_list::add(const struct VkEnumerateInstanceExtensionPropertiesChain *chain)
-{
-   uint32_t count;
-   VkResult m_error = chain->CallDown(nullptr, &count, nullptr);
-   if (m_error == VK_SUCCESS)
-   {
-      if (!m_ext_props.try_resize(count))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      m_error = chain->CallDown(nullptr, &count, m_ext_props.data());
-   }
-   return m_error;
-}
-
-VkResult extension_list::add(VkPhysicalDevice dev)
-{
-   layer::instance_private_data &inst_data = layer::instance_private_data::get(dev);
-   uint32_t count;
-   VkResult m_error = inst_data.disp.EnumerateDeviceExtensionProperties(dev, nullptr, &count, nullptr);
-
-   if (m_error == VK_SUCCESS)
-   {
-      if (!m_ext_props.try_resize(count))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      m_error = inst_data.disp.EnumerateDeviceExtensionProperties(dev, nullptr, &count, m_ext_props.data());
-   }
-   return m_error;
-}
-
-VkResult extension_list::add(PFN_vkEnumerateInstanceExtensionProperties fpEnumerateInstanceExtensionProperties)
-{
-   uint32_t count = 0;
-   VkResult m_error = fpEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
-
-   if (m_error == VK_SUCCESS)
-   {
-      if (!m_ext_props.try_resize(count))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      m_error = fpEnumerateInstanceExtensionProperties(nullptr, &count, m_ext_props.data());
-   }
-   return m_error;
-}
-
 VkResult extension_list::add(const char *const *extensions, uint32_t count)
 {
-   for (uint32_t i = 0; i < count; i++)
-   {
-      VkExtensionProperties props = {};
-      strncpy(props.extensionName, extensions[i], sizeof(props.extensionName));
-      if (!m_ext_props.try_push_back(props))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-   }
-   return VK_SUCCESS;
-}
-
-VkResult extension_list::add(const VkExtensionProperties *props, uint32_t count)
-{
-   if (!m_ext_props.try_push_back_many(props, props + count))
+   auto initial_size = m_ext_props.size();
+   if (!m_ext_props.try_resize(initial_size + count))
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
-   return VK_SUCCESS;
-}
-
-VkResult extension_list::add(const char *ext)
-{
-   if (!contains(ext))
+   for (uint32_t i = 0; i < count; i++)
    {
-      VkExtensionProperties props = {};
-      strncpy(props.extensionName, ext, sizeof(props.extensionName));
-      if (!m_ext_props.try_push_back(props))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
+      auto &dst = m_ext_props[initial_size + i];
+      strncpy(dst.extensionName, extensions[i], sizeof(dst.extensionName));
    }
    return VK_SUCCESS;
 }
@@ -133,45 +64,45 @@ VkResult extension_list::add(VkExtensionProperties ext_prop)
    return VK_SUCCESS;
 }
 
-VkResult extension_list::add(const char **ext_list, uint32_t count)
+VkResult extension_list::add(const VkExtensionProperties *props, uint32_t count)
 {
+   auto initial_size = m_ext_props.size();
+   if (!m_ext_props.try_resize(initial_size + count))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
    for (uint32_t i = 0; i < count; i++)
    {
-      if (add(ext_list[i]) != VK_SUCCESS)
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
+      m_ext_props[initial_size + i] = props[i];
    }
    return VK_SUCCESS;
 }
 
 VkResult extension_list::add(const extension_list &ext_list)
 {
-   util::vector<VkExtensionProperties> ext_vect = ext_list.get_extension_props();
-   for (auto &ext : ext_vect)
+   util::vector<const char *> ext_vect{m_alloc};
+   VkResult result = ext_list.get_extension_strings(ext_vect);
+   if (result != VK_SUCCESS)
    {
-      if (add(ext) != VK_SUCCESS)
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
+      return result;
    }
-   return VK_SUCCESS;
+   return add(ext_vect.data(), ext_vect.size());
 }
 
-bool extension_list::get_extension_strings(util::vector<const char*> &out) const
+VkResult extension_list::get_extension_strings(util::vector<const char*> &out) const
 {
    size_t old_size = out.size();
    size_t new_size = old_size + m_ext_props.size();
    if (!out.try_resize(new_size))
    {
-      return false;
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
    for (size_t i = old_size; i < new_size; i++)
    {
       out[i] = m_ext_props[i - old_size].extensionName;
    }
-   return true;
+   return VK_SUCCESS;
 }
 
 bool extension_list::contains(const extension_list &req) const

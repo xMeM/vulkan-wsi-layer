@@ -127,7 +127,28 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
 {
    util::allocator allocator{extensions_to_enable.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND};
    util::extension_list device_extensions{allocator};
-   VkResult res = device_extensions.add(phys_dev);
+
+   util::vector<VkExtensionProperties> ext_props{allocator};
+   layer::instance_private_data &inst_data = layer::instance_private_data::get(phys_dev);
+   uint32_t count;
+   VkResult res = inst_data.disp.EnumerateDeviceExtensionProperties(phys_dev, nullptr, &count, nullptr);
+
+   if (res == VK_SUCCESS)
+   {
+      if (!ext_props.try_resize(count))
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+      res = inst_data.disp.EnumerateDeviceExtensionProperties(phys_dev, nullptr, &count, ext_props.data());
+   }
+
+   if (res != VK_SUCCESS)
+   {
+      return res;
+   }
+
+   res = device_extensions.add(ext_props.data(), count);
+
    if (res != VK_SUCCESS)
    {
       return res;

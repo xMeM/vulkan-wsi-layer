@@ -29,11 +29,15 @@
 #include <algorithm>
 
 #include <vulkan/vulkan.h>
-#include <vulkan/vk_layer.h>
 
 namespace util
 {
 
+/**
+ * @brief A helper class for storing a vector of extension names
+ *
+ * @note This class does not store the extension versions.
+ */
 class extension_list
 {
 public:
@@ -41,14 +45,6 @@ public:
 
    extension_list(const extension_list &rhs) = delete;
    const extension_list &operator=(const extension_list &rhs) = delete;
-
-   /**
-    * @brief Obtain a vector of #VkExtensionProperties equivalent to this extension_list object.
-    */
-   const util::vector<VkExtensionProperties> &get_extension_props() const
-   {
-      return m_ext_props;
-   }
 
    /**
     * @brief Get the allocator used to manage the memory of this object.
@@ -66,26 +62,37 @@ public:
     *
     * @param[out] out A vector of C strings to which all extension are appended.
     *
-    * @return A boolean indicating whether the operation was successful. If this is @c false, then @p out is
-    * unmodified.
+    * @return Indicates whether the operation was successful. If this is @c VK_ERROR_OUT_OF_HOST_MEMORY,
+    * then @p out is unmodified.
     */
-   bool get_extension_strings(util::vector<const char*> &out) const;
+   VkResult get_extension_strings(util::vector<const char*> &out) const;
 
+   /**
+    * @brief Check if this extension list contains all the extensions listed in req.
+    */
    bool contains(const extension_list &req) const;
+
+   /**
+    * @brief Check if this extension list contains the extension specified by ext.
+    */
    bool contains(const char *ext) const;
+
+   /**
+    * @brief Remove an extension from a extension list
+    */
    void remove(const char *ext);
-   VkResult add(const char *ext);
+
    VkResult add(VkExtensionProperties ext_prop);
-   VkResult add(const char **ext_list, uint32_t count);
-   VkResult add(const extension_list &ext_list);
-   VkResult add(const struct VkEnumerateInstanceExtensionPropertiesChain *chain);
-   VkResult add(PFN_vkEnumerateInstanceExtensionProperties fpEnumerateInstanceExtensionProperties);
-   VkResult add(VkPhysicalDevice dev);
-   VkResult add(const char *const *extensions, uint32_t count);
    VkResult add(const VkExtensionProperties *props, uint32_t count);
+   VkResult add(const extension_list &ext_list);
+   VkResult add(const char *const *extensions, uint32_t count);
 
 private:
    util::allocator m_alloc;
+
+   /**
+    * @note We are using VkExtensionProperties to store the extension name only
+    */
    util::vector<VkExtensionProperties> m_ext_props;
 };
 } // namespace util

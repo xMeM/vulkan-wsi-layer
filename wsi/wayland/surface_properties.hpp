@@ -45,8 +45,6 @@ public:
 
    const util::extension_list &get_required_device_extensions() override;
 
-   bool physical_device_supported(VkPhysicalDevice dev);
-
    PFN_vkVoidFunction get_proc_addr(const char *name) override;
 };
 
