@@ -166,4 +166,104 @@ VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentIn
    return ret;
 }
 
+VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupPresentCapabilitiesKHR(
+   VkDevice device, VkDeviceGroupPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities)
+{
+   assert(pDeviceGroupPresentCapabilities != nullptr);
+
+   pDeviceGroupPresentCapabilities->presentMask[0] = 1;
+   pDeviceGroupPresentCapabilities->modes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+
+   for (uint32_t i = 1; i < VK_MAX_DEVICE_GROUP_SIZE_KHR; i++)
+   {
+      pDeviceGroupPresentCapabilities->presentMask[i] = 0;
+   }
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupSurfacePresentModesKHR(VkDevice device, VkSurfaceKHR surface,
+                                                                     VkDeviceGroupPresentModeFlagsKHR *pModes)
+{
+   assert(pModes != nullptr);
+
+   auto &device_data = layer::device_private_data::get(device);
+   auto &instance = device_data.instance_data;
+
+   if (!instance.should_layer_handle_surface(device_data.physical_device, surface))
+   {
+      return device_data.disp.GetDeviceGroupSurfacePresentModesKHR(device, surface, pModes);
+   }
+
+   *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice,
+                                                                      VkSurfaceKHR surface, uint32_t *pRectCount,
+                                                                      VkRect2D *pRects)
+{
+   assert(surface);
+   assert(pRectCount != nullptr);
+
+   auto &instance = layer::instance_private_data::get(physicalDevice);
+
+   if (!instance.should_layer_handle_surface(physicalDevice, surface))
+   {
+      return instance.disp.GetPhysicalDevicePresentRectanglesKHR(physicalDevice, surface, pRectCount, pRects);
+   }
+
+   VkResult result;
+   wsi::surface_properties *props = wsi::get_surface_properties(surface);
+   assert(props);
+
+   if (nullptr == pRects)
+   {
+      *pRectCount = 1;
+      result = VK_SUCCESS;
+   }
+   else if (0 == *pRectCount)
+   {
+      result = VK_INCOMPLETE;
+   }
+   else
+   {
+      *pRectCount = 1;
+
+      VkSurfaceCapabilitiesKHR surface_caps;
+      result = props->get_surface_capabilities(physicalDevice, surface, &surface_caps);
+
+      if (result != VK_SUCCESS)
+      {
+         return result;
+      }
+
+      pRects[0].offset.x = 0;
+      pRects[0].offset.y = 0;
+      pRects[0].extent = surface_caps.currentExtent;
+   }
+
+   return result;
+}
+
+VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
+                                                     uint32_t *pImageIndex)
+{
+   assert(pAcquireInfo != VK_NULL_HANDLE);
+   assert(pAcquireInfo->swapchain != VK_NULL_HANDLE);
+   assert(pAcquireInfo->semaphore != VK_NULL_HANDLE || pAcquireInfo->fence != VK_NULL_HANDLE);
+   assert(pImageIndex != nullptr);
+
+   auto &device_data = layer::device_private_data::get(device);
+
+   if (!device_data.layer_owns_swapchain(pAcquireInfo->swapchain))
+   {
+      return device_data.disp.AcquireNextImage2KHR(device, pAcquireInfo, pImageIndex);
+   }
+
+   wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(pAcquireInfo->swapchain);
+
+   return sc->acquire_next_image(pAcquireInfo->timeout, pAcquireInfo->semaphore, pAcquireInfo->fence, pImageIndex);
+}
+
 } /* extern "C" */

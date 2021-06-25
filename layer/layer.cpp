@@ -435,6 +435,10 @@ VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDe
    GET_PROC_ADDR(vkAcquireNextImageKHR);
    GET_PROC_ADDR(vkQueuePresentKHR);
 
+   GET_PROC_ADDR(vkGetDeviceGroupSurfacePresentModesKHR);
+   GET_PROC_ADDR(vkGetDeviceGroupPresentCapabilitiesKHR);
+   GET_PROC_ADDR(vkAcquireNextImage2KHR);
+
    return layer::device_private_data::get(device).disp.GetDeviceProcAddr(device, funcName);
 }
 
@@ -459,6 +463,8 @@ VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstance
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
    GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
    GET_PROC_ADDR(vkEnumerateInstanceLayerProperties);
+
+   GET_PROC_ADDR(vkGetPhysicalDevicePresentRectanglesKHR);
 
    return layer::instance_private_data::get(instance).disp.GetInstanceProcAddr(instance, funcName);
 }
