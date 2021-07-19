@@ -98,8 +98,8 @@ VkResult instance_private_data::associate(VkInstance instance, instance_dispatch
                                           PFN_vkSetInstanceLoaderData set_loader_data,
                                           util::wsi_platform_set enabled_layer_platforms, const util::allocator &allocator)
 {
-   auto *instance_data =
-      allocator.create<instance_private_data>(1, table, set_loader_data, enabled_layer_platforms, allocator);
+   auto instance_data =
+      allocator.make_unique<instance_private_data>(table, set_loader_data, enabled_layer_platforms, allocator);
 
    if (instance_data == nullptr)
    {
@@ -120,9 +120,10 @@ VkResult instance_private_data::associate(VkInstance instance, instance_dispatch
       g_instance_data.erase(it);
    }
 
-   auto result = g_instance_data.try_insert(std::make_pair(key, instance_data));
+   auto result = g_instance_data.try_insert(std::make_pair(key, instance_data.get()));
    if (result.has_value())
    {
+      instance_data.release();
       return VK_SUCCESS;
    }
    else
@@ -130,7 +131,6 @@ VkResult instance_private_data::associate(VkInstance instance, instance_dispatch
       WSI_LOG_WARNING("Failed to insert instance_private_data for instance (%p) as host is out of memory",
                       reinterpret_cast<void *>(instance));
 
-      destroy(instance_data);
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 }
@@ -231,8 +231,8 @@ VkResult device_private_data::associate(VkDevice dev, instance_private_data &ins
                                         const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
                                         const util::allocator &allocator)
 {
-   auto *device_data =
-      allocator.create<device_private_data>(1, inst_data, phys_dev, dev, table, set_loader_data, allocator);
+   auto device_data =
+      allocator.make_unique<device_private_data>(inst_data, phys_dev, dev, table, set_loader_data, allocator);
 
    if (device_data == nullptr)
    {
@@ -252,9 +252,10 @@ VkResult device_private_data::associate(VkDevice dev, instance_private_data &ins
       g_device_data.erase(it);
    }
 
-   auto result = g_device_data.try_insert(std::make_pair(key, device_data));
+   auto result = g_device_data.try_insert(std::make_pair(key, device_data.get()));
    if (result.has_value())
    {
+      device_data.release();
       return VK_SUCCESS;
    }
    else
@@ -262,7 +263,6 @@ VkResult device_private_data::associate(VkDevice dev, instance_private_data &ins
       WSI_LOG_WARNING("Failed to insert device_private_data for device (%p) as host is out of memory",
                       reinterpret_cast<void *>(dev));
 
-      destroy(device_data);
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 }

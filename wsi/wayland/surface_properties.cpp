@@ -269,18 +269,9 @@ static const char *required_device_extensions[] = {
    VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
 };
 
-static std::unique_ptr<util::extension_list> populate_device_extensions()
+VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
 {
-   std::unique_ptr<util::extension_list> ret(new util::extension_list(util::allocator::get_generic()));
-   ret->add(required_device_extensions, NELEMS(required_device_extensions));
-
-   return ret;
-}
-
-const util::extension_list &surface_properties::get_required_device_extensions()
-{
-   static std::unique_ptr<util::extension_list> device_extensions = populate_device_extensions();
-   return *device_extensions;
+   return extension_list.add(required_device_extensions, NELEMS(required_device_extensions));
 }
 
 /* TODO: Check for zwp_linux_dmabuf_v1 protocol in display */

@@ -162,8 +162,14 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
          continue;
       }
 
+      util::extension_list extensions_required_by_layer{allocator};
       surface_properties *props = get_surface_properties(wsi_ext.platform);
-      const auto &extensions_required_by_layer = props->get_required_device_extensions();
+      res = props->get_required_device_extensions(extensions_required_by_layer);
+      if (res != VK_SUCCESS)
+      {
+         return res;
+      }
+
       bool supported = device_extensions.contains(extensions_required_by_layer);
       if (!supported)
       {

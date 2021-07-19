@@ -63,10 +63,10 @@ public:
    /**
     * @brief Return the device extensions that this surface_properties implementation needs.
     */
-   virtual const util::extension_list &get_required_device_extensions()
+   virtual VkResult get_required_device_extensions(util::extension_list &extension_list)
    {
-      static const util::extension_list empty{util::allocator::get_generic()};
-      return empty;
+      /* Requires no additional extensions */
+      return VK_SUCCESS;
    }
 
    /**

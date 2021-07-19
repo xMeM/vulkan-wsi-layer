@@ -26,6 +26,7 @@
 #include <vector>
 #include <string>
 #include <cassert>
+#include <memory>
 
 #include <vulkan/vulkan.h>
 
@@ -33,6 +34,12 @@
 
 namespace util
 {
+
+template <typename T>
+class deleter;
+
+template <typename T>
+using unique_ptr = std::unique_ptr<T, deleter<T>>;
 
 /**
  * @brief Minimalistic wrapper of VkAllocationCallbacks.
@@ -88,6 +95,9 @@ public:
     */
    template <typename T>
    void destroy(size_t num_objects, T *obj) const noexcept;
+
+   template <typename T, typename... Args>
+   util::unique_ptr<T> make_unique(Args &&...args) const noexcept;
 
    VkAllocationCallbacks m_callbacks;
    VkSystemAllocationScope m_scope;
@@ -223,9 +233,27 @@ void allocator::destroy(size_t num_objects, T *objects) const noexcept
 }
 
 template <typename T>
-void destroy_custom(T *obj)
+class deleter
 {
-   T::destroy(obj);
+public:
+   deleter(allocator allocator)
+      : m_allocator(std::move(allocator))
+   {}
+
+   void operator()(T *object)
+   {
+      m_allocator.destroy<T>(1, object);
+   }
+
+private:
+   allocator m_allocator;
+};
+
+template <typename T, typename... Args>
+util::unique_ptr<T> allocator::make_unique(Args &&...args) const noexcept
+{
+   T *object = create<T>(1, std::forward<Args>(args)...);
+   return util::unique_ptr<T>(object, *this);
 }
 
 /**
