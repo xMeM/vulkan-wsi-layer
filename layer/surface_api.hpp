@@ -61,4 +61,10 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysic
 VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
                                                                    uint32_t queueFamilyIndex, VkSurfaceKHR surface,
                                                                    VkBool32 *pSupported);
+
+/**
+ * @brief Implements vkDestroySurfaceKHR Vulkan entrypoint.
+ */
+VKAPI_ATTR void wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                                              const VkAllocationCallbacks *pAllocator);
 }

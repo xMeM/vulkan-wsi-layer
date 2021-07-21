@@ -96,6 +96,7 @@ endif()
 if(BUILD_WSI_WAYLAND)
    add_library(wayland_wsi STATIC
       wsi/wayland/surface_properties.cpp
+      wsi/wayland/surface.cpp
       wsi/wayland/wl_helpers.cpp
       wsi/wayland/swapchain.cpp)
 
@@ -153,6 +154,7 @@ add_library(${PROJECT_NAME} SHARED
    wsi/swapchain_base.cpp
    wsi/wsi_factory.cpp
    wsi/headless/surface_properties.cpp
+   wsi/headless/surface.cpp
    wsi/headless/swapchain.cpp)
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${WSI_DEFINES})
 target_include_directories(${PROJECT_NAME} PRIVATE

@@ -28,8 +28,8 @@
  */
 
 #include "wsi_factory.hpp"
+#include "surface.hpp"
 #include "headless/surface_properties.hpp"
-#include "headless/swapchain.hpp"
 
 #include <cassert>
 #include <cstdlib>
@@ -41,7 +41,6 @@
 #if BUILD_WSI_WAYLAND
 #include <vulkan/vulkan_wayland.h>
 #include "wayland/surface_properties.hpp"
-#include "wayland/swapchain.hpp"
 #endif
 
 namespace wsi
@@ -73,36 +72,27 @@ static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
    }
 }
 
-surface_properties *get_surface_properties(VkSurfaceKHR surface)
+surface_properties *get_surface_properties(layer::instance_private_data &instance_data, VkSurfaceKHR surface)
 {
-   VkIcdSurfaceBase *surface_base = reinterpret_cast<VkIcdSurfaceBase *>(surface);
+   auto *wsi_surface = instance_data.get_surface(surface);
 
-   return get_surface_properties(surface_base->platform);
-}
-
-template <typename swapchain_type>
-static swapchain_base *allocate_swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
-{
-   util::allocator alloc{ dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
-   return alloc.create<swapchain_type>(1, dev_data, pAllocator);
-}
-
-swapchain_base *allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_private_data &dev_data,
-                                           const VkAllocationCallbacks *pAllocator)
-{
-   VkIcdSurfaceBase *surface_base = reinterpret_cast<VkIcdSurfaceBase *>(surface);
-
-   switch (surface_base->platform)
+   if (wsi_surface)
    {
-   case VK_ICD_WSI_PLATFORM_HEADLESS:
-      return allocate_swapchain<wsi::headless::swapchain>(dev_data, pAllocator);
-#if BUILD_WSI_WAYLAND
-   case VK_ICD_WSI_PLATFORM_WAYLAND:
-      return allocate_swapchain<wsi::wayland::swapchain>(dev_data, pAllocator);
-#endif
-   default:
-      return nullptr;
+      return &wsi_surface->get_properties();
    }
+
+   return nullptr;
+}
+
+util::unique_ptr<swapchain_base> allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_private_data &dev_data,
+                                                            const VkAllocationCallbacks *pAllocator)
+{
+   wsi::surface *wsi_surface = dev_data.instance_data.get_surface(surface);
+   if (wsi_surface)
+   {
+      return wsi_surface->allocate_swapchain(dev_data, pAllocator);
+   }
+   return nullptr;
 }
 
 util::wsi_platform_set find_enabled_layer_platforms(const VkInstanceCreateInfo *pCreateInfo)
@@ -195,7 +185,7 @@ void destroy_surface_swapchain(swapchain_base *swapchain, layer::device_private_
 {
    assert(swapchain);
 
-   util::allocator alloc{ swapchain->get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
+   util::allocator alloc{ dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };
    alloc.destroy(1, swapchain);
 }
 

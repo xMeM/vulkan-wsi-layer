@@ -41,11 +41,12 @@ namespace wsi
 /**
  * @brief Obtains the surface properties for the specific surface type.
  *
- * @param surface The surface for which to get the properties.
+ * @param instance_data The instance specific data.
+ * @param surface       The surface for which to get the properties.
  *
  * @return nullptr if surface type is unsupported.
  */
-surface_properties *get_surface_properties(VkSurfaceKHR surface);
+surface_properties *get_surface_properties(layer::instance_private_data &instance_data, VkSurfaceKHR surface);
 
 /**
  * @brief Allocates a surface specific swapchain.
@@ -56,8 +57,8 @@ surface_properties *get_surface_properties(VkSurfaceKHR surface);
  *
  * @return nullptr on failure.
  */
-swapchain_base *allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_private_data &dev_data,
-                                           const VkAllocationCallbacks *pAllocator);
+util::unique_ptr<swapchain_base> allocate_surface_swapchain(VkSurfaceKHR surface, layer::device_private_data &dev_data,
+                                                            const VkAllocationCallbacks *pAllocator);
 
 /**
  * @brief Destroys a swapchain and frees memory. Used with @ref allocate_surface_swapchain.

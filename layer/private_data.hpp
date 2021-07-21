@@ -27,10 +27,12 @@
 #include "util/platform_set.hpp"
 #include "util/custom_allocator.hpp"
 #include "util/unordered_set.hpp"
+#include "util/unordered_map.hpp"
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 #include <vulkan/vk_icd.h>
+#include <vulkan/vulkan_wayland.h>
 
 #include <memory>
 #include <unordered_set>
@@ -38,6 +40,12 @@
 #include <mutex>
 
 using scoped_mutex = std::lock_guard<std::mutex>;
+
+/** Forward declare stored objects */
+namespace wsi
+{
+class surface;
+}
 
 namespace layer
 {
@@ -57,6 +65,9 @@ namespace layer
    OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)         \
    OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)    \
    OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)         \
+   OPTIONAL(CreateHeadlessSurfaceEXT)                   \
+   OPTIONAL(CreateWaylandSurfaceKHR)                    \
+   OPTIONAL(DestroySurfaceKHR)                          \
    OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR) \
    OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)      \
    OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)
@@ -191,6 +202,39 @@ public:
    static instance_private_data &get(VkPhysicalDevice phys_dev);
 
    /**
+    * @brief Associate a VkSurface with a WSI surface object.
+    *
+    * @param vk_surface  The VkSurface object created by the Vulkan implementation.
+    * @param wsi_surface The WSI layer object representing the surface.
+    *
+    * @return VK_SUCCESS or VK_ERROR_OUT_OF_HOST_MEMORY
+    *
+    * @note On success this transfers ownership of the WSI surface. The WSI surface is then explicitly destroyed by the
+    *       user with @ref remove_surface
+    */
+   VkResult add_surface(VkSurfaceKHR vk_surface, util::unique_ptr<wsi::surface> &wsi_surface);
+
+   /**
+    * @brief Returns any associated WSI surface to the VkSurface.
+    *
+    * @param vk_surface The VkSurface object queried for association.
+    *
+    * @return nullptr or a raw pointer to the WSI surface.
+    *
+    * @note This returns a raw pointer that does not change any ownership. The user is responsible for ensuring that the
+    *       pointer is valid as it explicitly controls the lifetime of the object.
+    */
+   wsi::surface *get_surface(VkSurfaceKHR vk_surface);
+
+   /**
+    * @brief Destroys any VkSurface associated WSI surface.
+    *
+    * @param vk_surface The VkSurface to check for associations.
+    * @param alloc      The allocator to use if destroying a @ref wsi::surface object.
+    */
+   void remove_surface(VkSurfaceKHR vk_surface, const util::allocator &alloc);
+
+   /**
     * @brief Get the set of enabled platforms that are also supported by the layer.
     */
    const util::wsi_platform_set &get_enabled_platforms()
@@ -263,6 +307,19 @@ private:
    const PFN_vkSetInstanceLoaderData SetInstanceLoaderData;
    const util::wsi_platform_set enabled_layer_platforms;
    const util::allocator allocator;
+
+   /**
+    * @brief Container for all VkSurface objects tracked and supported by the Layer's WSI implementation.
+    *
+    * Uses plain pointers to store surface data as the lifetime of the object is explicitly controlled by the Vulkan
+    * application. The application may also use different but compatible host allocators on creation and destruction.
+    */
+   util::unordered_map<VkSurfaceKHR, wsi::surface *> surfaces;
+
+   /**
+    * @brief Lock for thread safe access to @ref surfaces
+    */
+   std::mutex surfaces_lock;
 };
 
 /**

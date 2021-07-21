@@ -26,6 +26,7 @@
 #include <array>
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <map>
 #include <mutex>
 
@@ -35,6 +36,7 @@
 #include <layer/private_data.hpp>
 
 #include "surface_properties.hpp"
+#include "surface.hpp"
 
 #define UNUSED(x) ((void)(x))
 
@@ -166,6 +168,39 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    }
 
    return res;
+}
+
+extern "C" VKAPI_ATTR VkResult VKAPI_CALL CreateHeadlessSurfaceEXT(VkInstance instance,
+                                                                   const VkHeadlessSurfaceCreateInfoEXT *pCreateInfo,
+                                                                   const VkAllocationCallbacks *pAllocator,
+                                                                   VkSurfaceKHR *pSurface)
+{
+   auto &instance_data = layer::instance_private_data::get(instance);
+   util::allocator allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };
+   auto wsi_surface = util::unique_ptr<wsi::surface>(allocator.make_unique<surface>());
+   if (wsi_surface == nullptr)
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+   VkResult res = instance_data.disp.CreateHeadlessSurfaceEXT(instance, pCreateInfo, pAllocator, pSurface);
+   if (res == VK_SUCCESS)
+   {
+      res = instance_data.add_surface(*pSurface, wsi_surface);
+      if (res != VK_SUCCESS)
+      {
+         instance_data.disp.DestroySurfaceKHR(instance, *pSurface, pAllocator);
+      }
+   }
+   return res;
+}
+
+PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
+{
+   if (strcmp(name, "vkCreateHeadlessSurfaceEXT") == 0)
+   {
+      return reinterpret_cast<PFN_vkVoidFunction>(CreateHeadlessSurfaceEXT);
+   }
+   return nullptr;
 }
 
 } /* namespace headless */

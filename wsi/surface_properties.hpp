@@ -71,11 +71,10 @@ public:
 
    /**
     * @brief Implements vkGetProcAddr for entrypoints specific to the surface type.
+    *
+    * At least the specific VkSurface creation entrypoint must be intercepted.
     */
-    virtual PFN_vkVoidFunction get_proc_addr(const char *name)
-    {
-       return nullptr;
-    }
+   virtual PFN_vkVoidFunction get_proc_addr(const char *name) = 0;
 };
 
 } /* namespace wsi */

@@ -461,6 +461,7 @@ VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstance
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
+   GET_PROC_ADDR(vkDestroySurfaceKHR);
    GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
    GET_PROC_ADDR(vkEnumerateInstanceLayerProperties);
 

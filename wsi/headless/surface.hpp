@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,32 +22,26 @@
  * SOFTWARE.
  */
 
+/** @file
+ * @brief Definitions for a headless WSI Surface
+ */
+
 #pragma once
 
-#include <vulkan/vk_icd.h>
-#include <vulkan/vulkan.h>
-#include <wsi/surface_properties.hpp>
+#include "wsi/surface.hpp"
 
 namespace wsi
 {
 namespace headless
 {
 
-class surface_properties : public wsi::surface_properties
+class surface : public wsi::surface
 {
 public:
-   VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                     VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
-
-   VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *surfaceFormatCount,
-                                VkSurfaceFormatKHR *surfaceFormats) override;
-
-   VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                      uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;
-
-   PFN_vkVoidFunction get_proc_addr(const char *name) override;
-
-   static surface_properties &get_instance();
+   surface() = default;
+   wsi::surface_properties &get_properties() override;
+   util::unique_ptr<swapchain_base> allocate_swapchain(layer::device_private_data &dev_data,
+                                                       const VkAllocationCallbacks *allocator) override;
 };
 
 } /* namespace headless */

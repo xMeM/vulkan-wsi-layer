@@ -24,6 +24,7 @@
 
 #include "private_data.hpp"
 #include "wsi/wsi_factory.hpp"
+#include "wsi/surface.hpp"
 #include "util/unordered_map.hpp"
 #include "util/log.hpp"
 
@@ -81,6 +82,7 @@ instance_private_data::instance_private_data(const instance_dispatch_table &tabl
    , SetInstanceLoaderData(set_loader_data)
    , enabled_layer_platforms(enabled_layer_platforms)
    , allocator(alloc)
+   , surfaces(alloc)
 {
 }
 
@@ -172,15 +174,60 @@ instance_private_data &instance_private_data::get(VkPhysicalDevice phys_dev)
    return get_instance_private_data(phys_dev);
 }
 
-static VkIcdWsiPlatform get_platform_of_surface(VkSurfaceKHR surface)
+VkResult instance_private_data::add_surface(VkSurfaceKHR vk_surface, util::unique_ptr<wsi::surface> &wsi_surface)
 {
-   VkIcdSurfaceBase *surface_base = reinterpret_cast<VkIcdSurfaceBase *>(surface);
-   return surface_base->platform;
+   scoped_mutex lock(surfaces_lock);
+
+   auto it = surfaces.find(vk_surface);
+   if (it != surfaces.end())
+   {
+      WSI_LOG_WARNING("Hash collision when adding new surface (%p). Old surface is replaced.",
+                      reinterpret_cast<void *>(vk_surface));
+      surfaces.erase(it);
+   }
+
+   auto result = surfaces.try_insert(std::make_pair(vk_surface, nullptr));
+   if (result.has_value())
+   {
+      assert(result->second);
+      result->first->second = wsi_surface.release();
+      return VK_SUCCESS;
+   }
+
+   return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+wsi::surface *instance_private_data::get_surface(VkSurfaceKHR vk_surface)
+{
+   scoped_mutex lock(surfaces_lock);
+   auto it = surfaces.find(vk_surface);
+   if (it != surfaces.end())
+   {
+      return it->second;
+   }
+
+   return nullptr;
+}
+
+void instance_private_data::remove_surface(VkSurfaceKHR vk_surface, const util::allocator &alloc)
+{
+   scoped_mutex lock(surfaces_lock);
+   auto it = surfaces.find(vk_surface);
+   if (it != surfaces.end())
+   {
+      alloc.destroy<wsi::surface>(1, it->second);
+      surfaces.erase(it);
+   }
+   /* Failing to find a surface is not an error. It could have been created by a WSI extension, which is not handled
+    * by this layer.
+    */
 }
 
 bool instance_private_data::does_layer_support_surface(VkSurfaceKHR surface)
 {
-   return enabled_layer_platforms.contains(get_platform_of_surface(surface));
+   scoped_mutex lock(surfaces_lock);
+   auto it = surfaces.find(surface);
+   return it != surfaces.end();
 }
 
 void instance_private_data::destroy(instance_private_data *instance_data)

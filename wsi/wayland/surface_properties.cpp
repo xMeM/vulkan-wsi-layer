@@ -33,6 +33,7 @@
 #include <array>
 #include <cstring>
 #include "surface_properties.hpp"
+#include "surface.hpp"
 #include "layer/private_data.hpp"
 #include "wl_helpers.hpp"
 #include "wl_object_owner.hpp"
@@ -281,13 +282,40 @@ VkBool32 GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physica
    return VK_TRUE;
 }
 
+extern "C" VkResult CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR *pCreateInfo,
+                                            const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
+{
+   auto &instance_data = layer::instance_private_data::get(instance);
+   util::allocator allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };
+   auto wsi_surface = util::unique_ptr<wsi::surface>(allocator.make_unique<surface>());
+   if (wsi_surface == nullptr)
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+   VkResult res = instance_data.disp.CreateWaylandSurfaceKHR(instance, pCreateInfo, pAllocator, pSurface);
+   if (res == VK_SUCCESS)
+   {
+      res = instance_data.add_surface(*pSurface, wsi_surface);
+      if (res != VK_SUCCESS)
+      {
+         instance_data.disp.DestroySurfaceKHR(instance, *pSurface, pAllocator);
+      }
+   }
+   return res;
+}
+
 PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
 {
    if (strcmp(name, "vkGetPhysicalDeviceWaylandPresentationSupportKHR") == 0)
    {
       return reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceWaylandPresentationSupportKHR);
    }
+   else if (strcmp(name, "vkCreateWaylandSurfaceKHR") == 0)
+   {
+      return reinterpret_cast<PFN_vkVoidFunction>(CreateWaylandSurfaceKHR);
+   }
    return nullptr;
 }
+
 } // namespace wayland
 } // namespace wsi

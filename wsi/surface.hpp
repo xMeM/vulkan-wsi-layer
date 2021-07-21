@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Arm Limited.
+ * Copyright (c) 2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,33 +22,45 @@
  * SOFTWARE.
  */
 
+/**
+ * @file
+ * @brief Vulkan WSI surface interfaces.
+ */
+
 #pragma once
 
-#include <vulkan/vk_icd.h>
 #include <vulkan/vulkan.h>
-#include <wsi/surface_properties.hpp>
+#include "surface_properties.hpp"
+#include "swapchain_base.hpp"
 
 namespace wsi
 {
-namespace headless
-{
 
-class surface_properties : public wsi::surface_properties
+/**
+ * @brief A generic WSI representation of a VkSurface.
+ *
+ * The association between these objects and VkSurfaces is kept in the VkInstance private data.
+ */
+class surface
 {
 public:
-   VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                     VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
+   virtual ~surface() = default;
 
-   VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *surfaceFormatCount,
-                                VkSurfaceFormatKHR *surfaceFormats) override;
+   /**
+    * @brief Returns a @ref surface_properties implementation that can be specific to the VkSurface represented.
+    */
+   virtual surface_properties &get_properties() = 0;
 
-   VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                      uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;
-
-   PFN_vkVoidFunction get_proc_addr(const char *name) override;
-
-   static surface_properties &get_instance();
+   /**
+    * @brief Allocates a swapchain for the VkSurface type represented.
+    *
+    * @param dev_data  The VkDevice associated private date.
+    * @param allocator Allocation callbacks to use for host memory.
+    *
+    * @return nullptr on failure otherwise a constructed swapchain.
+    */
+   virtual util::unique_ptr<swapchain_base> allocate_swapchain(layer::device_private_data &dev_data,
+                                                               const VkAllocationCallbacks *allocator) = 0;
 };
 
-} /* namespace headless */
 } /* namespace wsi */

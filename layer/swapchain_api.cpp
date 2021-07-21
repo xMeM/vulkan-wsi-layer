@@ -56,7 +56,7 @@ VKAPI_ATTR VkResult wsi_layer_vkCreateSwapchainKHR(VkDevice device,
       return device_data.disp.CreateSwapchainKHR(device_data.device, pSwapchainCreateInfo, pAllocator, pSwapchain);
    }
 
-   wsi::swapchain_base *sc = wsi::allocate_surface_swapchain(surface, device_data, pAllocator);
+   auto sc = wsi::allocate_surface_swapchain(surface, device_data, pAllocator);
    if (sc == nullptr)
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -65,20 +65,16 @@ VKAPI_ATTR VkResult wsi_layer_vkCreateSwapchainKHR(VkDevice device,
    VkResult result = sc->init(device, pSwapchainCreateInfo);
    if (result != VK_SUCCESS)
    {
-      /* Error occured during initialization, need to free allocated memory. */
-      wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
       return result;
    }
 
-   auto vulkan_swapchain = reinterpret_cast<VkSwapchainKHR>(sc);
-   result = device_data.add_layer_swapchain(vulkan_swapchain);
+   result = device_data.add_layer_swapchain(reinterpret_cast<VkSwapchainKHR>(sc.get()));
    if (result != VK_SUCCESS)
    {
-      wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
       return result;
    }
 
-   *pSwapchain = vulkan_swapchain;
+   *pSwapchain = reinterpret_cast<VkSwapchainKHR>(sc.release());
    return result;
 }
 
@@ -214,7 +210,7 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysical
    }
 
    VkResult result;
-   wsi::surface_properties *props = wsi::get_surface_properties(surface);
+   wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
    assert(props);
 
    if (nullptr == pRects)

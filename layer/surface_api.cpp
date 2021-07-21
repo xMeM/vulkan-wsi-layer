@@ -39,7 +39,7 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysic
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
    {
-      wsi::surface_properties *props = wsi::get_surface_properties(surface);
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
       assert(props != nullptr);
       return props->get_surface_capabilities(physicalDevice, surface, pSurfaceCapabilities);
    }
@@ -61,7 +61,7 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDev
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
    {
-      wsi::surface_properties *props = wsi::get_surface_properties(surface);
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
       assert(props != nullptr);
       return props->get_surface_formats(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats);
    }
@@ -81,7 +81,7 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysic
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
    {
-      wsi::surface_properties *props = wsi::get_surface_properties(surface);
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
       assert(props != nullptr);
       return props->get_surface_present_modes(physicalDevice, surface, pPresentModeCount, pPresentModes);
    }
@@ -105,6 +105,17 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDev
    }
 
    return instance.disp.GetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface, pSupported);
+}
+
+VKAPI_ATTR void wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                                              const VkAllocationCallbacks *pAllocator)
+{
+   auto &instance_data = layer::instance_private_data::get(instance);
+
+   instance_data.disp.DestroySurfaceKHR(instance, surface, pAllocator);
+
+   instance_data.remove_surface(
+      surface, util::allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator });
 }
 
 } /* extern "C" */

@@ -246,20 +246,21 @@ void allocator::destroy(size_t num_objects, T *objects) const noexcept
  *        destroy method.
  */
 template <typename T>
-class deleter
+class deleter : public allocator
 {
 public:
-   deleter(allocator allocator)
-      : m_allocator(std::move(allocator))
+   deleter()
+      : deleter(allocator::get_generic())
+   {}
+
+   deleter(allocator alloc)
+      : allocator(std::move(alloc))
    {}
 
    void operator()(T *object)
    {
-      m_allocator.destroy<T>(1, object);
+      destroy<T>(1, object);
    }
-
-private:
-   allocator m_allocator;
 };
 
 /**
