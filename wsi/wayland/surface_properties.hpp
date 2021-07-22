@@ -25,15 +25,30 @@
 #pragma once
 
 #include "wsi/surface_properties.hpp"
+#include "util/unordered_set.hpp"
 
 namespace wsi
 {
 namespace wayland
 {
 
+struct vk_format_hasher
+{
+   size_t operator()(const VkFormat format) const
+   {
+      return std::hash<uint64_t>()(static_cast<uint64_t>(format));
+   }
+};
+
+using vk_format_set = util::unordered_set<VkFormat, vk_format_hasher>;
+
+class surface;
+
 class surface_properties : public wsi::surface_properties
 {
 public:
+   surface_properties(surface &wsi_surface, const util::allocator &alloc);
+
    static surface_properties &get_instance();
 
    VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
@@ -46,6 +61,16 @@ public:
    VkResult get_required_device_extensions(util::extension_list &extension_list) override;
 
    PFN_vkVoidFunction get_proc_addr(const char *name) override;
+
+private:
+   surface_properties();
+
+   /** If the properties are specific to a @ref wsi::wayland::surface this is a pointer to it. Can be nullptr for
+    * generic Wayland surface properties.
+    */
+   surface *specific_surface;
+   /** Set of supported Vulkan formats by the @ref specific_surface. */
+   vk_format_set supported_formats;
 };
 
 } // namespace wayland

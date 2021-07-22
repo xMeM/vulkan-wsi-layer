@@ -47,15 +47,17 @@ namespace wsi
 namespace wayland
 {
 
-struct vk_format_hasher
+surface_properties::surface_properties(surface &wsi_surface, const util::allocator &allocator)
+   : specific_surface(&wsi_surface)
+   , supported_formats(allocator)
 {
-   size_t operator()(const VkFormat format) const
-   {
-      return std::hash<uint64_t>()(static_cast<uint64_t>(format));
-   }
-};
+}
 
-using vk_format_set = std::unordered_set<VkFormat, vk_format_hasher>;
+surface_properties::surface_properties()
+   : specific_surface(nullptr)
+   , supported_formats(util::allocator::get_generic())
+{
+}
 
 surface_properties &surface_properties::get_instance()
 {
@@ -100,118 +102,64 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    return VK_SUCCESS;
 }
 
-static void get_vk_supported_formats(const util::vector<drm_format_pair> &drm_supported_formats,
-                                     vk_format_set &vk_supported_formats)
+static VkResult get_vk_supported_formats(const util::vector<drm_format_pair> &drm_supported_formats,
+                                         vk_format_set &vk_supported_formats)
 {
    for (const auto &drm_format : drm_supported_formats)
    {
       const VkFormat vk_format = util::drm::drm_to_vk_format(drm_format.fourcc);
       if (vk_format != VK_FORMAT_UNDEFINED)
       {
-         const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
-         if (srgb_vk_format != VK_FORMAT_UNDEFINED)
+         auto it = vk_supported_formats.try_insert(vk_format);
+         if (!it.has_value())
          {
-            vk_supported_formats.insert({srgb_vk_format, vk_format});
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
          }
-         else
+      }
+      const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
+      if (srgb_vk_format != VK_FORMAT_UNDEFINED)
+      {
+         auto it = vk_supported_formats.try_insert(srgb_vk_format);
+         if (!it.has_value())
          {
-            vk_supported_formats.insert(vk_format);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
          }
       }
    }
-}
-
-/*
- * @brief Query a surface's supported formats from the compositor.
- *
- * @details A wl_registry is created in order to get a zwp_linux_dmabuf_v1 object.
- * Then a listener is attached to that object in order to get the supported formats
- * from the server. The supported formats are stored in @p vk_supported_formats.
- *
- * @param[in]  surface                  The surface, which the supported formats
- *                                      are for.
- * @param[out] vk_supported_formats     unordered_set which will store the supported
- *                                      formats.
- *
- * @retval VK_SUCCESS                    Indicates success.
- * @retval VK_ERROR_SURFACE_LOST_KHR     Indicates one of the Wayland functions failed.
- * @retval VK_ERROR_OUT_OF_DEVICE_MEMORY Indicates the host went out of memory.
- */
-static VkResult query_supported_formats(
-   const VkSurfaceKHR surface, vk_format_set &vk_supported_formats, const util::allocator& allocator)
-{
-   const VkIcdSurfaceWayland *vk_surf = reinterpret_cast<VkIcdSurfaceWayland *>(surface);
-   wl_display *display = vk_surf->display;
-
-   auto registry = registry_owner{wl_display_get_registry(display)};
-   if (registry.get() == nullptr)
-   {
-      WSI_LOG_ERROR("Failed to get wl display registry.");
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-
-   auto dmabuf_interface = zwp_linux_dmabuf_v1_owner{nullptr};
-   const wl_registry_listener registry_listener = { registry_handler };
-   int res = wl_registry_add_listener(registry.get(), &registry_listener, &dmabuf_interface);
-   if (res < 0)
-   {
-      WSI_LOG_ERROR("Failed to add registry listener.");
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-
-   /* Get the dma buf interface. */
-   res = wl_display_roundtrip(display);
-   if (res < 0)
-   {
-      WSI_LOG_ERROR("Roundtrip failed.");
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-
-   if (dmabuf_interface.get() == nullptr)
-   {
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-
-   util::vector<drm_format_pair> drm_supported_formats{allocator};
-   const VkResult ret = get_supported_formats_and_modifiers(display, dmabuf_interface.get(), drm_supported_formats);
-   if (ret != VK_SUCCESS)
-   {
-      return ret == VK_ERROR_UNKNOWN ? VK_ERROR_SURFACE_LOST_KHR : ret;
-   }
-
-   get_vk_supported_formats(drm_supported_formats, vk_supported_formats);
-
-   return ret;
+   return VK_SUCCESS;
 }
 
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                                  uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats)
 {
-   vk_format_set formats;
-
    auto &instance = layer::instance_private_data::get(physical_device);
-   const auto query_res = query_supported_formats(surface, formats, instance.get_allocator());
-   if (query_res != VK_SUCCESS)
+
+   assert(specific_surface);
+   if (!supported_formats.size())
    {
-      return query_res;
+      VkResult res = get_vk_supported_formats(specific_surface->get_formats(), supported_formats);
+      if (res != VK_SUCCESS)
+      {
+         return res;
+      }
    }
 
    assert(surfaceFormatCount != nullptr);
    if (nullptr == surfaceFormats)
    {
-      *surfaceFormatCount = formats.size();
+      *surfaceFormatCount = supported_formats.size();
       return VK_SUCCESS;
    }
 
    VkResult res = VK_SUCCESS;
 
-   if (formats.size() > *surfaceFormatCount)
+   if (supported_formats.size() > *surfaceFormatCount)
    {
       res = VK_INCOMPLETE;
    }
 
    uint32_t format_count = 0;
-   for (const auto &format : formats)
+   for (const auto &format : supported_formats)
    {
       if (format_count >= *surfaceFormatCount)
       {
@@ -287,15 +235,17 @@ extern "C" VkResult CreateWaylandSurfaceKHR(VkInstance instance, const VkWayland
 {
    auto &instance_data = layer::instance_private_data::get(instance);
    util::allocator allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };
-   auto wsi_surface = util::unique_ptr<wsi::surface>(allocator.make_unique<surface>());
+   auto wsi_surface = surface::make_surface(allocator, pCreateInfo->display, pCreateInfo->surface);
    if (wsi_surface == nullptr)
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+
    VkResult res = instance_data.disp.CreateWaylandSurfaceKHR(instance, pCreateInfo, pAllocator, pSurface);
    if (res == VK_SUCCESS)
    {
-      res = instance_data.add_surface(*pSurface, wsi_surface);
+      auto surface_base = util::unique_ptr<wsi::surface>(std::move(wsi_surface));
+      res = instance_data.add_surface(*pSurface, surface_base);
       if (res != VK_SUCCESS)
       {
          instance_data.disp.DestroySurfaceKHR(instance, *pSurface, pAllocator);

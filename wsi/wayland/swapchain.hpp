@@ -34,6 +34,7 @@ extern "C" {
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include "util/wsialloc/wsialloc.h"
 #include "wl_object_owner.hpp"
+#include "surface.hpp"
 
 namespace wsi
 {
@@ -43,7 +44,8 @@ namespace wayland
 class swapchain : public wsi::swapchain_base
 {
 public:
-   explicit swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *allocator);
+   explicit swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *allocator,
+                      surface &wsi_surface);
 
    ~swapchain();
 
@@ -108,10 +110,9 @@ private:
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;
-   zwp_linux_dmabuf_v1_owner m_dmabuf_interface;
-
+   struct zwp_linux_dmabuf_v1 *m_dmabuf_interface;
    /* The queue on which we dispatch the swapchain related events, mostly frame completion */
-   struct wl_event_queue *m_surface_queue;
+   struct wl_event_queue *m_swapchain_queue;
    /* The queue on which we dispatch buffer related events, mostly buffer_release */
    struct wl_event_queue *m_buffer_queue;
 

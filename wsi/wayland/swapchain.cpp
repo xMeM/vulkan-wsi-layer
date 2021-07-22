@@ -26,6 +26,7 @@
 
 #include "swapchain.hpp"
 #include "wl_helpers.hpp"
+#include "surface_properties.hpp"
 
 #include <stdint.h>
 #include <cstring>
@@ -47,24 +48,6 @@ namespace wsi
 namespace wayland
 {
 
-template <typename T>
-static std::unique_ptr<T, std::function<void(T *)>>
-make_proxy_with_queue(T *object, wl_event_queue *queue)
-{
-   auto proxy = reinterpret_cast<T *>(wl_proxy_create_wrapper(object));
-   if (proxy != nullptr)
-   {
-      wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(proxy), queue);
-   }
-
-   auto delete_proxy = [](T *proxy)
-   {
-      wl_proxy_wrapper_destroy(reinterpret_cast<wl_proxy *>(proxy));
-   };
-
-   return std::unique_ptr<T, std::function<void(T *)>>(proxy, delete_proxy);
-}
-
 const VkImageAspectFlagBits plane_flag_bits[MAX_PLANES] = {
    VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT,
    VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT,
@@ -84,12 +67,13 @@ struct swapchain::wayland_image_data
    uint32_t num_planes;
 };
 
-swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
+swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator,
+                     surface &wsi_surface)
    : swapchain_base(dev_data, pAllocator)
-   , m_display(nullptr)
-   , m_surface(nullptr)
-   , m_dmabuf_interface(nullptr)
-   , m_surface_queue(nullptr)
+   , m_display(wsi_surface.get_wl_display())
+   , m_surface(wsi_surface.get_wl_surface())
+   , m_dmabuf_interface(wsi_surface.get_dmabuf_interface())
+   , m_swapchain_queue(nullptr)
    , m_buffer_queue(nullptr)
    , m_wsi_allocator(nullptr)
    , m_present_pending(false)
@@ -102,9 +86,9 @@ swapchain::~swapchain()
 
    wsialloc_delete(m_wsi_allocator);
    m_wsi_allocator = nullptr;
-   if (m_surface_queue != nullptr)
+   if (m_swapchain_queue != nullptr)
    {
-      wl_event_queue_destroy(m_surface_queue);
+      wl_event_queue_destroy(m_swapchain_queue);
    }
    if (m_buffer_queue != nullptr)
    {
@@ -112,65 +96,25 @@ swapchain::~swapchain()
    }
 }
 
-struct display_queue
-{
-   wl_display *display;
-   wl_event_queue *queue;
-};
-
 VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo)
 {
-   VkIcdSurfaceWayland *vk_surf = reinterpret_cast<VkIcdSurfaceWayland *>(pSwapchainCreateInfo->surface);
-
-   m_display = vk_surf->display;
-   m_surface = vk_surf->surface;
-
-   m_surface_queue = wl_display_create_queue(m_display);
-
-   if (m_surface_queue == nullptr)
+   if ((m_display == nullptr) || (m_surface == nullptr) || (m_dmabuf_interface == nullptr))
    {
-      WSI_LOG_ERROR("Failed to create wl surface display_queue.");
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   m_swapchain_queue = wl_display_create_queue(m_display);
+
+   if (m_swapchain_queue == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to create swapchain wl queue.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    m_buffer_queue = wl_display_create_queue(m_display);
    if (m_buffer_queue == nullptr)
    {
-      WSI_LOG_ERROR("Failed to create wl buffer display_queue.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   auto display_proxy = make_proxy_with_queue(m_display, m_surface_queue);
-   if (display_proxy == nullptr)
-   {
-      WSI_LOG_ERROR("Failed to create wl display proxy.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   auto registry = registry_owner{ wl_display_get_registry(display_proxy.get()) };
-   if (registry == nullptr)
-   {
-      WSI_LOG_ERROR("Failed to get wl display registry.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   const wl_registry_listener registry_listener = { registry_handler };
-   int res = wl_registry_add_listener(registry.get(), &registry_listener, &m_dmabuf_interface);
-   if (res < 0)
-   {
-      WSI_LOG_ERROR("Failed to add registry listener.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   res = wl_display_roundtrip_queue(m_display, m_surface_queue);
-   if (res < 0)
-   {
-      WSI_LOG_ERROR("Roundtrip failed.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   if (m_dmabuf_interface.get() == nullptr)
-   {
+      WSI_LOG_ERROR("Failed to create buffer wl queue.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -594,7 +538,7 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
    }
 
    /* create a wl_buffer using the dma_buf protocol */
-   auto dmabuf_interface_proxy = make_proxy_with_queue(m_dmabuf_interface.get(), m_surface_queue);
+   auto dmabuf_interface_proxy = make_proxy_with_queue(m_dmabuf_interface, m_swapchain_queue);
    if (dmabuf_interface_proxy == nullptr)
    {
       WSI_LOG_ERROR("Failed to allocate dma-buf interface proxy.");
@@ -622,7 +566,7 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
 
    /* TODO: don't roundtrip - we should be able to send the create request now,
     * and only wait for it on first present. only do this once, not for all buffers created */
-   res = wl_display_roundtrip_queue(m_display, m_surface_queue);
+   res = wl_display_roundtrip_queue(m_display, m_swapchain_queue);
    if (res < 0)
    {
       destroy_image(image);
@@ -679,7 +623,7 @@ void swapchain::present_image(uint32_t pendingIndex)
           * time if the compositor isn't responding (perhaps because the
           * window is hidden).
           */
-         res = dispatch_queue(m_display, m_surface_queue, -1);
+         res = dispatch_queue(m_display, m_swapchain_queue, -1);
       } while (res > 0 && m_present_pending);
 
       if (res <= 0)
@@ -697,7 +641,7 @@ void swapchain::present_image(uint32_t pendingIndex)
    if (m_present_mode == VK_PRESENT_MODE_FIFO_KHR)
    {
       /* request a hint when we can present the _next_ frame */
-      auto surface_proxy = make_proxy_with_queue(m_surface, m_surface_queue);
+      auto surface_proxy = make_proxy_with_queue(m_surface, m_swapchain_queue);
       if (surface_proxy == nullptr)
       {
          WSI_LOG_ERROR("failed to create wl_surface proxy");

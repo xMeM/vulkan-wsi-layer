@@ -57,5 +57,20 @@ struct dmabuf_deleter
 
 using registry_owner = std::unique_ptr<wl_registry, registry_deleter>;
 using zwp_linux_dmabuf_v1_owner = std::unique_ptr<zwp_linux_dmabuf_v1, dmabuf_deleter>;
+
+template <typename T>
+static std::unique_ptr<T, std::function<void(T *)>> make_proxy_with_queue(T *object, wl_event_queue *queue)
+{
+   auto proxy = reinterpret_cast<T *>(wl_proxy_create_wrapper(object));
+   if (proxy != nullptr)
+   {
+      wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(proxy), queue);
+   }
+
+   auto delete_proxy = [](T *proxy) { wl_proxy_wrapper_destroy(reinterpret_cast<wl_proxy *>(proxy)); };
+
+   return std::unique_ptr<T, std::function<void(T *)>>(proxy, delete_proxy);
+}
+
 } // namespace wayland
 } // namespace wsi
