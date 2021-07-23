@@ -25,6 +25,7 @@
 #pragma once
 
 #include "wsi/swapchain_base.hpp"
+#include "wl_helpers.hpp"
 
 extern "C" {
 #include <vulkan/vk_icd.h>
@@ -110,7 +111,10 @@ private:
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;
-   struct zwp_linux_dmabuf_v1 *m_dmabuf_interface;
+   /** Raw pointer to the WSI Surface that this swapchain was created from. The Vulkan specification ensures that the
+    * surface is valid until swapchain is destroyed. */
+   surface *m_wsi_surface;
+
    /* The queue on which we dispatch the swapchain related events, mostly frame completion */
    struct wl_event_queue *m_swapchain_queue;
    /* The queue on which we dispatch buffer related events, mostly buffer_release */
@@ -169,6 +173,19 @@ private:
     */
    VkResult get_drm_format_properties(
       VkFormat format, util::vector<VkDrmFormatModifierPropertiesEXT> &format_props_list);
+
+   /**
+    * @brief Finds what formats are compatible with the requested swapchain image Vulkan Device and Wayland surface.
+    *
+    * @param      info               The Swapchain image creation info.
+    * @param[out] importable_formats A list of formats that can be imported to the Vulkan Device.
+    * @param[out] exportable_formats A list of formats that can be exported from the Vulkan Device.
+    *
+    * @return VK_SUCCESS or VK_ERROR_OUT_OF_HOST_MEMORY
+    */
+   VkResult get_surface_compatible_formats(const VkImageCreateInfo &info,
+                                           util::vector<wsialloc_format> &importable_formats,
+                                           util::vector<uint64_t> &exportable_modifers);
 };
 } // namespace wayland
 } // namespace wsi

@@ -72,7 +72,7 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
    : swapchain_base(dev_data, pAllocator)
    , m_display(wsi_surface.get_wl_display())
    , m_surface(wsi_surface.get_wl_surface())
-   , m_dmabuf_interface(wsi_surface.get_dmabuf_interface())
+   , m_wsi_surface(&wsi_surface)
    , m_swapchain_queue(nullptr)
    , m_buffer_queue(nullptr)
    , m_wsi_allocator(nullptr)
@@ -98,7 +98,7 @@ swapchain::~swapchain()
 
 VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo)
 {
-   if ((m_display == nullptr) || (m_surface == nullptr) || (m_dmabuf_interface == nullptr))
+   if ((m_display == nullptr) || (m_surface == nullptr) || (m_wsi_surface->get_dmabuf_interface() == nullptr))
    {
       return VK_ERROR_INITIALIZATION_FAILED;
    }
@@ -251,21 +251,6 @@ VkResult swapchain::get_drm_format_properties(
    return VK_SUCCESS;
 }
 
-static bool is_disjoint_supported(
-   const util::vector<VkDrmFormatModifierPropertiesEXT> &format_props, uint64_t modifier)
-{
-   for (const auto &prop : format_props)
-   {
-      if (prop.drmFormatModifier == modifier &&
-          prop.drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_DISJOINT_BIT)
-      {
-         return true;
-      }
-   }
-
-   return false;
-}
-
 static uint32_t get_same_fd_index(int fd, int const *fds)
 {
    uint32_t index = 0;
@@ -277,12 +262,114 @@ static uint32_t get_same_fd_index(int fd, int const *fds)
    return index;
 }
 
-VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
-                                   VkImage *image)
+VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info,
+                                                   util::vector<wsialloc_format> &importable_formats,
+                                                   util::vector<uint64_t> &exportable_modifers)
 {
-   VkResult result = VK_SUCCESS;
-   const uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
+   /* Query supported modifers. */
+   util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(
+      util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+   VkResult result = get_drm_format_properties(info.format, drm_format_props);
+   if (result != VK_SUCCESS)
+   {
+      WSI_LOG_ERROR("Failed to get format properties.");
+      return result;
+   }
+   for (const auto &prop : drm_format_props)
+   {
+      bool is_supported = false;
+      drm_format_pair drm_format{ util::drm::vk_to_drm_format(info.format), prop.drmFormatModifier };
+      for (const auto &format : m_wsi_surface->get_formats())
+      {
+         if (format.fourcc == drm_format.fourcc && format.modifier == drm_format.modifier)
+         {
+            is_supported = true;
+            break;
+         }
+      }
+      if (!is_supported)
+      {
+         continue;
+      }
 
+      VkExternalImageFormatPropertiesKHR external_props = {};
+      external_props.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR;
+
+      VkImageFormatProperties2KHR format_props = {};
+      format_props.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR;
+      format_props.pNext = &external_props;
+      {
+         VkPhysicalDeviceExternalImageFormatInfoKHR external_info = {};
+         external_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR;
+         external_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
+         VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_mod_info = {};
+         drm_mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
+         drm_mod_info.pNext = &external_info;
+         drm_mod_info.drmFormatModifier = prop.drmFormatModifier;
+         drm_mod_info.sharingMode = info.sharingMode;
+         drm_mod_info.queueFamilyIndexCount = info.queueFamilyIndexCount;
+         drm_mod_info.pQueueFamilyIndices = info.pQueueFamilyIndices;
+
+         VkPhysicalDeviceImageFormatInfo2KHR image_info = {};
+         image_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR;
+         image_info.pNext = &drm_mod_info;
+         image_info.format = info.format;
+         image_info.type = info.imageType;
+         image_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+         image_info.usage = info.usage;
+         image_info.flags = info.flags;
+
+         result = m_device_data.instance_data.disp.GetPhysicalDeviceImageFormatProperties2KHR(
+            m_device_data.physical_device, &image_info, &format_props);
+      }
+      if (result != VK_SUCCESS)
+      {
+         continue;
+      }
+      if (format_props.imageFormatProperties.maxExtent.width < info.extent.width ||
+          format_props.imageFormatProperties.maxExtent.height < info.extent.height ||
+          format_props.imageFormatProperties.maxExtent.depth < info.extent.depth)
+      {
+         continue;
+      }
+      if (format_props.imageFormatProperties.maxMipLevels < info.mipLevels ||
+          format_props.imageFormatProperties.maxArrayLayers < info.arrayLayers)
+      {
+         continue;
+      }
+      if ((format_props.imageFormatProperties.sampleCounts & info.samples) != info.samples)
+      {
+         continue;
+      }
+
+      if (external_props.externalMemoryProperties.externalMemoryFeatures &
+          VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR)
+      {
+         if (!exportable_modifers.try_push_back(drm_format.modifier))
+         {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+      }
+
+      if (external_props.externalMemoryProperties.externalMemoryFeatures &
+          VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR)
+      {
+         uint64_t flags =
+            (prop.drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_DISJOINT_BIT) ? 0 : WSIALLOC_FORMAT_NON_DISJOINT;
+         wsialloc_format import_format{ drm_format.fourcc, drm_format.modifier, flags };
+         if (!importable_formats.try_push_back(import_format))
+         {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image)
+{
    image_data->buffer = nullptr;
    image_data->num_planes = 0;
    for (uint32_t plane = 0; plane < MAX_PLANES; plane++)
@@ -291,77 +378,17 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       image_data->memory[plane] = VK_NULL_HANDLE;
    }
 
-   /* Query support for disjoint images. */
-   util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(m_allocator);
-   result = get_drm_format_properties(image_create_info.format, drm_format_props);
+   util::vector<wsialloc_format> importable_formats(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+   util::vector<uint64_t> exportable_modifiers(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+   VkResult result = get_surface_compatible_formats(image_create_info, importable_formats, exportable_modifiers);
    if (result != VK_SUCCESS)
    {
-      WSI_LOG_ERROR("Failed to get format properties.");
       return result;
    }
-   auto is_disjoint = is_disjoint_supported(drm_format_props, modifier);
 
-   VkExternalImageFormatPropertiesKHR external_props = {};
-   external_props.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR;
+   /* TODO: Handle exportable images which use ICD allocated memory in preference to an external allocator. */
 
-   VkImageFormatProperties2KHR format_props = {};
-   format_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2_KHR;
-   format_props.pNext = &external_props;
-   {
-      VkPhysicalDeviceExternalImageFormatInfoKHR external_info = {};
-      external_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR;
-      external_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-
-      VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_mod_info = {};
-      drm_mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
-      drm_mod_info.pNext = &external_info;
-      drm_mod_info.drmFormatModifier = modifier;
-      drm_mod_info.sharingMode = image_create_info.sharingMode;
-      drm_mod_info.queueFamilyIndexCount = image_create_info.queueFamilyIndexCount;
-      drm_mod_info.pQueueFamilyIndices = image_create_info.pQueueFamilyIndices;
-
-      VkPhysicalDeviceImageFormatInfo2KHR info = {};
-      info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR;
-      info.pNext = &drm_mod_info;
-      info.format = image_create_info.format;
-      info.type = image_create_info.imageType;
-      info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-      info.usage = image_create_info.usage;
-      info.flags = image_create_info.flags;
-
-      result = m_device_data.instance_data.disp.GetPhysicalDeviceImageFormatProperties2KHR(m_device_data.physical_device,
-                                                                                           &info, &format_props);
-   }
-   if (result != VK_SUCCESS)
-   {
-      WSI_LOG_ERROR("Failed to get physical device format support.");
-      return result;
-   }
-   if (format_props.imageFormatProperties.maxExtent.width < image_create_info.extent.width ||
-       format_props.imageFormatProperties.maxExtent.height < image_create_info.extent.height ||
-       format_props.imageFormatProperties.maxExtent.depth < image_create_info.extent.depth)
-   {
-      WSI_LOG_ERROR("Physical device does not support required extent.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-   if (format_props.imageFormatProperties.maxMipLevels < image_create_info.mipLevels ||
-       format_props.imageFormatProperties.maxArrayLayers < image_create_info.arrayLayers)
-   {
-      WSI_LOG_ERROR("Physical device does not support required array layers or mip levels.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-   if ((format_props.imageFormatProperties.sampleCounts & image_create_info.samples) != image_create_info.samples)
-   {
-      WSI_LOG_ERROR("Physical device does not support required sample count.");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   if (external_props.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR)
-   {
-      /* TODO: Handle exportable images which use ICD allocated memory in preference to an external allocator. */
-   }
-   if (!(external_props.externalMemoryProperties.externalMemoryFeatures &
-         VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
+   if (importable_formats.empty())
    {
       WSI_LOG_ERROR("Export/Import not supported.");
       return VK_ERROR_INITIALIZATION_FAILED;
@@ -369,45 +396,42 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
    else
    {
       /* TODO: Handle Dedicated allocation bit. */
-      const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
-      const auto is_protected_memory = (image_create_info.flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0;
-
-      const uint64_t format_flags = is_disjoint ? 0 : WSIALLOC_FORMAT_NON_DISJOINT;
-      wsialloc_format format = {fourcc, modifier, format_flags};
-
+      bool is_protected_memory = (image_create_info.flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0;
       const uint64_t allocation_flags = is_protected_memory ? WSIALLOC_ALLOCATE_PROTECTED : 0;
-      wsialloc_allocate_info alloc_info = {
-         &format,
-         1,
-         image_create_info.extent.width,
-         image_create_info.extent.height,
-         allocation_flags
-      };
+      wsialloc_allocate_info alloc_info = { importable_formats.data(), static_cast<unsigned>(importable_formats.size()),
+                                            image_create_info.extent.width, image_create_info.extent.height,
+                                            allocation_flags };
 
-      wsialloc_format allocated_format = {0};
+      wsialloc_format allocated_format = { 0 };
       const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, &allocated_format, image_data->stride,
                                       image_data->buffer_fd, image_data->offset);
       if (res != WSIALLOC_ERROR_NONE)
       {
          WSI_LOG_ERROR("Failed allocation of DMA Buffer. WSI error: %d", static_cast<int>(res));
-         if(res == WSIALLOC_ERROR_NOT_SUPPORTED)
+         if (res == WSIALLOC_ERROR_NOT_SUPPORTED)
          {
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
          }
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
 
+      bool is_disjoint = false;
       for (uint32_t plane = 0; plane < MAX_PLANES; plane++)
       {
          if (image_data->buffer_fd[plane] == -1)
          {
             break;
          }
+         else if (image_data->buffer_fd[plane] != image_data->buffer_fd[0])
+         {
+            is_disjoint = true;
+         }
          image_data->num_planes++;
       }
 
       {
-         util::vector<VkSubresourceLayout> image_layout(m_allocator);
+         util::vector<VkSubresourceLayout> image_layout(
+            util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
          if (!image_layout.try_resize(image_data->num_planes))
          {
             return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -428,7 +452,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
          VkImageDrmFormatModifierExplicitCreateInfoEXT drm_mod_info = {};
          drm_mod_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
          drm_mod_info.pNext = image_create_info.pNext;
-         drm_mod_info.drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
+         drm_mod_info.drmFormatModifier = allocated_format.modifier;
          drm_mod_info.drmFormatModifierPlaneCount = image_data->num_planes;
          drm_mod_info.pPlaneLayouts = image_layout.data();
 
@@ -450,13 +474,15 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       {
          if (is_disjoint)
          {
-            util::vector<VkBindImageMemoryInfo> bind_img_mem_infos(m_allocator);
+            util::vector<VkBindImageMemoryInfo> bind_img_mem_infos(
+               util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
             if (!bind_img_mem_infos.try_resize(image_data->num_planes))
             {
                return VK_ERROR_OUT_OF_HOST_MEMORY;
             }
 
-            util::vector<VkBindImagePlaneMemoryInfo> bind_plane_mem_infos(m_allocator);
+            util::vector<VkBindImagePlaneMemoryInfo> bind_plane_mem_infos(
+               util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
             if (!bind_plane_mem_infos.try_resize(image_data->num_planes))
             {
                return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -484,21 +510,11 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
                bind_img_mem_infos[plane].memory = image_data->memory[fd_index];
             }
 
-            result = m_device_data.disp.BindImageMemory2KHR(m_device, bind_img_mem_infos.size(),
-                                                            bind_img_mem_infos.data());
+            result =
+               m_device_data.disp.BindImageMemory2KHR(m_device, bind_img_mem_infos.size(), bind_img_mem_infos.data());
          }
          else
          {
-            /* Make sure one fd has been allocated. */
-            for (uint32_t plane = 1; plane < image_data->num_planes; plane++)
-            {
-               if (image_data->buffer_fd[plane] != image_data->buffer_fd[0])
-               {
-                  WSI_LOG_ERROR("Different fds per plane for a non disjoint image.");
-                  return VK_ERROR_INITIALIZATION_FAILED;
-               }
-            }
-
             result = allocate_plane_memory(image_data->buffer_fd[0], &image_data->memory[0]);
             if (result != VK_SUCCESS)
             {
@@ -538,7 +554,7 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
    }
 
    /* create a wl_buffer using the dma_buf protocol */
-   auto dmabuf_interface_proxy = make_proxy_with_queue(m_dmabuf_interface, m_swapchain_queue);
+   auto dmabuf_interface_proxy = make_proxy_with_queue(m_wsi_surface->get_dmabuf_interface(), m_swapchain_queue);
    if (dmabuf_interface_proxy == nullptr)
    {
       WSI_LOG_ERROR("Failed to allocate dma-buf interface proxy.");
