@@ -38,6 +38,15 @@ namespace util
 template <typename T>
 class deleter;
 
+/**
+ * @brief Wrapper for unique_ptr.
+ *
+ * This is a wrapper for unique_ptr that can be used to construct/destroy objects using the allocators in
+ * VkAllocationCallbacks. This smart pointer contains a full copy of the VkAllocationCallbacks, so its size is
+ * considerably larger than sizeof(void*).
+ *
+ * allocator::make_unique is provided to facilitate creating instances of this object.
+ */
 template <typename T>
 using unique_ptr = std::unique_ptr<T, deleter<T>>;
 
@@ -232,6 +241,10 @@ void allocator::destroy(size_t num_objects, T *objects) const noexcept
    allocator.deallocate(objects, num_objects);
 }
 
+/**
+ * @brief Class deleter is used to free the resource managed by the util::unique_ptr. Uses the passed in allocator's
+ *        destroy method.
+ */
 template <typename T>
 class deleter
 {
@@ -249,6 +262,9 @@ private:
    allocator m_allocator;
 };
 
+/**
+ * @brief Creates a util::unique_ptr object using the allocator for the deleter.
+ */
 template <typename T, typename... Args>
 util::unique_ptr<T> allocator::make_unique(Args &&...args) const noexcept
 {
