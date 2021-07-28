@@ -98,14 +98,9 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
 
 swapchain::~swapchain()
 {
-   int res;
    teardown();
 
-   res = wsialloc_delete(m_wsi_allocator);
-   if (res != 0)
-   {
-      WSI_LOG_ERROR("error deleting the allocator: %d", res);
-   }
+   wsialloc_delete(m_wsi_allocator);
    m_wsi_allocator = nullptr;
    if (m_surface_queue != nullptr)
    {
@@ -179,8 +174,7 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   m_wsi_allocator = wsialloc_new(-1);
-   if (nullptr == m_wsi_allocator)
+   if (wsialloc_new(&m_wsi_allocator) != WSIALLOC_ERROR_NONE)
    {
       WSI_LOG_ERROR("Failed to create wsi allocator.");
       return VK_ERROR_INITIALIZATION_FAILED;
@@ -432,13 +426,30 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
    {
       /* TODO: Handle Dedicated allocation bit. */
       const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
+      const auto is_protected_memory = (image_create_info.flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0;
 
-      const auto res =
-         wsialloc_alloc(m_wsi_allocator, fourcc, image_create_info.extent.width, image_create_info.extent.height,
-                        image_data->stride, image_data->buffer_fd, image_data->offset, nullptr);
-      if (res != 0)
+      const uint64_t format_flags = is_disjoint ? 0 : WSIALLOC_FORMAT_NON_DISJOINT;
+      wsialloc_format format = {fourcc, modifier, format_flags};
+
+      const uint64_t allocation_flags = is_protected_memory ? WSIALLOC_ALLOCATE_PROTECTED : 0;
+      wsialloc_allocate_info alloc_info = {
+         &format,
+         1,
+         image_create_info.extent.width,
+         image_create_info.extent.height,
+         allocation_flags
+      };
+
+      wsialloc_format allocated_format = {0};
+      const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, &allocated_format, image_data->stride,
+                                      image_data->buffer_fd, image_data->offset);
+      if (res != WSIALLOC_ERROR_NONE)
       {
-         WSI_LOG_ERROR("Failed allocation of DMA Buffer.");
+         WSI_LOG_ERROR("Failed allocation of DMA Buffer. WSI error: %d", static_cast<int>(res));
+         if(res == WSIALLOC_ERROR_NOT_SUPPORTED)
+         {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+         }
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
 
