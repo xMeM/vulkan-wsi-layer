@@ -38,6 +38,8 @@
 #include <layer/private_data.hpp>
 #include <util/timed_semaphore.hpp>
 #include <util/custom_allocator.hpp>
+#include <util/ring_buffer.hpp>
+#include "surface_properties.hpp"
 
 namespace wsi
 {
@@ -164,17 +166,6 @@ protected:
     */
    bool m_is_valid;
 
-   struct ring_buffer
-   {
-      /* Ring buffer to hold the image indexes. */
-      uint32_t *ring;
-      /* Head of the ring. */
-      uint32_t head;
-      /* End of the ring. */
-      uint32_t tail;
-      /* Size of the ring. */
-      uint32_t size;
-   };
    /**
     * @brief A semaphore to be signalled once a page flip event occurs.
     */
@@ -215,7 +206,7 @@ protected:
     * threads and we do not allow the application to acquire more images
     * than we have we eliminate race conditions.
     */
-   ring_buffer m_pending_buffer_pool;
+   util::ring_buffer<uint32_t, wsi::surface_properties::MAX_SWAPCHAIN_IMAGE_COUNT> m_pending_buffer_pool;
 
    /**
     * @brief User provided memory allocation callbacks.

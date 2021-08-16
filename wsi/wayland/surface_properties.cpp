@@ -70,8 +70,7 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
 {
    /* Image count limits */
    pSurfaceCapabilities->minImageCount = 2;
-   /* There is no maximum theoretically speaking */
-   pSurfaceCapabilities->maxImageCount = UINT32_MAX;
+   pSurfaceCapabilities->maxImageCount = MAX_SWAPCHAIN_IMAGE_COUNT;
 
    /* Surface extents */
    pSurfaceCapabilities->currentExtent = { 0xffffffff, 0xffffffff };

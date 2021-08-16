@@ -75,6 +75,9 @@ public:
     * At least the specific VkSurface creation entrypoint must be intercepted.
     */
    virtual PFN_vkVoidFunction get_proc_addr(const char *name) = 0;
+
+   /* There is no maximum theoretically speaking however we choose 3 for practicality */
+   static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 3;
 };
 
 } /* namespace wsi */

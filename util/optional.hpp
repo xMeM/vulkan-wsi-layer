@@ -100,6 +100,26 @@ public:
    void reset() noexcept
    {
       m_has_value = false;
+      m_value = T{};
+   }
+
+   /**
+    * @brief Reassign/assign the value in the optional.
+    *
+    * @return optional& This optional object with the value.
+    */
+   optional &set(T &&val) noexcept
+   {
+      m_value = std::move(val);
+      m_has_value = true;
+      return *this;
+   }
+
+   optional &set(const T &val) noexcept
+   {
+      m_value = val;
+      m_has_value = true;
+      return *this;
    }
 
    /**

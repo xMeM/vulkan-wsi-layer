@@ -71,11 +71,11 @@ void swapchain_base::page_flip_thread()
 
       /* We want to present the oldest queued for present image from our present queue,
        * which we can find at the sc->pending_buffer_pool.head index. */
-      uint32_t pending_index = m_pending_buffer_pool.ring[m_pending_buffer_pool.head];
-      m_pending_buffer_pool.head = (m_pending_buffer_pool.head + 1) % m_pending_buffer_pool.size;
+      auto pending_index = m_pending_buffer_pool.pop_front();
+      assert(pending_index.has_value());
 
       /* We wait for the fence of the oldest pending image to be signalled. */
-      vk_res = m_device_data.disp.WaitForFences(m_device, 1, &sc_images[pending_index].present_fence, VK_TRUE,
+      vk_res = m_device_data.disp.WaitForFences(m_device, 1, &sc_images[*pending_index].present_fence, VK_TRUE,
                                                     timeout);
       if (vk_res != VK_SUCCESS)
       {
@@ -88,9 +88,9 @@ void swapchain_base::page_flip_thread()
 
       /* If the descendant has started presenting the queue_present operation has marked the image
        * as FREE so we simply release it and continue. */
-      if (sc_images[pending_index].status == swapchain_image::FREE)
+      if (sc_images[*pending_index].status == swapchain_image::FREE)
       {
-         destroy_image(sc_images[pending_index]);
+         destroy_image(sc_images[*pending_index]);
          m_free_image_semaphore.post();
          continue;
       }
@@ -108,14 +108,14 @@ void swapchain_base::page_flip_thread()
 
          sem_post(&m_start_present_semaphore);
 
-         present_image(pending_index);
+         present_image(*pending_index);
 
          m_first_present = false;
       }
       /* The swapchain has already started presenting. */
       else
       {
-         present_image(pending_index);
+         present_image(*pending_index);
       }
    }
 }
@@ -139,7 +139,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_page_flip_thread_run(true)
    , m_thread_sem_defined(false)
    , m_first_present(true)
-   , m_pending_buffer_pool{ nullptr, 0, 0, 0 }
+   , m_pending_buffer_pool{}
    , m_allocator(dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, callbacks)
    , m_swapchain_images(m_allocator)
    , m_surface(VK_NULL_HANDLE)
@@ -184,17 +184,6 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    /* Init image to invalid values. */
    if (!m_swapchain_images.try_resize(swapchain_create_info->minImageCount))
       return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-   /* Initialize ring buffer. */
-   m_pending_buffer_pool.ring = m_allocator.create<uint32_t>(m_swapchain_images.size(), 0);
-   if (m_pending_buffer_pool.ring == nullptr)
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
-
-   m_pending_buffer_pool.head = 0;
-   m_pending_buffer_pool.tail = 0;
-   m_pending_buffer_pool.size = m_swapchain_images.size();
 
    /* We have allocated images, we can call the platform init function if something needs to be done. */
    result = init_platform(device, swapchain_create_info);
@@ -364,8 +353,6 @@ void swapchain_base::teardown()
       /* Call implementation specific release */
       destroy_image(img);
    }
-
-   m_allocator.destroy(m_swapchain_images.size(), m_pending_buffer_pool.ring);
 }
 
 VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t *image_index)
@@ -457,7 +444,7 @@ VkResult swapchain_base::get_swapchain_images(uint32_t *swapchain_image_count, V
    }
 }
 
-VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index)
+VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, uint32_t image_index)
 {
    VkResult result;
    bool descendent_started_presenting = false;
@@ -512,19 +499,13 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    if (descendent_started_presenting)
    {
       m_swapchain_images[image_index].status = swapchain_image::FREE;
-
-      m_pending_buffer_pool.ring[m_pending_buffer_pool.tail] = image_index;
-      m_pending_buffer_pool.tail = (m_pending_buffer_pool.tail + 1) % m_pending_buffer_pool.size;
+      m_pending_buffer_pool.push_back(image_index);
       m_page_flip_semaphore.post();
-
       return VK_ERROR_OUT_OF_DATE_KHR;
    }
 
    m_swapchain_images[image_index].status = swapchain_image::PENDING;
-
-   m_pending_buffer_pool.ring[m_pending_buffer_pool.tail] = image_index;
-   m_pending_buffer_pool.tail = (m_pending_buffer_pool.tail + 1) % m_pending_buffer_pool.size;
-
+   m_pending_buffer_pool.push_back(image_index);
    m_page_flip_semaphore.post();
    return VK_SUCCESS;
 }
