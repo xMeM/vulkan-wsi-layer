@@ -88,6 +88,11 @@ protected:
     * @param image Handle to the image about to be released.
     */
    void destroy_image(wsi::swapchain_image &image);
+
+   VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
+                                      uint32_t sem_count) override;
+
+   VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
 };
 
 } /* namespace headless */

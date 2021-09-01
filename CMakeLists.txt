@@ -161,6 +161,7 @@ add_library(${PROJECT_NAME} SHARED
    util/extension_list.cpp
    util/log.cpp
    wsi/swapchain_base.cpp
+   wsi/synchronization.cpp
    wsi/wsi_factory.cpp
    wsi/headless/surface_properties.cpp
    wsi/headless/surface.cpp

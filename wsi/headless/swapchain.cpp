@@ -44,6 +44,7 @@ struct image_data
 {
    /* Device memory backing the image. */
    VkDeviceMemory memory;
+   fence_sync present_fence;
 };
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
@@ -116,13 +117,14 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create, wsi::swapchain_
    }
 
    /* Initialize presentation fence. */
-   VkFenceCreateInfo fence_info = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0 };
-   res = m_device_data.disp.CreateFence(m_device, &fence_info, nullptr, &image.present_fence);
-   if (res != VK_SUCCESS)
+   auto present_fence = fence_sync::create(m_device_data);
+   if (!present_fence.has_value())
    {
       destroy_image(image);
-      return res;
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+   data->present_fence = std::move(present_fence.value());
+
    return res;
 }
 
@@ -136,12 +138,6 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
    if (image.status != wsi::swapchain_image::INVALID)
    {
-      if (image.present_fence != VK_NULL_HANDLE)
-      {
-         m_device_data.disp.DestroyFence(m_device, image.present_fence, nullptr);
-         image.present_fence = VK_NULL_HANDLE;
-      }
-
       if (image.image != VK_NULL_HANDLE)
       {
          m_device_data.disp.DestroyImage(m_device, image.image, get_allocation_callbacks());
@@ -165,6 +161,19 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
       image.data = nullptr;
    }
 
+}
+
+VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
+                                              uint32_t sem_count)
+{
+   auto data = reinterpret_cast<image_data *>(image.data);
+   return data->present_fence.set_payload(queue, sem_payload, sem_count);
+}
+
+VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)
+{
+   auto data = reinterpret_cast<image_data *>(image.data);
+   return data->present_fence.wait_payload(timeout);
 }
 
 } /* namespace headless */

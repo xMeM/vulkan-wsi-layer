@@ -36,28 +36,6 @@
 
 extern "C" {
 
-   void registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
-                         uint32_t version)
-   {
-      auto dmabuf_interface = reinterpret_cast<wsi::wayland::zwp_linux_dmabuf_v1_owner* >(data);
-
-      if (!strcmp(interface, "zwp_linux_dmabuf_v1"))
-      {
-         version = ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION;
-         zwp_linux_dmabuf_v1 *dmabuf_interface_obj =
-            reinterpret_cast<zwp_linux_dmabuf_v1 *>(wl_registry_bind(
-               wl_registry, name, &zwp_linux_dmabuf_v1_interface, version));
-
-         if (dmabuf_interface_obj == nullptr)
-         {
-            WSI_LOG_ERROR("Failed to get zwp_linux_dmabuf_v1 interface.");
-            return;
-         }
-
-         dmabuf_interface->reset(dmabuf_interface_obj);
-      }
-   }
-
    int dispatch_queue(struct wl_display *display, struct wl_event_queue *queue, int timeout)
    {
       int err;

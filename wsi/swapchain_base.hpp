@@ -40,6 +40,7 @@
 #include <util/custom_allocator.hpp>
 #include <util/ring_buffer.hpp>
 #include "surface_properties.hpp"
+#include "wsi/synchronization.hpp"
 
 namespace wsi
 {
@@ -59,8 +60,6 @@ struct swapchain_image
 
    VkImage image{VK_NULL_HANDLE};
    status status{swapchain_image::INVALID};
-
-   VkFence present_fence{VK_NULL_HANDLE};
 };
 
 /**
@@ -356,6 +355,33 @@ protected:
    {
       return VK_SUCCESS;
    }
+
+   /**
+    * @brief Sets the present payload for a swapchain image.
+    *
+    * @param[in] image       The swapchain image for which to set a present payload.
+    * @param     queue       A Vulkan queue that can be used for any Vulkan commands needed.
+    * @param[in] sem_payload Array of Vulkan semaphores that constitute the payload.
+    * @param     sem_count   Number of elements in @p sem_payload
+    *
+    * @return VK_SUCCESS on success or an error code otherwise.
+    */
+   virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
+                                              uint32_t sem_count) = 0;
+
+   /**
+    * @brief Waits for the present payload of an image if necessary.
+    *
+    * If the page flip thread needs to wait for the image present synchronization payload the WSI implemention can block
+    * and wait in this call. Otherwise the function should return successfully without blocking.
+    *
+    * @param[in] image   The swapchain image for which the function may need to wait until the presentat payload has
+    *                    finished.
+    * @param     timeout Timeout for any wait in nanoseconds.
+    *
+    * @return VK_SUCCESS if waiting was successful or unnecessary. An error code otherwise.
+    */
+   virtual VkResult image_wait_present(swapchain_image &image, uint64_t timeout) = 0;
 
 private:
    /**

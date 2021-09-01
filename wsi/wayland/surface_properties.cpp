@@ -131,8 +131,6 @@ static VkResult get_vk_supported_formats(const util::vector<drm_format_pair> &dr
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                                  uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats)
 {
-   auto &instance = layer::instance_private_data::get(physical_device);
-
    assert(specific_surface);
    if (!supported_formats.size())
    {
@@ -215,6 +213,8 @@ static const char *required_device_extensions[] = {
    VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
    VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
    VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
 };
 
 VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
@@ -226,6 +226,13 @@ VkResult surface_properties::get_required_device_extensions(util::extension_list
 VkBool32 GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physical_device, uint32_t queue_index,
                                                         struct wl_display *display)
 {
+   bool dev_supports_sync =
+      sync_fd_fence_sync::is_supported(layer::instance_private_data::get(physical_device), physical_device);
+   if (!dev_supports_sync)
+   {
+      return VK_FALSE;
+   }
+
    return VK_TRUE;
 }
 

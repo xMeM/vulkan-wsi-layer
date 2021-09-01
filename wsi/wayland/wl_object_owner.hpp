@@ -26,37 +26,49 @@
 
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
+#include <linux-explicit-synchronization-unstable-v1-protocol.h>
 #include <memory.h>
+#include <functional>
 
 namespace wsi
 {
 namespace wayland
 {
 
-struct registry_deleter
+static inline void wayland_object_destroy(wl_registry *obj)
 {
-   void operator()(wl_registry* obj) const
+   wl_registry_destroy(obj);
+}
+
+static inline void wayland_object_destroy(zwp_linux_dmabuf_v1 *obj)
+{
+   zwp_linux_dmabuf_v1_destroy(obj);
+}
+
+static inline void wayland_object_destroy(zwp_linux_explicit_synchronization_v1 *obj)
+{
+   zwp_linux_explicit_synchronization_v1_destroy(obj);
+}
+
+static inline void wayland_object_destroy(zwp_linux_surface_synchronization_v1 *obj)
+{
+   zwp_linux_surface_synchronization_v1_destroy(obj);
+}
+
+template <typename T>
+struct wayland_deleter
+{
+   void operator()(T *obj) const
    {
       if (obj != nullptr)
       {
-         wl_registry_destroy(obj);
+         wayland_object_destroy(obj);
       }
    }
 };
 
-struct dmabuf_deleter
-{
-   void operator()(zwp_linux_dmabuf_v1* obj) const
-   {
-      if (obj != nullptr)
-      {
-         zwp_linux_dmabuf_v1_destroy(obj);
-      }
-   }
-};
-
-using registry_owner = std::unique_ptr<wl_registry, registry_deleter>;
-using zwp_linux_dmabuf_v1_owner = std::unique_ptr<zwp_linux_dmabuf_v1, dmabuf_deleter>;
+template<typename T>
+using wayland_owner = std::unique_ptr<T, wayland_deleter<T>>;
 
 template <typename T>
 static std::unique_ptr<T, std::function<void(T *)>> make_proxy_with_queue(T *object, wl_event_queue *queue)

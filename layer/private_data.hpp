@@ -70,7 +70,8 @@ namespace layer
    OPTIONAL(DestroySurfaceKHR)                          \
    OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR) \
    OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)      \
-   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)
+   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)      \
+   OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)
 
 struct instance_dispatch_table
 {
@@ -131,7 +132,8 @@ struct instance_dispatch_table
    OPTIONAL(BindImageMemory2KHR)                    \
    OPTIONAL(GetDeviceGroupSurfacePresentModesKHR)   \
    OPTIONAL(GetDeviceGroupPresentCapabilitiesKHR)   \
-   OPTIONAL(AcquireNextImage2KHR)
+   OPTIONAL(AcquireNextImage2KHR)                   \
+   OPTIONAL(GetFenceFdKHR)
 
 struct device_dispatch_table
 {

@@ -133,6 +133,40 @@ surface::surface(const init_parameters &params)
 {
 }
 
+void surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
+                              uint32_t version)
+{
+   auto wsi_surface = reinterpret_cast<wsi::wayland::surface *>(data);
+
+   if (!strcmp(interface, zwp_linux_dmabuf_v1_interface.name) && version >= ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION)
+   {
+      zwp_linux_dmabuf_v1 *dmabuf_interface_obj = reinterpret_cast<zwp_linux_dmabuf_v1 *>(wl_registry_bind(
+         wl_registry, name, &zwp_linux_dmabuf_v1_interface, ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION));
+
+      if (dmabuf_interface_obj == nullptr)
+      {
+         WSI_LOG_ERROR("Failed to get zwp_linux_dmabuf_v1 interface.");
+         return;
+      }
+
+      wsi_surface->dmabuf_interface.reset(dmabuf_interface_obj);
+   }
+   else if (!strcmp(interface, zwp_linux_explicit_synchronization_v1_interface.name))
+   {
+      zwp_linux_explicit_synchronization_v1 *explicit_sync_interface_obj =
+         reinterpret_cast<zwp_linux_explicit_synchronization_v1 *>(
+            wl_registry_bind(wl_registry, name, &zwp_linux_explicit_synchronization_v1_interface, 1));
+
+      if (explicit_sync_interface_obj == nullptr)
+      {
+         WSI_LOG_ERROR("Failed to get zwp_linux_explicit_synchronization_v1 interface.");
+         return;
+      }
+
+      wsi_surface->explicit_sync_interface.reset(explicit_sync_interface_obj);
+   }
+}
+
 bool surface::init()
 {
    surface_queue = wl_display_create_queue(wayland_display);
@@ -150,15 +184,15 @@ bool surface::init()
       return false;
    };
 
-   auto registry = registry_owner{ wl_display_get_registry(display_proxy.get()) };
+   auto registry = wayland_owner<wl_registry>{ wl_display_get_registry(display_proxy.get()) };
    if (registry == nullptr)
    {
       WSI_LOG_ERROR("Failed to get wl display registry.");
       return false;
    }
 
-   const wl_registry_listener registry_listener = { registry_handler };
-   int res = wl_registry_add_listener(registry.get(), &registry_listener, &dmabuf_interface);
+   const wl_registry_listener registry_listener = { surface_registry_handler };
+   int res = wl_registry_add_listener(registry.get(), &registry_listener, this);
    if (res < 0)
    {
       WSI_LOG_ERROR("Failed to add registry listener.");
@@ -177,6 +211,22 @@ bool surface::init()
       WSI_LOG_ERROR("Failed to obtain zwp_linux_dma_buf_v1 interface.");
       return false;
    }
+
+   if (explicit_sync_interface.get() == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to obtain zwp_linux_explicit_synchronization_v1 interface.");
+      return false;
+   }
+
+   auto surface_sync_obj =
+      zwp_linux_explicit_synchronization_v1_get_synchronization(explicit_sync_interface.get(), wayland_surface);
+   if (surface_sync_obj == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to retrieve surface synchronization interface");
+      return false;
+   }
+
+   surface_sync_interface.reset(surface_sync_obj);
 
    VkResult vk_res =
       get_supported_formats_and_modifiers(wayland_display, surface_queue, dmabuf_interface.get(), supported_formats);

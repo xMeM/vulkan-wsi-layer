@@ -26,13 +26,9 @@
 
 #include <stdint.h>
 #include <wayland-client.h>
-#include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include "util/custom_allocator.hpp"
 
 extern "C" {
-   void registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
-                         uint32_t version);
-
    /**
     * @brief Dispatch events from a Wayland event queue
     *

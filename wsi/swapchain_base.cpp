@@ -74,9 +74,8 @@ void swapchain_base::page_flip_thread()
       auto pending_index = m_pending_buffer_pool.pop_front();
       assert(pending_index.has_value());
 
-      /* We wait for the fence of the oldest pending image to be signalled. */
-      vk_res = m_device_data.disp.WaitForFences(m_device, 1, &sc_images[*pending_index].present_fence, VK_TRUE,
-                                                    timeout);
+      /* We may need to wait for the payload of the present sync of the oldest pending image to be finished. */
+      vk_res = image_wait_present(sc_images[*pending_index], timeout);
       if (vk_res != VK_SUCCESS)
       {
          m_is_valid = false;
@@ -464,30 +463,8 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
       }
    }
 
-   /* When the semaphore that comes in is signalled, we know that all work is done. So, we do not
-    * want to block any future Vulkan queue work on it. So, we pass in BOTTOM_OF_PIPE bit as the
-    * wait flag.
-    */
-   VkPipelineStageFlags pipeline_stage_flags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
-   VkSubmitInfo submit_info = { VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                               NULL,
-                               present_info->waitSemaphoreCount,
-                               present_info->pWaitSemaphores,
-                               &pipeline_stage_flags,
-                               0,
-                               NULL,
-                               0,
-                               NULL };
-
-   assert(m_swapchain_images[image_index].status == swapchain_image::ACQUIRED);
-   result = m_device_data.disp.ResetFences(m_device, 1, &m_swapchain_images[image_index].present_fence);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
-   result = m_device_data.disp.QueueSubmit(queue, 1, &submit_info, m_swapchain_images[image_index].present_fence);
+   result = image_set_present_payload(m_swapchain_images[image_index], queue, present_info->pWaitSemaphores,
+                                      present_info->waitSemaphoreCount);
    if (result != VK_SUCCESS)
    {
       return result;

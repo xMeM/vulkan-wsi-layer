@@ -104,6 +104,11 @@ protected:
     */
    VkResult get_free_buffer(uint64_t *timeout) override;
 
+   VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
+                                      uint32_t sem_count) override;
+
+   VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
+
 private:
    struct wayland_image_data;
 

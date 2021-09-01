@@ -65,6 +65,8 @@ struct swapchain::wayland_image_data
    VkDeviceMemory memory[MAX_PLANES];
 
    uint32_t num_planes;
+
+   sync_fd_fence_sync present_fence;
 };
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator,
@@ -601,13 +603,13 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create_info, swapchain_
    }
 
    /* Initialize presentation fence. */
-   VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0 };
-   result = m_device_data.disp.CreateFence(m_device, &fenceInfo, get_allocation_callbacks(), &image.present_fence);
-   if (result != VK_SUCCESS)
+   auto present_fence = sync_fd_fence_sync::create(m_device_data);
+   if (!present_fence.has_value())
    {
       destroy_image(image);
-      return result;
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+   image_data->present_fence = std::move(present_fence.value());
 
    return VK_SUCCESS;
 }
@@ -651,6 +653,19 @@ void swapchain::present_image(uint32_t pendingIndex)
    }
 
    wl_surface_attach(m_surface, image_data->buffer, 0, 0);
+
+   auto present_sync_fd = image_data->present_fence.export_sync_fd();
+   if (!present_sync_fd.has_value())
+   {
+      WSI_LOG_ERROR("Failed to export present fence.");
+      m_is_valid = false;
+   }
+   else if (present_sync_fd->is_valid())
+   {
+      zwp_linux_surface_synchronization_v1_set_acquire_fence(m_wsi_surface->get_surface_sync_interface(),
+                                                             present_sync_fd->get());
+   }
+
    /* TODO: work out damage */
    wl_surface_damage(m_surface, 0, 0, INT32_MAX, INT32_MAX);
 
@@ -690,12 +705,6 @@ void swapchain::destroy_image(swapchain_image &image)
 
    if (image.status != swapchain_image::INVALID)
    {
-      if (image.present_fence != VK_NULL_HANDLE)
-      {
-         m_device_data.disp.DestroyFence(m_device, image.present_fence, get_allocation_callbacks());
-         image.present_fence = VK_NULL_HANDLE;
-      }
-
       if (image.image != VK_NULL_HANDLE)
       {
          m_device_data.disp.DestroyImage(m_device, image.image, get_allocation_callbacks());
@@ -790,6 +799,20 @@ VkResult swapchain::get_free_buffer(uint64_t *timeout)
    {
       return VK_ERROR_DEVICE_LOST;
    }
+}
+
+VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
+                                              uint32_t sem_count)
+{
+   auto image_data = reinterpret_cast<wayland_image_data *>(image.data);
+   return image_data->present_fence.set_payload(queue, sem_payload, sem_count);
+}
+
+VkResult swapchain::image_wait_present(swapchain_image &, uint64_t)
+{
+   /* With explicit sync in use there is no need to wait for the present sync before submiting the image to the
+    * compositor. */
+   return VK_SUCCESS;
 }
 
 } // namespace wayland
