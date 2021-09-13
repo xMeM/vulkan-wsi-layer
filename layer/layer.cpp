@@ -434,6 +434,7 @@ VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDe
    GET_PROC_ADDR(vkGetSwapchainImagesKHR);
    GET_PROC_ADDR(vkAcquireNextImageKHR);
    GET_PROC_ADDR(vkQueuePresentKHR);
+   GET_PROC_ADDR(vkDestroyDevice);
 
    GET_PROC_ADDR(vkGetDeviceGroupSurfacePresentModesKHR);
    GET_PROC_ADDR(vkGetDeviceGroupPresentCapabilitiesKHR);
@@ -456,7 +457,6 @@ VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstance
    GET_PROC_ADDR(vkCreateInstance);
    GET_PROC_ADDR(vkDestroyInstance);
    GET_PROC_ADDR(vkCreateDevice);
-   GET_PROC_ADDR(vkDestroyDevice);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceSupportKHR);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
