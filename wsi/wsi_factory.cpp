@@ -154,6 +154,11 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
 
       util::extension_list extensions_required_by_layer{allocator};
       surface_properties *props = get_surface_properties(wsi_ext.platform);
+      if (props == nullptr)
+      {
+         return VK_ERROR_INITIALIZATION_FAILED;
+      }
+
       res = props->get_required_device_extensions(extensions_required_by_layer);
       if (res != VK_SUCCESS)
       {
@@ -197,7 +202,13 @@ PFN_vkVoidFunction get_proc_addr(const char *name)
     */
    for (const auto &wsi_ext : supported_wsi_extensions)
    {
-      PFN_vkVoidFunction func = get_surface_properties(wsi_ext.platform)->get_proc_addr(name);
+      surface_properties *props = get_surface_properties(wsi_ext.platform);
+      if (props == nullptr)
+      {
+         return nullptr;
+      }
+
+      PFN_vkVoidFunction func = props->get_proc_addr(name);
       if (func)
       {
          return func;

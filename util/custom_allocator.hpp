@@ -316,7 +316,7 @@ public:
          base::push_back(std::forward<arg_types>(args)...);
          return true;
       }
-      catch (const std::bad_alloc &e)
+      catch (const std::bad_alloc &)
       {
          return false;
       }
@@ -348,7 +348,7 @@ public:
          base::resize(std::forward<arg_types>(args)...);
          return true;
       }
-      catch (const std::bad_alloc &e)
+      catch (const std::bad_alloc &)
       {
          return false;
       }

@@ -48,6 +48,11 @@ VkResult extension_list::add(const char *const *extensions, uint32_t count)
    {
       auto &dst = m_ext_props[initial_size + i];
       strncpy(dst.extensionName, extensions[i], sizeof(dst.extensionName));
+
+      if (strlen(extensions[i]) >= sizeof(dst.extensionName))
+      {
+         dst.extensionName[sizeof(dst.extensionName) - 1] = '\0';
+      }
    }
    return VK_SUCCESS;
 }
