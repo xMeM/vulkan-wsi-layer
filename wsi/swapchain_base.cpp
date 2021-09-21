@@ -83,18 +83,6 @@ void swapchain_base::page_flip_thread()
          continue;
       }
 
-      std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
-
-      /* If the descendant has started presenting the queue_present operation has marked the image
-       * as FREE so we simply release it and continue. */
-      if (sc_images[*pending_index].status == swapchain_image::FREE)
-      {
-         destroy_image(sc_images[*pending_index]);
-         m_free_image_semaphore.post();
-         continue;
-      }
-      image_status_lock.unlock();
-
       /* First present of the swapchain. If it has an ancestor, wait until all the pending buffers
        * from the ancestor have finished page flipping before we set mode. */
       if (m_first_present)
@@ -143,6 +131,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_ancestor(VK_NULL_HANDLE)
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
+   , m_image_acquire_lock()
 {
 }
 
@@ -352,6 +341,8 @@ void swapchain_base::teardown()
 
 VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t *image_index)
 {
+   std::unique_lock<std::mutex> acquire_lock(m_image_acquire_lock);
+
    VkResult retval = wait_for_free_buffer(timeout);
    if (retval != VK_SUCCESS)
    {
@@ -443,7 +434,6 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
 {
    VkResult result;
    bool descendent_started_presenting = false;
-   const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
 
    if (m_descendant != VK_NULL_HANDLE)
    {
@@ -466,14 +456,12 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
       return result;
    }
 
-   /* If the descendant has started presenting, we should release the image
-    * however we do not want to block inside the main thread so we mark it
-    * as free and let the page flip thread take care of it. */
+   const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
+   /* If the descendant has started presenting, we should release the image. */
    if (descendent_started_presenting)
    {
       m_swapchain_images[image_index].status = swapchain_image::FREE;
-      m_pending_buffer_pool.push_back(image_index);
-      m_page_flip_semaphore.post();
+      m_free_image_semaphore.post();
       return VK_ERROR_OUT_OF_DATE_KHR;
    }
 
@@ -499,20 +487,23 @@ void swapchain_base::deprecate(VkSwapchainKHR descendant)
 
 void swapchain_base::wait_for_pending_buffers()
 {
+   std::unique_lock<std::mutex> acquire_lock(m_image_acquire_lock);
    int wait;
-   int pending_images = 0;
-
+   int acquired_images = 0;
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
 
    for (auto& img : m_swapchain_images)
    {
-      if (img.status == swapchain_image::PENDING)
+      if (img.status == swapchain_image::ACQUIRED)
       {
-         ++pending_images;
+         acquired_images++;
       }
    }
 
-   wait = pending_images;
+   /* Waiting for free images waits for both free and pending. One pending image may be presented and acquired by a
+    * compositor. The WSI backend may not necessarily know which pending image is presented to change its state. It may
+    * be impossible to wait for that one presented image. */
+   wait = m_swapchain_images.size() - acquired_images - 1;
    image_status_lock.unlock();
 
    while (wait > 0)

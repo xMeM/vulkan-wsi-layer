@@ -408,6 +408,7 @@ protected:
    virtual VkResult image_wait_present(swapchain_image &image, uint64_t timeout) = 0;
 
 private:
+   std::mutex m_image_acquire_lock;
    /**
     * @brief Wait for a buffer to become free.
     */
