@@ -200,13 +200,6 @@ protected:
    bool m_page_flip_thread_run;
 
    /**
-    * @brief In case we encounter threading or drm errors we need a way to
-    * notify the user of the failure. When this flag is false, acquire_next_image
-    * will return an error code.
-    */
-   bool m_is_valid;
-
-   /**
     * @brief A semaphore to be signalled once a page flip event occurs.
     */
    util::timed_semaphore m_page_flip_semaphore;
@@ -431,8 +424,43 @@ protected:
     */
    virtual VkResult image_wait_present(swapchain_image &image, uint64_t timeout) = 0;
 
+   /**
+    * @brief Returns true if an error has occurred.
+    */
+   bool error_has_occured() const
+   {
+      return m_error_state != VK_SUCCESS;
+   }
+
+   VkResult get_error_state() const
+   {
+      return m_error_state;
+   }
+
+   /*
+    * @brief Set the error state.
+    *
+    * The error state should be set when a failure that should be communicated
+    * to the application occurs during the page flipping thread.
+    *
+    * @param state Error code to be returned from acquire_next_image.
+    */
+   void set_error_state(VkResult state)
+   {
+      m_error_state = state;
+   }
+
 private:
    std::mutex m_image_acquire_lock;
+   /**
+    * @brief In case we encounter threading or drm errors we need a way to
+    * notify the user of the failure. While no error has occurred its value
+    * is VK_SUCCESS. When an error occurs, its value is set to the
+    * appropriate error code and it is returned to the user through the next
+    * acquire_next_image call.
+    */
+   VkResult m_error_state;
+
    /**
     * @brief Wait for a buffer to become free.
     */

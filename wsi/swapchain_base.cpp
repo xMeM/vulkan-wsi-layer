@@ -80,7 +80,16 @@ void swapchain_base::page_flip_thread()
       vk_res = image_wait_present(sc_images[*pending_index], timeout);
       if (vk_res != VK_SUCCESS)
       {
-         m_is_valid = false;
+         /*
+          * Setting the error state to VK_TIMEOUT would communicate the wrong error
+          * state to the application through acquire_next_image. For this reason we
+          * convert it to VK_ERROR_DEVICE_LOST.
+          */
+         if (vk_res == VK_TIMEOUT)
+         {
+            vk_res = VK_ERROR_DEVICE_LOST;
+         }
+         set_error_state(vk_res);
          m_free_image_semaphore.post();
          continue;
       }
@@ -171,7 +180,6 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
 swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *callbacks)
    : m_device_data(dev_data)
    , m_page_flip_thread_run(false)
-   , m_is_valid(false)
    , m_start_present_semaphore()
    , m_thread_sem_defined(false)
    , m_first_present(true)
@@ -185,6 +193,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
    , m_image_acquire_lock()
+   , m_error_state(VK_NOT_READY)
 {
 }
 
@@ -295,7 +304,7 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       ancestor->deprecate(reinterpret_cast<VkSwapchainKHR>(this));
    }
 
-   m_is_valid = true;
+   set_error_state(VK_SUCCESS);
 
    return VK_SUCCESS;
 }
@@ -315,7 +324,7 @@ void swapchain_base::teardown()
       auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
       sem_wait(&desc->m_start_present_semaphore);
    }
-   else if (m_is_valid)
+   else if (!error_has_occured())
    {
       /* If descendant hasn't started presenting, there are pending buffers in the swapchain. */
       wait_for_pending_buffers();
@@ -380,9 +389,9 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
       return retval;
    }
 
-   if (!m_is_valid)
+   if (error_has_occured())
    {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return get_error_state();
    }
 
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);

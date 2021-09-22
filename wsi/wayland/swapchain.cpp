@@ -601,7 +601,7 @@ void swapchain::present_image(uint32_t pendingIndex)
    /* if a frame is already pending, wait for a hint to present again */
    if (!m_wsi_surface->wait_next_frame_event())
    {
-      m_is_valid = false;
+      set_error_state(VK_ERROR_SURFACE_LOST_KHR);
    }
 
    wl_surface_attach(m_surface, image_data->buffer, 0, 0);
@@ -610,7 +610,7 @@ void swapchain::present_image(uint32_t pendingIndex)
    if (!present_sync_fd.has_value())
    {
       WSI_LOG_ERROR("Failed to export present fence.");
-      m_is_valid = false;
+      set_error_state(VK_ERROR_SURFACE_LOST_KHR);
    }
    else if (present_sync_fd->is_valid())
    {
@@ -625,7 +625,7 @@ void swapchain::present_image(uint32_t pendingIndex)
    {
       if (!m_wsi_surface->set_frame_callback())
       {
-         m_is_valid = false;
+         set_error_state(VK_ERROR_SURFACE_LOST_KHR);
       }
    }
 
@@ -635,7 +635,7 @@ void swapchain::present_image(uint32_t pendingIndex)
    {
       WSI_LOG_ERROR("error flushing the display");
       /* Setting the swapchain as invalid */
-      m_is_valid = false;
+      set_error_state(VK_ERROR_SURFACE_LOST_KHR);
    }
 }
 
