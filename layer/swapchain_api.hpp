@@ -62,4 +62,10 @@ extern "C"
 
    VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
                                                         uint32_t *pImageIndex);
+
+   VKAPI_ATTR VkResult wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
+                                               const VkAllocationCallbacks *pAllocator, VkImage *pImage);
+
+   VKAPI_ATTR VkResult wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
+                                                       const VkBindImageMemoryInfo *pBindInfos);
 }

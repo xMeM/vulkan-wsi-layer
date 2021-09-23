@@ -34,6 +34,7 @@ extern "C" {
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include "util/wsialloc/wsialloc.h"
+#include "util/custom_allocator.hpp"
 #include "wl_object_owner.hpp"
 #include "surface.hpp"
 
@@ -41,6 +42,26 @@ namespace wsi
 {
 namespace wayland
 {
+
+struct image_creation_parameters
+{
+   VkImageCreateInfo m_image_create_info;
+   wsialloc_format m_allocated_format;
+   util::vector<VkSubresourceLayout> m_image_layout;
+   VkExternalMemoryImageCreateInfoKHR m_external_info;
+   VkImageDrmFormatModifierExplicitCreateInfoEXT m_drm_mod_info;
+
+   image_creation_parameters(VkImageCreateInfo image_create_info, wsialloc_format allocated_format,
+                             util::allocator allocator, VkExternalMemoryImageCreateInfoKHR external_info,
+                             VkImageDrmFormatModifierExplicitCreateInfoEXT drm_mod_info)
+      : m_image_create_info(image_create_info)
+      , m_allocated_format(allocated_format)
+      , m_image_layout(allocator)
+      , m_external_info(external_info)
+      , m_drm_mod_info(drm_mod_info)
+   {
+   }
+};
 
 class swapchain : public wsi::swapchain_base
 {
@@ -60,17 +81,32 @@ protected:
    VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo) override;
 
    /**
-    * @brief Creates a new swapchain image.
+    * @brief Creates a VkImage handle.
+    *
+    * The image_create_info argument is ignored in favour of m_image_create_info. This is because in
+    * order to guarantee a VkImage can be bound to any swapchain index, all swapchain images must
+    * be created with the same creation parameters.
+    *
+    * @param      image_create_info Data to be used to create the image.
+    * @param[out] image             Handle to the image.
+    *
+    * @return If image creation is successful returns VK_SUCCESS, otherwise
+    * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_OUT_OF_HOST_MEMORY
+    * depending on the error that occured.
+    */
+   VkResult create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image) override;
+
+   /**
+    * @brief Creates and binds a new swapchain image.
     *
     * @param image_create_info Data to be used to create the image.
-    *
-    * @param image Handle to the image.
+    * @param image             Handle to the image.
     *
     * @return If image creation is successful returns VK_SUCCESS, otherwise
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
     * depending on the error that occurred.
     */
-   VkResult create_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
+   VkResult create_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
 
    /**
     * @brief Method to present an image
@@ -109,10 +145,27 @@ protected:
 
    VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
 
+   /**
+    * @brief Bind image to a swapchain
+    *
+    * @param device              is the logical device that owns the images and memory.
+    * @param bind_image_mem_info details the image we want to bind.
+    * @param bind_sc_info        describes the swapchain memory to bind to.
+    *
+    * @return VK_SUCCESS on success, otherwise on failure VK_ERROR_OUT_OF_HOST_MEMORY or VK_ERROR_OUT_OF_DEVICE_MEMORY
+    * can be returned.
+    */
+   VkResult bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
+                                 const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
+
 private:
    struct wayland_image_data;
 
    VkResult allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image);
+   VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
+                              util::vector<wsialloc_format> importable_formats, wsialloc_format *allocated_format);
+   VkResult internal_bind_swapchain_image(VkDevice &device, wayland_image_data *swapchain_image,
+                                          const VkImage &image);
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;
@@ -129,6 +182,11 @@ private:
     * @brief Handle to the WSI allocator.
     */
    wsialloc_allocator *m_wsi_allocator;
+
+   /**
+    * @brief Image creation parameters used for all swapchain images.
+    */
+   struct image_creation_parameters m_image_creation_parameters;
 
    /**
     * @brief true when waiting for the server hint to present a buffer

@@ -62,17 +62,28 @@ protected:
    };
 
    /**
-    * @brief Creates a new swapchain image.
+    * @brief Creates a VkImage handle.
+    *
+    * @param      image_create_info Data to be used to create the image.
+    * @param[out] image             Handle to the image.
+    *
+    * @return If image creation is successful returns VK_SUCCESS, otherwise
+    * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_OUT_OF_HOST_MEMORY
+    * depending on the error that occured.
+    */
+   VkResult create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image) override;
+
+   /**
+    * @brief Creates and binds a new swapchain image.
     *
     * @param image_create_info Data to be used to create the image.
-    *
-    * @param image Handle to the image.
+    * @param image             Handle to the image.
     *
     * @return If image creation is successful returns VK_SUCCESS, otherwise
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
     * depending on the error that occured.
     */
-   VkResult create_image(VkImageCreateInfo image_create_info, wsi::swapchain_image &image);
+   VkResult create_and_bind_swapchain_image(VkImageCreateInfo image_create_info, wsi::swapchain_image &image) override;
 
    /**
     * @brief Method to perform a present - just calls unpresent_image on headless
@@ -93,6 +104,19 @@ protected:
                                       uint32_t sem_count) override;
 
    VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
+
+   /**
+    * @brief Bind image to a swapchain
+    *
+    * @param device              is the logical device that owns the images and memory.
+    * @param bind_image_mem_info details the image we want to bind.
+    * @param bind_sc_info        describes the swapchain memory to bind to.
+    *
+    * @return VK_SUCCESS on success, otherwise on failure VK_ERROR_OUT_OF_HOST_MEMORY or VK_ERROR_OUT_OF_DEVICE_MEMORY
+    * can be returned.
+    */
+   VkResult bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
+                                 const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
 };
 
 } /* namespace headless */

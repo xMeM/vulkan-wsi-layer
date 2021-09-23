@@ -36,6 +36,7 @@
 
 #include "private_data.hpp"
 #include "swapchain_api.hpp"
+#include <util/helpers.hpp>
 
 extern "C" {
 
@@ -260,6 +261,56 @@ VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAc
    wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(pAcquireInfo->swapchain);
 
    return sc->acquire_next_image(pAcquireInfo->timeout, pAcquireInfo->semaphore, pAcquireInfo->fence, pImageIndex);
+}
+
+VKAPI_ATTR VkResult wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
+                                            const VkAllocationCallbacks *pAllocator, VkImage *pImage)
+{
+   auto &device_data = layer::device_private_data::get(device);
+
+   const VkImageSwapchainCreateInfoKHR *image_sc_create_info =
+      util::find_extension<VkImageSwapchainCreateInfoKHR>(VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR,
+         pCreateInfo->pNext);
+
+   if (image_sc_create_info == nullptr || !device_data.layer_owns_swapchain(image_sc_create_info->swapchain))
+   {
+      return device_data.disp.CreateImage(device_data.device, pCreateInfo, pAllocator, pImage);
+   }
+
+   auto sc = reinterpret_cast<wsi::swapchain_base *>(image_sc_create_info->swapchain);
+   return sc->create_aliased_image_handle(pCreateInfo, pImage);
+}
+
+VKAPI_ATTR VkResult wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
+                                                    const VkBindImageMemoryInfo *pBindInfos)
+{
+   auto &device_data = layer::device_private_data::get(device);
+
+   for (uint32_t i = 0; i < bindInfoCount; i++)
+   {
+      const VkBindImageMemorySwapchainInfoKHR *bind_sc_info = util::find_extension<VkBindImageMemorySwapchainInfoKHR>(
+         VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR, pBindInfos[i].pNext);
+
+      if (bind_sc_info == nullptr || bind_sc_info->swapchain == VK_NULL_HANDLE ||
+          !device_data.layer_owns_swapchain(bind_sc_info->swapchain))
+      {
+         VkResult result = device_data.disp.BindImageMemory2KHR(device, 1, &pBindInfos[i]);
+         if (result != VK_SUCCESS)
+         {
+            return result;
+         }
+      }
+      else
+      {
+         auto sc = reinterpret_cast<wsi::swapchain_base *>(bind_sc_info->swapchain);
+         VkResult result = sc->bind_swapchain_image(device, &pBindInfos[i], bind_sc_info);
+         if (result != VK_SUCCESS)
+         {
+            return result;
+         }
+      }
+   }
+   return VK_SUCCESS;
 }
 
 } /* extern "C" */

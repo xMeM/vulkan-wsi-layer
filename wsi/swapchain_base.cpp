@@ -217,7 +217,7 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
 
    for (auto& img : m_swapchain_images)
    {
-      result = create_image(image_create_info, img);
+      result = create_and_bind_swapchain_image(image_create_info, img);
       if (result != VK_SUCCESS)
       {
          return result;

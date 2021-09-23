@@ -58,12 +58,17 @@ swapchain::~swapchain()
    teardown();
 }
 
-VkResult swapchain::create_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
+VkResult swapchain::create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image)
+{
+   return m_device_data.disp.CreateImage(m_device, image_create_info, get_allocation_callbacks(), image);
+}
+
+VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
 {
    VkResult res = VK_SUCCESS;
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
 
-   res = m_device_data.disp.CreateImage(m_device, &image_create, nullptr, &image.image);
+   res = m_device_data.disp.CreateImage(m_device, &image_create, get_allocation_callbacks(), &image.image);
    if (res != VK_SUCCESS)
    {
       return res;
@@ -100,7 +105,7 @@ VkResult swapchain::create_image(VkImageCreateInfo image_create, wsi::swapchain_
    image.data = reinterpret_cast<void *>(data);
    image.status = wsi::swapchain_image::FREE;
 
-   res = m_device_data.disp.AllocateMemory(m_device, &mem_info, nullptr, &data->memory);
+   res = m_device_data.disp.AllocateMemory(m_device, &mem_info, get_allocation_callbacks(), &data->memory);
    assert(VK_SUCCESS == res);
    if (res != VK_SUCCESS)
    {
@@ -154,7 +159,7 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
       auto *data = reinterpret_cast<image_data *>(image.data);
       if (data->memory != VK_NULL_HANDLE)
       {
-         m_device_data.disp.FreeMemory(m_device, data->memory, nullptr);
+         m_device_data.disp.FreeMemory(m_device, data->memory, get_allocation_callbacks());
          data->memory = VK_NULL_HANDLE;
       }
       m_allocator.destroy(1, data);
@@ -174,6 +179,17 @@ VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)
 {
    auto data = reinterpret_cast<image_data *>(image.data);
    return data->present_fence.wait_payload(timeout);
+}
+
+VkResult swapchain::bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
+                                         const VkBindImageMemorySwapchainInfoKHR *bind_sc_info)
+{
+   auto &device_data = layer::device_private_data::get(device);
+
+   const wsi::swapchain_image &swapchain_image = m_swapchain_images[bind_sc_info->imageIndex];
+   VkDeviceMemory memory = reinterpret_cast<image_data *>(swapchain_image.data)->memory;
+
+   return device_data.disp.BindImageMemory(device, bind_image_mem_info->image, memory, 0);
 }
 
 } /* namespace headless */
