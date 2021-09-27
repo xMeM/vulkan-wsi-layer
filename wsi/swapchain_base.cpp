@@ -125,10 +125,6 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
 
    m_swapchain_images[presented_index].status = swapchain_image::FREE;
 
-   if (m_descendant != VK_NULL_HANDLE)
-   {
-      destroy_image(m_swapchain_images[presented_index]);
-   }
    image_status_lock.unlock();
    m_free_image_semaphore.post();
 }
