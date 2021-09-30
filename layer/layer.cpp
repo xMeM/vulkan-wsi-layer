@@ -36,62 +36,10 @@
 #include "wsi/wsi_factory.hpp"
 #include "util/log.hpp"
 
-#define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION)
+#define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
 
 namespace layer
 {
-
-static const VkLayerProperties global_layer = {
-   "VK_LAYER_window_system_integration", VK_LAYER_API_VERSION, 1, "Window system integration layer",
-};
-static const VkExtensionProperties device_extension[] = { { VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                                            VK_KHR_SWAPCHAIN_SPEC_VERSION } };
-static const VkExtensionProperties instance_extension[] = { { VK_KHR_SURFACE_EXTENSION_NAME,
-                                                              VK_KHR_SURFACE_SPEC_VERSION } };
-
-VKAPI_ATTR VkResult extension_properties(const uint32_t count, const VkExtensionProperties *layer_ext, uint32_t *pCount,
-                                         VkExtensionProperties *pProp)
-{
-   uint32_t size;
-
-   if (pProp == NULL || layer_ext == NULL)
-   {
-      *pCount = count;
-      return VK_SUCCESS;
-   }
-
-   size = *pCount < count ? *pCount : count;
-   memcpy(pProp, layer_ext, size * sizeof(*pProp));
-   *pCount = size;
-   if (size < count)
-   {
-      return VK_INCOMPLETE;
-   }
-
-   return VK_SUCCESS;
-}
-
-VKAPI_ATTR VkResult layer_properties(const uint32_t count, const VkLayerProperties *layer_prop, uint32_t *pCount,
-                                     VkLayerProperties *pProp)
-{
-   uint32_t size;
-
-   if (pProp == NULL || layer_prop == NULL)
-   {
-      *pCount = count;
-      return VK_SUCCESS;
-   }
-
-   size = *pCount < count ? *pCount : count;
-   memcpy(pProp, layer_prop, size * sizeof(*pProp));
-   *pCount = size;
-   if (size < count)
-   {
-      return VK_INCOMPLETE;
-   }
-
-   return VK_SUCCESS;
-}
 
 VKAPI_ATTR VkLayerInstanceCreateInfo *get_chain_info(const VkInstanceCreateInfo *pCreateInfo, VkLayerFunction func)
 {
@@ -395,34 +343,6 @@ vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct
    return VK_SUCCESS;
 }
 
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkEnumerateDeviceExtensionProperties(
-   VkPhysicalDevice physicalDevice, const char *pLayerName, uint32_t *pCount, VkExtensionProperties *pProperties)
-{
-   if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
-      return layer::extension_properties(1, layer::device_extension, pCount, pProperties);
-
-   assert(physicalDevice);
-   return layer::instance_private_data::get(physicalDevice)
-      .disp.EnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pCount, pProperties);
-}
-
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkEnumerateInstanceExtensionProperties(
-   const VkEnumerateInstanceExtensionPropertiesChain *chain, const char *pLayerName,
-   uint32_t *pCount, VkExtensionProperties *pProperties)
-{
-   if (pLayerName && !strcmp(pLayerName, layer::global_layer.layerName))
-      return layer::extension_properties(1, layer::instance_extension, pCount, pProperties);
-
-   assert(chain);
-   return chain->CallDown(pLayerName, pCount, pProperties);
-}
-
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-wsi_layer_vkEnumerateInstanceLayerProperties(uint32_t *pCount, VkLayerProperties *pProperties)
-{
-   return layer::layer_properties(1, &layer::global_layer, pCount, pProperties);
-}
-
 #define GET_PROC_ADDR(func)      \
    if (!strcmp(funcName, #func)) \
       return (PFN_vkVoidFunction)&wsi_layer_##func;
@@ -464,8 +384,6 @@ VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstance
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
    GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
    GET_PROC_ADDR(vkDestroySurfaceKHR);
-   GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
-   GET_PROC_ADDR(vkEnumerateInstanceLayerProperties);
 
    GET_PROC_ADDR(vkGetPhysicalDevicePresentRectanglesKHR);
 
