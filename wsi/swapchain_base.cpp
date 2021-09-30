@@ -71,8 +71,10 @@ void swapchain_base::page_flip_thread()
 
       /* We want to present the oldest queued for present image from our present queue,
        * which we can find at the sc->pending_buffer_pool.head index. */
+      std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
       auto pending_index = m_pending_buffer_pool.pop_front();
       assert(pending_index.has_value());
+      image_status_lock.unlock();
 
       /* We may need to wait for the payload of the present sync of the oldest pending image to be finished. */
       vk_res = image_wait_present(sc_images[*pending_index], timeout);
@@ -466,7 +468,9 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    }
 
    m_swapchain_images[image_index].status = swapchain_image::PENDING;
-   m_pending_buffer_pool.push_back(image_index);
+   bool buffer_pool_res = m_pending_buffer_pool.push_back(image_index);
+   (void)buffer_pool_res;
+   assert(buffer_pool_res);
    m_page_flip_semaphore.post();
    return VK_SUCCESS;
 }
