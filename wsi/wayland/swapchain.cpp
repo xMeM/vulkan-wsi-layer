@@ -90,7 +90,10 @@ swapchain::~swapchain()
 {
    teardown();
 
-   wsialloc_delete(m_wsi_allocator);
+   if (m_wsi_allocator != nullptr)
+   {
+      wsialloc_delete(m_wsi_allocator);
+   }
    m_wsi_allocator = nullptr;
    if (m_swapchain_queue != nullptr)
    {
@@ -146,9 +149,16 @@ extern "C" void create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *
 {
    auto wayland_buffer = reinterpret_cast<wl_buffer **>(data);
    *wayland_buffer = buffer;
+
+   zwp_linux_buffer_params_v1_destroy(params);
 }
 
-static const struct zwp_linux_buffer_params_v1_listener params_listener = { create_succeeded, NULL };
+extern "C" void create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
+{
+   zwp_linux_buffer_params_v1_destroy(params);
+}
+
+static const struct zwp_linux_buffer_params_v1_listener params_listener = { create_succeeded, create_failed };
 
 extern "C" void buffer_release(void *data, struct wl_buffer *wayl_buffer)
 {
@@ -615,7 +625,7 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
 
    /* should now have a wl_buffer */
    assert(image_data->buffer);
-   zwp_linux_buffer_params_v1_destroy(params);
+
    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(image_data->buffer), m_buffer_queue);
    res = wl_buffer_add_listener(image_data->buffer, &buffer_listener, this);
    if (res < 0)
