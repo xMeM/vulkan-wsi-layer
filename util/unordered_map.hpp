@@ -131,4 +131,4 @@ public:
       }
    }
 };
-}
+} /* namespace util */

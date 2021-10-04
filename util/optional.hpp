@@ -194,4 +194,4 @@ inline optional<T> make_optional(Args &&...args)
 {
    return optional<T>{T(std::forward<Args>(args)...)};
 }
-}
+} /* namespace util */
