@@ -108,7 +108,7 @@ public:
    template <typename T, typename... Args>
    util::unique_ptr<T> make_unique(Args &&...args) const noexcept;
 
-   VkAllocationCallbacks m_callbacks;
+   VkAllocationCallbacks m_callbacks{};
    VkSystemAllocationScope m_scope;
 };
 

@@ -106,7 +106,7 @@ VkResult fence_sync::set_payload(VkQueue queue, const VkSemaphore *sem_payload, 
    VkPipelineStageFlags pipeline_stage_flags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
    VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, sem_count, sem_payload, &pipeline_stage_flags, 0, NULL, 0, NULL
+      VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, sem_count, sem_payload, &pipeline_stage_flags, 0, nullptr, 0, nullptr
    };
 
    result = dev->disp.QueueSubmit(queue, 1, &submit_info, fence);

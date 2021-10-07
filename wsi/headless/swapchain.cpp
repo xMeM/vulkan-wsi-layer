@@ -43,7 +43,7 @@ namespace headless
 struct image_data
 {
    /* Device memory backing the image. */
-   VkDeviceMemory memory;
+   VkDeviceMemory memory{};
    fence_sync present_fence;
 };
 

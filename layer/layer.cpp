@@ -44,26 +44,26 @@ namespace layer
 
 VKAPI_ATTR VkLayerInstanceCreateInfo *get_chain_info(const VkInstanceCreateInfo *pCreateInfo, VkLayerFunction func)
 {
-   VkLayerInstanceCreateInfo *chain_info = (VkLayerInstanceCreateInfo *)pCreateInfo->pNext;
+   auto *chain_info = reinterpret_cast<const VkLayerInstanceCreateInfo *>(pCreateInfo->pNext);
    while (chain_info &&
           !(chain_info->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO && chain_info->function == func))
    {
-      chain_info = (VkLayerInstanceCreateInfo *)chain_info->pNext;
+      chain_info = reinterpret_cast<const VkLayerInstanceCreateInfo *>(chain_info->pNext);
    }
 
-   return chain_info;
+   return const_cast<VkLayerInstanceCreateInfo *>(chain_info);
 }
 
 VKAPI_ATTR VkLayerDeviceCreateInfo *get_chain_info(const VkDeviceCreateInfo *pCreateInfo, VkLayerFunction func)
 {
-   VkLayerDeviceCreateInfo *chain_info = (VkLayerDeviceCreateInfo *)pCreateInfo->pNext;
+   auto *chain_info = reinterpret_cast<const VkLayerDeviceCreateInfo *>(pCreateInfo->pNext);
    while (chain_info &&
           !(chain_info->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO && chain_info->function == func))
    {
-      chain_info = (VkLayerDeviceCreateInfo *)chain_info->pNext;
+      chain_info = reinterpret_cast<const VkLayerDeviceCreateInfo *>(chain_info->pNext);
    }
 
-   return chain_info;
+   return const_cast<VkLayerDeviceCreateInfo *>(chain_info);
 }
 
 template <typename T>
