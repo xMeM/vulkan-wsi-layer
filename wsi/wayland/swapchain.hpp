@@ -78,7 +78,8 @@ protected:
    /**
     * @brief Initialize platform specifics.
     */
-   VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo) override;
+   VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
+                          bool &use_presentation_thread) override;
 
    /**
     * @brief Creates a VkImage handle.

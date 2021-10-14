@@ -315,8 +315,16 @@ protected:
 
    /**
     * @brief Platform specific initialization
+    *
+    * @param      device                  VkDevice object.
+    * @param      swapchain_create_info   Pointer to the swapchain create info struct.
+    * @param[out] use_presentation_thread Flag indicating if image presentation
+    *                                     must happen in a separate thread.
+    *
+    * @return VK_SUCCESS on success or an error code otherwise.
     */
-   virtual VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info) = 0;
+   virtual VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
+                                  bool &use_presentation_thread) = 0;
 
    /**
     * @brief Base swapchain teardown.
@@ -449,6 +457,41 @@ private:
     * semaphore of the swapchain will be posted.
     **/
    void page_flip_thread();
+
+   /**
+    * @brief Call the swapchain implementation specific present_image function.
+    *
+    * In addition to calling the present_image function it also handles the
+    * communication with the ancestor before the first presentation.
+    *
+    * @param image_index Index of the image to be presented.
+    */
+   void call_present(uint32_t image_index);
+
+   /**
+    * @brief Return true if the descendant has an image with PENDING or PRESENTED status.
+    */
+   bool has_descendant_started_presenting();
+
+   /**
+    * @brief Initialize the page flipping thread.
+    *
+    * @return VK_SUCCESS if the initialization was successful or an error code otherwise.
+    */
+   VkResult init_page_flip_thread();
+
+   /**
+    * @brief Notify the presentation engine with the next image to be presented.
+    *
+    * Appends the next image to the ring buffer and notifies the page flipping
+    * thread if it is enabled or directly calls the WSI backend implementation to
+    * present the image.
+    *
+    * @param image_index                   Index of the image to be presented.
+    *
+    * @return VK_SUCCESS on success or an error code otherwise.
+    */
+   VkResult notify_presentation_engine(uint32_t image_index);
 };
 
 } /* namespace wsi */

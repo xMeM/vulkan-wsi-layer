@@ -102,7 +102,8 @@ swapchain::~swapchain()
    }
 }
 
-VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo)
+VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
+                                  bool &use_presentation_thread)
 {
    if ((m_display == nullptr) || (m_surface == nullptr) || (m_wsi_surface->get_dmabuf_interface() == nullptr))
    {
@@ -128,6 +129,16 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    {
       WSI_LOG_ERROR("Failed to create wsi allocator.");
       return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   /*
+    * When VK_PRESENT_MODE_MAILBOX_KHR has been chosen by the application we don't
+    * initialize the page flip thread so the present_image function can be called
+    * during vkQueuePresent.
+    */
+   if (m_present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
+   {
+      use_presentation_thread = false;
    }
 
    return VK_SUCCESS;

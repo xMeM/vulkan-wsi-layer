@@ -56,7 +56,8 @@ protected:
    /**
     * @brief Platform specific init
     */
-   VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo)
+   VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
+                          bool &use_presentation_thread) override
    {
       return VK_SUCCESS;
    };

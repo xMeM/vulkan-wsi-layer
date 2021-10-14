@@ -85,28 +85,77 @@ void swapchain_base::page_flip_thread()
          continue;
       }
 
-      /* First present of the swapchain. If it has an ancestor, wait until all the pending buffers
-       * from the ancestor have finished page flipping before we set mode. */
-      if (m_first_present)
+      call_present(*pending_index);
+   }
+}
+
+void swapchain_base::call_present(uint32_t image_index)
+{
+   /* First present of the swapchain. If it has an ancestor, wait until all the
+    * pending buffers from the ancestor have been presented. */
+   if (m_first_present)
+   {
+      if (m_ancestor != VK_NULL_HANDLE)
       {
-         if (m_ancestor != VK_NULL_HANDLE)
-         {
-            auto *ancestor = reinterpret_cast<swapchain_base *>(m_ancestor);
-            ancestor->wait_for_pending_buffers();
-         }
-
-         sem_post(&m_start_present_semaphore);
-
-         present_image(*pending_index);
-
-         m_first_present = false;
+         auto *ancestor = reinterpret_cast<swapchain_base *>(m_ancestor);
+         ancestor->wait_for_pending_buffers();
       }
-      /* The swapchain has already started presenting. */
-      else
+
+      sem_post(&m_start_present_semaphore);
+
+      present_image(image_index);
+
+      m_first_present = false;
+   }
+   /* The swapchain has already started presenting. */
+   else
+   {
+      present_image(image_index);
+   }
+}
+
+bool swapchain_base::has_descendant_started_presenting()
+{
+   if (m_descendant == VK_NULL_HANDLE)
+   {
+      return false;
+   }
+
+   auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
+   for (auto &image : desc->m_swapchain_images)
+   {
+      if (image.status == swapchain_image::PRESENTED || image.status == swapchain_image::PENDING)
       {
-         present_image(*pending_index);
+         return true;
       }
    }
+
+   return false;
+}
+
+VkResult swapchain_base::init_page_flip_thread()
+{
+   /* Setup semaphore for signaling pageflip thread */
+   VkResult result = m_page_flip_semaphore.init(0);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   m_thread_sem_defined = true;
+
+   /* Launch page flipping thread */
+   m_page_flip_thread_run = true;
+   try
+   {
+      m_page_flip_thread = std::thread(&swapchain_base::page_flip_thread, this);
+   }
+   catch (const std::system_error &)
+   {
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   return VK_SUCCESS;
 }
 
 void swapchain_base::unpresent_image(uint32_t presented_index)
@@ -121,7 +170,7 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
 
 swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *callbacks)
    : m_device_data(dev_data)
-   , m_page_flip_thread_run(true)
+   , m_page_flip_thread_run(false)
    , m_thread_sem_defined(false)
    , m_first_present(true)
    , m_pending_buffer_pool{}
@@ -143,27 +192,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    assert(swapchain_create_info != nullptr);
    assert(swapchain_create_info->surface != VK_NULL_HANDLE);
 
-   int res;
-   VkResult result;
-
    m_device = device;
    m_surface = swapchain_create_info->surface;
-
-   /* Check presentMode has a compatible value with swapchain - everything else should be taken care at image creation.*/
-   static const std::array<VkPresentModeKHR, 2> present_modes = { VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR };
-   bool present_mode_found = false;
-   for (uint32_t i = 0; i < present_modes.size() && !present_mode_found; i++)
-   {
-      if (swapchain_create_info->presentMode == present_modes[i])
-      {
-         present_mode_found = true;
-      }
-   }
-
-   if (!present_mode_found)
-   {
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
 
    m_present_mode = swapchain_create_info->presentMode;
 
@@ -172,10 +202,20 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    /* We have allocated images, we can call the platform init function if something needs to be done. */
-   result = init_platform(device, swapchain_create_info);
+   bool use_presentation_thread = true;
+   VkResult result = init_platform(device, swapchain_create_info, use_presentation_thread);
    if (result != VK_SUCCESS)
    {
       return result;
+   }
+
+   if (use_presentation_thread)
+   {
+      result = init_page_flip_thread();
+      if (result != VK_SUCCESS)
+      {
+         return result;
+      }
    }
 
    VkImageCreateInfo image_create_info = {};
@@ -218,25 +258,13 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return result;
    }
 
-   /* Setup semaphore for signaling pageflip thread */
-   result = m_page_flip_semaphore.init(0);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
-   res = sem_init(&m_start_present_semaphore, 0, 0);
+   int res = sem_init(&m_start_present_semaphore, 0, 0);
    /* Only programming error can cause this to fail. */
    assert(res == 0);
    if (res != 0)
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
-
-   m_thread_sem_defined = true;
-
-   /* Launch page flipping thread */
-   m_page_flip_thread = std::thread(&swapchain_base::page_flip_thread, this);
 
    /* Release the swapchain images of the old swapchain in order
     * to free up memory for new swapchain. This is necessary especially
@@ -266,31 +294,17 @@ void swapchain_base::teardown()
     * immediately. For images in the PENDING state, we will block until the
     * presentation engine is finished with them. */
 
-   int res;
-   bool descendent_started_presenting = false;
-
-   if (m_descendant != VK_NULL_HANDLE)
+   if (has_descendant_started_presenting())
    {
+      /* Here we wait for the start_present_semaphore, once this semaphore is up,
+       * the descendant has finished waiting, we don't want to delete vkImages and vkFences
+       * and semaphores before the waiting is done. */
       auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
-      for (auto& img : desc->m_swapchain_images)
-      {
-         if (img.status == swapchain_image::PRESENTED ||
-             img.status == swapchain_image::PENDING)
-         {
-            /* Here we wait for the start_present_semaphore, once this semaphore is up,
-             * the descendant has finished waiting, we don't want to delete vkImages and vkFences
-             * and semaphores before the waiting is done. */
-            sem_wait(&desc->m_start_present_semaphore);
-
-            descendent_started_presenting = true;
-            break;
-         }
-      }
+      sem_wait(&desc->m_start_present_semaphore);
    }
-
-   /* If descendant started presenting, there is no pending buffer in the swapchain. */
-   if (m_is_valid && descendent_started_presenting == false)
+   else if (m_is_valid)
    {
+      /* If descendant hasn't started presenting, there are pending buffers in the swapchain. */
       wait_for_pending_buffers();
    }
 
@@ -314,12 +328,12 @@ void swapchain_base::teardown()
       {
          WSI_LOG_ERROR("m_page_flip_thread is not joinable");
       }
+   }
 
-      res = sem_destroy(&m_start_present_semaphore);
-      if (res != 0)
-      {
-         WSI_LOG_ERROR("sem_destroy failed for start_present_semaphore with %d", errno);
-      }
+   int res = sem_destroy(&m_start_present_semaphore);
+   if (res != 0)
+   {
+      WSI_LOG_ERROR("sem_destroy failed for start_present_semaphore with %d", errno);
    }
 
    if (m_descendant != VK_NULL_HANDLE)
@@ -432,35 +446,15 @@ VkResult swapchain_base::get_swapchain_images(uint32_t *swapchain_image_count, V
    }
 }
 
-VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, uint32_t image_index)
+VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
 {
-   VkResult result;
-   bool descendent_started_presenting = false;
-
-   if (m_descendant != VK_NULL_HANDLE)
-   {
-      auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
-      for (auto& img : desc->m_swapchain_images)
-      {
-         if (img.status == swapchain_image::PRESENTED ||
-             img.status == swapchain_image::PENDING)
-         {
-            descendent_started_presenting = true;
-            break;
-         }
-      }
-   }
-
-   result = image_set_present_payload(m_swapchain_images[image_index], queue, present_info->pWaitSemaphores,
-                                      present_info->waitSemaphoreCount);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
-   /* If the descendant has started presenting, we should release the image. */
-   if (descendent_started_presenting)
+
+   /* If the descendant has started presenting, we should release the image
+    * however we do not want to block inside the main thread so we mark it
+    * as free and let the page flip thread take care of it. */
+   const bool descendant_started_presenting = has_descendant_started_presenting();
+   if (descendant_started_presenting)
    {
       m_swapchain_images[image_index].status = swapchain_image::FREE;
       m_free_image_semaphore.post();
@@ -468,10 +462,38 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    }
 
    m_swapchain_images[image_index].status = swapchain_image::PENDING;
-   bool buffer_pool_res = m_pending_buffer_pool.push_back(image_index);
-   (void)buffer_pool_res;
-   assert(buffer_pool_res);
-   m_page_flip_semaphore.post();
+
+   if (m_page_flip_thread_run)
+   {
+      bool buffer_pool_res = m_pending_buffer_pool.push_back(image_index);
+      (void)buffer_pool_res;
+      assert(buffer_pool_res);
+      m_page_flip_semaphore.post();
+   }
+   else
+   {
+      call_present(image_index);
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index)
+{
+
+   VkResult result = image_set_present_payload(m_swapchain_images[image_index], queue, present_info->pWaitSemaphores,
+                                               present_info->waitSemaphoreCount);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   result = notify_presentation_engine(image_index);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
    return VK_SUCCESS;
 }
 
