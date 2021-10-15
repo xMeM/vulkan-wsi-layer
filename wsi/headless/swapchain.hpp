@@ -59,6 +59,7 @@ protected:
    VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
                           bool &use_presentation_thread) override
    {
+      use_presentation_thread = true;
       return VK_SUCCESS;
    };
 
