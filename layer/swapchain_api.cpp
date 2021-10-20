@@ -127,6 +127,54 @@ VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchain
    return sc->acquire_next_image(timeout, semaphore, fence, pImageIndex);
 }
 
+static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &present_info,
+                                    layer::device_private_data &device_data)
+{
+   util::vector<VkSemaphore> swapchain_semaphores{ util::allocator(device_data.get_allocator(),
+                                                                   VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
+   if (!swapchain_semaphores.try_resize(present_info.swapchainCount))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   for (uint32_t i = 0; i < present_info.swapchainCount; ++i)
+   {
+      auto swapchain = reinterpret_cast<wsi::swapchain_base *>(present_info.pSwapchains[i]);
+      swapchain_semaphores[i] = swapchain->get_image_present_semaphore(present_info.pImageIndices[i]);
+   }
+
+   util::vector<VkPipelineStageFlags> pipeline_stage_flags{ util::allocator::get_generic() };
+   if (!pipeline_stage_flags.try_resize(present_info.waitSemaphoreCount))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   for (uint32_t i = 0; i < present_info.waitSemaphoreCount; ++i)
+   {
+      pipeline_stage_flags[i] = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+   }
+
+   VkSubmitInfo submit_info = {
+      VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      NULL,
+      present_info.waitSemaphoreCount,
+      present_info.pWaitSemaphores,
+      pipeline_stage_flags.data(),
+      0,
+      NULL,
+      static_cast<uint32_t>(swapchain_semaphores.size()),
+      swapchain_semaphores.data(),
+   };
+
+   VkResult result = device_data.disp.QueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   return VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
    assert(queue != VK_NULL_HANDLE);
@@ -139,6 +187,20 @@ VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentIn
       return device_data.disp.QueuePresentKHR(queue, pPresentInfo);
    }
 
+   /* Avoid allocating on the heap when there is only one swapchain. */
+   VkResult res = VK_SUCCESS;
+   const VkPresentInfoKHR *present_info = pPresentInfo;
+   if (pPresentInfo->swapchainCount > 1)
+   {
+      res = submit_wait_request(queue, *pPresentInfo, device_data);
+      if (res != VK_SUCCESS)
+      {
+         return res;
+      }
+
+      present_info = nullptr;
+   }
+
    VkResult ret = VK_SUCCESS;
    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; ++i)
    {
@@ -147,7 +209,7 @@ VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentIn
       wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
       assert(sc != nullptr);
 
-      VkResult res = sc->queue_present(queue, pPresentInfo, pPresentInfo->pImageIndices[i]);
+      res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i]);
 
       if (pPresentInfo->pResults != nullptr)
       {

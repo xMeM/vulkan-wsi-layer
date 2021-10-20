@@ -60,6 +60,7 @@ struct swapchain_image
 
    VkImage image{VK_NULL_HANDLE};
    status status{swapchain_image::INVALID};
+   VkSemaphore present_semaphore{ VK_NULL_HANDLE };
 };
 
 /**
@@ -124,7 +125,10 @@ public:
     *
     * @param queue The queue to which the submission will be made to.
     *
-    * @param pPresentInfo Information about the swapchain and image to be presented.
+    * @param present_info Information about the swapchain and image to be presented.
+    * If it is nullptr it means that the presentation request will wait on the
+    * image's \p present_semaphore and not the semaphores that come with
+    * \p present_info.
     *
     * @param imageIndex The index of the image to be presented.
     *
@@ -168,6 +172,18 @@ public:
     */
    virtual VkResult bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
                                          const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) = 0;
+
+   /**
+    * @brief Get image's present semaphore
+    *
+    * @param image_index Image's index
+    *
+    * @return the image's present_semaphore
+    */
+   VkSemaphore get_image_present_semaphore(uint32_t image_index)
+   {
+      return m_swapchain_images[image_index].present_semaphore;
+   }
 
 protected:
 

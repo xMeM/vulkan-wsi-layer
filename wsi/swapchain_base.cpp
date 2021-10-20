@@ -199,7 +199,9 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
 
    /* Init image to invalid values. */
    if (!m_swapchain_images.try_resize(swapchain_create_info->minImageCount))
+   {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
 
    /* We have allocated images, we can call the platform init function if something needs to be done. */
    bool use_presentation_thread = true;
@@ -245,6 +247,15 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    for (auto& img : m_swapchain_images)
    {
       result = create_and_bind_swapchain_image(image_create_info, img);
+      if (result != VK_SUCCESS)
+      {
+         return result;
+      }
+
+      VkSemaphoreCreateInfo semaphore_info = {};
+      semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      result = m_device_data.disp.CreateSemaphore(m_device, &semaphore_info, get_allocation_callbacks(),
+                                                  &img.present_semaphore);
       if (result != VK_SUCCESS)
       {
          return result;
@@ -352,6 +363,8 @@ void swapchain_base::teardown()
    {
       /* Call implementation specific release */
       destroy_image(img);
+
+      m_device_data.disp.DestroySemaphore(m_device, img.present_semaphore, get_allocation_callbacks());
    }
 }
 
@@ -481,8 +494,15 @@ VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
 VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index)
 {
 
-   VkResult result = image_set_present_payload(m_swapchain_images[image_index], queue, present_info->pWaitSemaphores,
-                                               present_info->waitSemaphoreCount);
+   const VkSemaphore *wait_semaphores = &m_swapchain_images[image_index].present_semaphore;
+   uint32_t sem_count = 1;
+   if (present_info != nullptr)
+   {
+      wait_semaphores = present_info->pWaitSemaphores;
+      sem_count = present_info->waitSemaphoreCount;
+   }
+
+   VkResult result = image_set_present_payload(m_swapchain_images[image_index], queue, wait_semaphores, sem_count);
    if (result != VK_SUCCESS)
    {
       return result;

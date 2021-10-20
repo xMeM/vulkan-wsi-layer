@@ -120,6 +120,8 @@ struct instance_dispatch_table
    REQUIRED(FreeMemory)                             \
    REQUIRED(CreateFence)                            \
    REQUIRED(DestroyFence)                           \
+   REQUIRED(CreateSemaphore)                        \
+   REQUIRED(DestroySemaphore)                       \
    REQUIRED(ResetFences)                            \
    REQUIRED(WaitForFences)                          \
    REQUIRED(DestroyDevice)                          \
