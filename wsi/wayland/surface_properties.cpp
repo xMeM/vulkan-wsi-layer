@@ -76,7 +76,6 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    pSurfaceCapabilities->currentExtent = { 0xffffffff, 0xffffffff };
    pSurfaceCapabilities->minImageExtent = { 1, 1 };
 
-   /* TODO: Ask the device for max - for now setting the max from the GPU, may be ask the display somehow*/
    VkPhysicalDeviceProperties dev_props;
    layer::instance_private_data::get(physical_device).disp.GetPhysicalDeviceProperties(physical_device, &dev_props);
 
