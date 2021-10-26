@@ -29,7 +29,10 @@
 
 #include "wsi_factory.hpp"
 #include "surface.hpp"
+
+#if BUILD_WSI_HEADLESS
 #include "headless/surface_properties.hpp"
+#endif
 
 #include <cassert>
 #include <cstdlib>
@@ -51,7 +54,9 @@ static struct wsi_extension
    VkExtensionProperties extension;
    VkIcdWsiPlatform platform;
 } const supported_wsi_extensions[] = {
+#if BUILD_WSI_HEADLESS
    { { VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME, VK_EXT_HEADLESS_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_HEADLESS },
+#endif
 #if BUILD_WSI_WAYLAND
    { { VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_WAYLAND },
 #endif
@@ -61,8 +66,10 @@ static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
 {
    switch (platform)
    {
+#if BUILD_WSI_HEADLESS
    case VK_ICD_WSI_PLATFORM_HEADLESS:
       return &headless::surface_properties::get_instance();
+#endif
 #if BUILD_WSI_WAYLAND
    case VK_ICD_WSI_PLATFORM_WAYLAND:
       return &wayland::surface_properties::get_instance();

@@ -47,6 +47,7 @@ else()
 endif()
 
 # Build Configuration options
+option(BUILD_WSI_HEADLESS "Build with support for VK_EXT_headless_surface" ON)
 option(BUILD_WSI_WAYLAND "Build with support for VK_KHR_wayland_surface" OFF)
 set(SELECT_EXTERNAL_ALLOCATOR "none" CACHE STRING "Select an external system allocator (none, ion)")
 
@@ -150,6 +151,24 @@ else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_wayland_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
 
+# Headless
+if(BUILD_WSI_HEADLESS)
+   add_library(wsi_headless STATIC
+      wsi/headless/surface_properties.cpp
+      wsi/headless/surface.cpp
+      wsi/headless/swapchain.cpp)
+
+   target_include_directories(wsi_headless PRIVATE
+      ${PROJECT_SOURCE_DIR}
+      ${VULKAN_CXX_INCLUDE}
+      ${CMAKE_CURRENT_BINARY_DIR})
+
+   target_compile_options(wsi_headless INTERFACE "-DBUILD_WSI_HEADLESS=1")
+   list(APPEND LINK_WSI_LIBS wsi_headless)
+else()
+   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_EXT_headless_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+endif()
+
 # Layer
 add_library(${PROJECT_NAME} SHARED
    layer/layer.cpp
@@ -162,10 +181,8 @@ add_library(${PROJECT_NAME} SHARED
    util/log.cpp
    wsi/swapchain_base.cpp
    wsi/synchronization.cpp
-   wsi/wsi_factory.cpp
-   wsi/headless/surface_properties.cpp
-   wsi/headless/surface.cpp
-   wsi/headless/swapchain.cpp)
+   wsi/wsi_factory.cpp)
+
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${WSI_DEFINES})
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${VULKAN_CXX_INCLUDE})
