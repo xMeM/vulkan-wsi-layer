@@ -119,6 +119,12 @@ protected:
     */
    VkResult bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
                                  const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
+
+private:
+   /**
+    * @brief Image creation info used for all swapchain images.
+    */
+   VkImageCreateInfo m_image_create_info;
 };
 
 } /* namespace headless */
