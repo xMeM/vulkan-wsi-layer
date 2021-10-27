@@ -55,6 +55,16 @@ static inline void wayland_object_destroy(zwp_linux_surface_synchronization_v1 *
    zwp_linux_surface_synchronization_v1_destroy(obj);
 }
 
+static inline void wayland_object_destroy(wl_callback *obj)
+{
+   wl_callback_destroy(obj);
+}
+
+static inline void wayland_object_destroy(wl_event_queue *obj)
+{
+   wl_event_queue_destroy(obj);
+}
+
 template <typename T>
 struct wayland_deleter
 {

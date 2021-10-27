@@ -81,7 +81,6 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
    , m_buffer_queue(nullptr)
    , m_wsi_allocator(nullptr)
    , m_image_creation_parameters({}, {}, m_allocator, {}, {})
-   , m_present_pending(false)
 {
    m_image_creation_parameters.m_image_create_info.format = VK_FORMAT_UNDEFINED;
 }
@@ -646,42 +645,15 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    return VK_SUCCESS;
 }
 
-static void frame_done(void *data, wl_callback *cb, uint32_t cb_data)
-{
-   (void)cb_data;
-
-   bool *present_pending = reinterpret_cast<bool *>(data);
-   assert(present_pending);
-
-   *present_pending = false;
-
-   wl_callback_destroy(cb);
-}
-
 void swapchain::present_image(uint32_t pendingIndex)
 {
    int res;
    wayland_image_data *image_data = reinterpret_cast<wayland_image_data *>(m_swapchain_images[pendingIndex].data);
-   /* if a frame is already pending, wait for a hint to present again */
-   if (m_present_pending)
-   {
-      assert(m_present_mode == VK_PRESENT_MODE_FIFO_KHR);
-      do
-      {
-         /* block waiting for the compositor to return the wl_surface::frame
-          * callback. We may want to change this to timeout after a period of
-          * time if the compositor isn't responding (perhaps because the
-          * window is hidden).
-          */
-         res = dispatch_queue(m_display, m_swapchain_queue, -1);
-      } while (res > 0 && m_present_pending);
 
-      if (res <= 0)
-      {
-         WSI_LOG_ERROR("error waiting for Wayland compositor frame hint");
-         m_is_valid = false;
-         /* try to present anyway */
-      }
+   /* if a frame is already pending, wait for a hint to present again */
+   if (!m_wsi_surface->wait_next_frame_event())
+   {
+      m_is_valid = false;
    }
 
    wl_surface_attach(m_surface, image_data->buffer, 0, 0);
@@ -703,21 +675,9 @@ void swapchain::present_image(uint32_t pendingIndex)
 
    if (m_present_mode == VK_PRESENT_MODE_FIFO_KHR)
    {
-      /* request a hint when we can present the _next_ frame */
-      auto surface_proxy = make_proxy_with_queue(m_surface, m_swapchain_queue);
-      if (surface_proxy == nullptr)
+      if (!m_wsi_surface->set_frame_callback())
       {
-         WSI_LOG_ERROR("failed to create wl_surface proxy");
          m_is_valid = false;
-         return;
-      }
-
-      wl_callback *cb = wl_surface_frame(surface_proxy.get());
-      if (cb != nullptr)
-      {
-         static const wl_callback_listener frame_listener = { frame_done };
-         m_present_pending = true;
-         wl_callback_add_listener(cb, &frame_listener, &m_present_pending);
       }
    }
 

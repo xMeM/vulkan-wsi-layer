@@ -189,14 +189,6 @@ private:
     */
    struct image_creation_parameters m_image_creation_parameters;
 
-   /**
-    * @brief true when waiting for the server hint to present a buffer
-    *
-    * true if a buffer has been presented and we've not had a wl_surface::frame
-    * callback to indicate the server is ready for the next buffer.
-    */
-   bool m_present_pending;
-
    /*
     * @brief Allocate memory for an image plane.
     *

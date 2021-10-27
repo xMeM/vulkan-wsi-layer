@@ -130,6 +130,8 @@ surface::surface(const init_parameters &params)
    , supported_formats(params.allocator)
    , properties(*this, params.allocator)
    , surface_queue(nullptr)
+   , last_frame_callback(nullptr)
+   , present_pending(false)
 {
 }
 
@@ -169,15 +171,14 @@ void surface_registry_handler(void *data, struct wl_registry *wl_registry, uint3
 
 bool surface::init()
 {
-   surface_queue = wl_display_create_queue(wayland_display);
-
-   if (surface_queue == nullptr)
+   surface_queue.reset(wl_display_create_queue(wayland_display));
+   if (surface_queue.get() == nullptr)
    {
       WSI_LOG_ERROR("Failed to create wl surface queue.");
       return false;
    }
 
-   auto display_proxy = make_proxy_with_queue(wayland_display, surface_queue);
+   auto display_proxy = make_proxy_with_queue(wayland_display, surface_queue.get());
    if (display_proxy == nullptr)
    {
       WSI_LOG_ERROR("Failed to create wl display proxy.");
@@ -199,7 +200,7 @@ bool surface::init()
       return false;
    }
 
-   res = wl_display_roundtrip_queue(wayland_display, surface_queue);
+   res = wl_display_roundtrip_queue(wayland_display, surface_queue.get());
    if (res < 0)
    {
       WSI_LOG_ERROR("Roundtrip failed.");
@@ -228,8 +229,8 @@ bool surface::init()
 
    surface_sync_interface.reset(surface_sync_obj);
 
-   VkResult vk_res =
-      get_supported_formats_and_modifiers(wayland_display, surface_queue, dmabuf_interface.get(), supported_formats);
+   VkResult vk_res = get_supported_formats_and_modifiers(wayland_display, surface_queue.get(), dmabuf_interface.get(),
+                                                         supported_formats);
    if (vk_res != VK_SUCCESS)
    {
       return false;
@@ -255,10 +256,6 @@ util::unique_ptr<surface> surface::make_surface(const util::allocator &allocator
 
 surface::~surface()
 {
-   if (surface_queue != nullptr)
-   {
-      wl_event_queue_destroy(surface_queue);
-   }
 }
 
 wsi::surface_properties &surface::get_properties()
@@ -271,6 +268,74 @@ util::unique_ptr<swapchain_base> surface::allocate_swapchain(layer::device_priva
 {
    util::allocator alloc{ dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, allocator };
    return util::unique_ptr<swapchain_base>(alloc.make_unique<swapchain>(dev_data, allocator, *this));
+}
+
+static void frame_done(void *data, wl_callback *cb, uint32_t time)
+{
+   (void)time;
+
+   bool *present_pending = reinterpret_cast<bool *>(data);
+   assert(present_pending);
+
+   *present_pending = false;
+}
+
+bool surface::set_frame_callback()
+{
+   /* request a hint when we can present the _next_ frame */
+   auto surface_proxy = make_proxy_with_queue(wayland_surface, surface_queue.get());
+   if (surface_proxy == nullptr)
+   {
+      WSI_LOG_ERROR("failed to create wl_surface proxy");
+      return false;
+   }
+
+   /* Reset will also destroy the previous callback object. */
+   last_frame_callback.reset(wl_surface_frame(surface_proxy.get()));
+   if (last_frame_callback.get() == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to create frame callback.");
+      return false;
+   }
+
+   static const wl_callback_listener frame_listener = { frame_done };
+   present_pending = true;
+   int res = wl_callback_add_listener(last_frame_callback.get(), &frame_listener, &present_pending);
+   if (res < 0)
+   {
+      WSI_LOG_ERROR("Failed to add frame done callback listener.");
+      return false;
+   }
+
+   return true;
+}
+
+bool surface::wait_next_frame_event()
+{
+   /*
+    * In a previous present call we sent a wl_surface::frame request, which will
+    * trigger an event when the compositor starts a redraw using the previous frame
+    * we sent. If the compositor isn't sending us frame events at least every second
+    * we don't wait indefinitely so we don't block the next image presentation if
+    * we are, e.g. minimised.
+    */
+   const int timeout = 1000;
+   while (present_pending)
+   {
+      int res = dispatch_queue(wayland_display, surface_queue.get(), timeout);
+      if (res < 0)
+      {
+         WSI_LOG_ERROR("Error while waiting for the compositor to send the next frame event.");
+         return false;
+      }
+      else if (res == 0)
+      {
+         WSI_LOG_INFO("Wait for frame event timed out, present anyway.");
+         present_pending = false;
+      }
+   }
+
+   return true;
 }
 
 } // namespace wayland
