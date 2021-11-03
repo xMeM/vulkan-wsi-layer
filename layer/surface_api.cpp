@@ -27,14 +27,12 @@
 #include "private_data.hpp"
 #include "surface_api.hpp"
 
-extern "C" {
-
 /**
  * @brief Implements vkGetPhysicalDeviceSurfaceCapabilitiesKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice,
-                                                                        VkSurfaceKHR surface,
-                                                                        VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                    VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) VWL_API_POST
 {
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
@@ -54,9 +52,10 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysic
 /**
  * @brief Implements vkGetPhysicalDeviceSurfaceFormatsKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,
-                                                                   VkSurfaceKHR surface, uint32_t *pSurfaceFormatCount,
-                                                                   VkSurfaceFormatKHR *pSurfaceFormats)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                               uint32_t *pSurfaceFormatCount,
+                                               VkSurfaceFormatKHR *pSurfaceFormats) VWL_API_POST
 {
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
@@ -73,10 +72,10 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDev
 /**
  * @brief Implements vkGetPhysicalDeviceSurfacePresentModesKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice,
-                                                                        VkSurfaceKHR surface,
-                                                                        uint32_t *pPresentModeCount,
-                                                                        VkPresentModeKHR *pPresentModes)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                    uint32_t *pPresentModeCount,
+                                                    VkPresentModeKHR *pPresentModes) VWL_API_POST
 {
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
@@ -93,9 +92,9 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysic
 /**
  * @brief Implements vkGetPhysicalDeviceSurfaceSupportKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
-                                                                   uint32_t queueFamilyIndex, VkSurfaceKHR surface,
-                                                                   VkBool32 *pSupported)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                               VkSurfaceKHR surface, VkBool32 *pSupported) VWL_API_POST
 {
    auto &instance = layer::instance_private_data::get(physicalDevice);
    if (instance.should_layer_handle_surface(physicalDevice, surface))
@@ -107,8 +106,9 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDev
    return instance.disp.GetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface, pSupported);
 }
 
-VKAPI_ATTR void wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
-                                              const VkAllocationCallbacks *pAllocator)
+VWL_VKAPI_CALL(void)
+wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                              const VkAllocationCallbacks *pAllocator) VWL_API_POST
 {
    auto &instance_data = layer::instance_private_data::get(instance);
 
@@ -117,5 +117,3 @@ VKAPI_ATTR void wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR 
    instance_data.remove_surface(
       surface, util::allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator });
 }
-
-} /* extern "C" */

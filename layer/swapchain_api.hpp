@@ -31,41 +31,48 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include "util/macros.hpp"
 
-extern "C"
-{
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo,
+                               const VkAllocationCallbacks *pAllocator, VkSwapchainKHR *pSwapchain) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo,
-                                                      const VkAllocationCallbacks *pAllocator, VkSwapchainKHR *pSwapchain);
+VWL_VKAPI_CALL(void)
+wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
+                                const VkAllocationCallbacks *pAllocator) VWL_API_POST;
 
-   VKAPI_ATTR void wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
-                                                   const VkAllocationCallbacks *pAllocator);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc, uint32_t *pSwapchainImageCount,
+                                  VkImage *pSwapchainImages) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc,
-                                                         uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t timeout, VkSemaphore semaphore,
+                                VkFence fence, uint32_t *pImageIndex) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t timeout,
-                                                       VkSemaphore semaphore, VkFence fence, uint32_t *pImageIndex);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo);
+/* 1.1 entrypoints */
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetDeviceGroupPresentCapabilitiesKHR(
+   VkDevice device, VkDeviceGroupPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities) VWL_API_POST;
 
-   /* 1.1 entrypoints */
-   VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupPresentCapabilitiesKHR(
-      VkDevice device, VkDeviceGroupPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetDeviceGroupSurfacePresentModesKHR(VkDevice device, VkSurfaceKHR surface,
+                                                 VkDeviceGroupPresentModeFlagsKHR *pModes) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupSurfacePresentModesKHR(VkDevice device, VkSurfaceKHR surface,
-                                                                        VkDeviceGroupPresentModeFlagsKHR *pModes);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                  uint32_t *pRectCount, VkRect2D *pRects) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice,
-                                                                         VkSurfaceKHR surface, uint32_t *pRectCount,
-                                                                         VkRect2D *pRects);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
+                                 uint32_t *pImageIndex) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
-                                                        uint32_t *pImageIndex);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
+                        VkImage *pImage) VWL_API_POST;
 
-   VKAPI_ATTR VkResult wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
-                                               const VkAllocationCallbacks *pAllocator, VkImage *pImage);
-
-   VKAPI_ATTR VkResult wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
-                                                       const VkBindImageMemoryInfo *pBindInfos);
-}
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
+                             const VkBindImageMemoryInfo *pBindInfos) VWL_API_POST;

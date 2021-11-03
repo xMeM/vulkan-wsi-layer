@@ -35,6 +35,7 @@
 #include "util/custom_allocator.hpp"
 #include "wsi/wsi_factory.hpp"
 #include "util/log.hpp"
+#include "util/macros.hpp"
 
 #define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
 
@@ -263,15 +264,15 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
 
 } /* namespace layer */
 
-extern "C" {
-VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName);
+VWL_VKAPI_CALL(PFN_vkVoidFunction)
+wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POST;
 
-VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstanceProcAddr(VkInstance instance,
-                                                                                         const char *funcName);
+VWL_VKAPI_CALL(PFN_vkVoidFunction)
+wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_API_POST;
 
 /* Clean up the dispatch table for this instance. */
-VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL wsi_layer_vkDestroyInstance(VkInstance instance,
-                                                                       const VkAllocationCallbacks *pAllocator)
+VWL_VKAPI_CALL(void)
+wsi_layer_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator) VWL_API_POST
 {
    if (instance == VK_NULL_HANDLE)
    {
@@ -289,8 +290,8 @@ VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL wsi_layer_vkDestroyInstance(VkInstanc
    fn_destroy_instance(instance, pAllocator);
 }
 
-VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL wsi_layer_vkDestroyDevice(VkDevice device,
-                                                                     const VkAllocationCallbacks *pAllocator)
+VWL_VKAPI_CALL(void)
+wsi_layer_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) VWL_API_POST
 {
    if (device == VK_NULL_HANDLE)
    {
@@ -308,23 +309,22 @@ VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL wsi_layer_vkDestroyDevice(VkDevice de
    fn_destroy_device(device, pAllocator);
 }
 
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
-                                                                          const VkAllocationCallbacks *pAllocator,
-                                                                          VkInstance *pInstance)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
+                           VkInstance *pInstance) VWL_API_POST
 {
    return layer::create_instance(pCreateInfo, pAllocator, pInstance);
 }
 
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL wsi_layer_vkCreateDevice(VkPhysicalDevice physicalDevice,
-                                                                        const VkDeviceCreateInfo *pCreateInfo,
-                                                                        const VkAllocationCallbacks *pAllocator,
-                                                                        VkDevice *pDevice)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                         const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) VWL_API_POST
 {
    return layer::create_device(physicalDevice, pCreateInfo, pAllocator, pDevice);
 }
 
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
-vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct)
+VWL_VKAPI_CALL(VkResult)
+VK_LAYER_EXPORT wsi_layer_vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct) VWL_API_POST
 {
    assert(pVersionStruct);
    assert(pVersionStruct->sType == LAYER_NEGOTIATE_INTERFACE_STRUCT);
@@ -347,7 +347,8 @@ vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct
    if (!strcmp(funcName, #func)) \
       return (PFN_vkVoidFunction)&wsi_layer_##func;
 
-VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName)
+VWL_VKAPI_CALL(PFN_vkVoidFunction)
+wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POST
 {
    GET_PROC_ADDR(vkCreateSwapchainKHR);
    GET_PROC_ADDR(vkDestroySwapchainKHR);
@@ -365,8 +366,8 @@ VK_LAYER_EXPORT PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetDeviceProcAddr(VkDe
    return layer::device_private_data::get(device).disp.GetDeviceProcAddr(device, funcName);
 }
 
-VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstanceProcAddr(VkInstance instance,
-                                                                                         const char *funcName)
+VWL_VKAPI_CALL(PFN_vkVoidFunction)
+wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_API_POST
 {
    PFN_vkVoidFunction wsi_func = wsi::get_proc_addr(funcName);
    if (wsi_func)
@@ -389,4 +390,3 @@ VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wsi_layer_vkGetInstance
 
    return layer::instance_private_data::get(instance).disp.GetInstanceProcAddr(instance, funcName);
 }
-} /* extern "C" */

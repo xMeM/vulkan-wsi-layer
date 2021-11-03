@@ -38,11 +38,9 @@
 #include "swapchain_api.hpp"
 #include <util/helpers.hpp>
 
-extern "C" {
-
-VKAPI_ATTR VkResult wsi_layer_vkCreateSwapchainKHR(VkDevice device,
-                                                   const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo,
-                                                   const VkAllocationCallbacks *pAllocator, VkSwapchainKHR *pSwapchain)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo,
+                               const VkAllocationCallbacks *pAllocator, VkSwapchainKHR *pSwapchain) VWL_API_POST
 {
    assert(pSwapchain != nullptr);
    layer::device_private_data &device_data = layer::device_private_data::get(device);
@@ -79,8 +77,9 @@ VKAPI_ATTR VkResult wsi_layer_vkCreateSwapchainKHR(VkDevice device,
    return result;
 }
 
-VKAPI_ATTR void wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
-                                                const VkAllocationCallbacks *pAllocator)
+VWL_VKAPI_CALL(void)
+wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
+                                const VkAllocationCallbacks *pAllocator) VWL_API_POST
 {
    layer::device_private_data &device_data = layer::device_private_data::get(device);
 
@@ -94,8 +93,9 @@ VKAPI_ATTR void wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR 
    wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc,
-                                                      uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc, uint32_t *pSwapchainImageCount,
+                                  VkImage *pSwapchainImages) VWL_API_POST
 {
    layer::device_private_data &device_data = layer::device_private_data::get(device);
 
@@ -110,8 +110,9 @@ VKAPI_ATTR VkResult wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapcha
    return sc->get_swapchain_images(pSwapchainImageCount, pSwapchainImages);
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t timeout,
-                                                    VkSemaphore semaphore, VkFence fence, uint32_t *pImageIndex)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t timeout, VkSemaphore semaphore,
+                                VkFence fence, uint32_t *pImageIndex) VWL_API_POST
 {
    layer::device_private_data &device_data = layer::device_private_data::get(device);
 
@@ -127,7 +128,8 @@ VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchain
    return sc->acquire_next_image(timeout, semaphore, fence, pImageIndex);
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo) VWL_API_POST
 {
    assert(queue != VK_NULL_HANDLE);
    assert(pPresentInfo != nullptr);
@@ -163,8 +165,9 @@ VKAPI_ATTR VkResult wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentIn
    return ret;
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupPresentCapabilitiesKHR(
-   VkDevice device, VkDeviceGroupPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetDeviceGroupPresentCapabilitiesKHR(
+   VkDevice device, VkDeviceGroupPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities) VWL_API_POST
 {
    assert(pDeviceGroupPresentCapabilities != nullptr);
 
@@ -179,8 +182,9 @@ VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupPresentCapabilitiesKHR(
    return VK_SUCCESS;
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupSurfacePresentModesKHR(VkDevice device, VkSurfaceKHR surface,
-                                                                     VkDeviceGroupPresentModeFlagsKHR *pModes)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetDeviceGroupSurfacePresentModesKHR(VkDevice device, VkSurfaceKHR surface,
+                                                 VkDeviceGroupPresentModeFlagsKHR *pModes) VWL_API_POST
 {
    assert(pModes != nullptr);
 
@@ -196,9 +200,9 @@ VKAPI_ATTR VkResult wsi_layer_vkGetDeviceGroupSurfacePresentModesKHR(VkDevice de
    return VK_SUCCESS;
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice,
-                                                                      VkSurfaceKHR surface, uint32_t *pRectCount,
-                                                                      VkRect2D *pRects)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                  uint32_t *pRectCount, VkRect2D *pRects) VWL_API_POST
 {
    assert(surface);
    assert(pRectCount != nullptr);
@@ -243,8 +247,9 @@ VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysical
    return result;
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
-                                                     uint32_t *pImageIndex)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKHR *pAcquireInfo,
+                                 uint32_t *pImageIndex) VWL_API_POST
 {
    assert(pAcquireInfo != VK_NULL_HANDLE);
    assert(pAcquireInfo->swapchain != VK_NULL_HANDLE);
@@ -263,8 +268,9 @@ VKAPI_ATTR VkResult wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAc
    return sc->acquire_next_image(pAcquireInfo->timeout, pAcquireInfo->semaphore, pAcquireInfo->fence, pImageIndex);
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
-                                            const VkAllocationCallbacks *pAllocator, VkImage *pImage)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
+                        VkImage *pImage) VWL_API_POST
 {
    auto &device_data = layer::device_private_data::get(device);
 
@@ -281,8 +287,9 @@ VKAPI_ATTR VkResult wsi_layer_vkCreateImage(VkDevice device, const VkImageCreate
    return sc->create_aliased_image_handle(pCreateInfo, pImage);
 }
 
-VKAPI_ATTR VkResult wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
-                                                    const VkBindImageMemoryInfo *pBindInfos)
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
+                             const VkBindImageMemoryInfo *pBindInfos) VWL_API_POST
 {
    auto &device_data = layer::device_private_data::get(device);
 
@@ -312,5 +319,3 @@ VKAPI_ATTR VkResult wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindI
    }
    return VK_SUCCESS;
 }
-
-} /* extern "C" */
