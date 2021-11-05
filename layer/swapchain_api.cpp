@@ -143,7 +143,8 @@ static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &prese
       swapchain_semaphores[i] = swapchain->get_image_present_semaphore(present_info.pImageIndices[i]);
    }
 
-   util::vector<VkPipelineStageFlags> pipeline_stage_flags{ util::allocator::get_generic() };
+   util::vector<VkPipelineStageFlags> pipeline_stage_flags{ util::allocator(device_data.get_allocator(),
+                                                                            VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
    if (!pipeline_stage_flags.try_resize(present_info.waitSemaphoreCount))
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
