@@ -201,7 +201,7 @@ void destroy_surface_swapchain(swapchain_base *swapchain, layer::device_private_
    alloc.destroy(1, swapchain);
 }
 
-PFN_vkVoidFunction get_proc_addr(const char *name)
+PFN_vkVoidFunction get_proc_addr(const char *name, const layer::instance_private_data &instance_data)
 {
    /*
     * Note that we here assume that there are no two get_proc_addr implementations
@@ -216,7 +216,7 @@ PFN_vkVoidFunction get_proc_addr(const char *name)
       }
 
       PFN_vkVoidFunction func = props->get_proc_addr(name);
-      if (func)
+      if (props->is_surface_extension_enabled(instance_data) && func)
       {
          return func;
       }

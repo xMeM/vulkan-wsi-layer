@@ -32,6 +32,7 @@
 
 #include <vulkan/vulkan.h>
 #include "util/extension_list.hpp"
+#include "layer/private_data.hpp"
 
 namespace wsi
 {
@@ -75,6 +76,11 @@ public:
     * At least the specific VkSurface creation entrypoint must be intercepted.
     */
    virtual PFN_vkVoidFunction get_proc_addr(const char *name) = 0;
+
+   /**
+    * @brief Check if the proper surface extension has been enabled for the specific VkSurface type.
+    */
+   virtual bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) = 0;
 
    /* There is no maximum theoretically speaking however we choose 3 for practicality */
    static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 3;

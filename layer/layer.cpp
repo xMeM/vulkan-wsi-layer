@@ -152,7 +152,6 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
    /* Find all the platforms that the layer can handle based on pCreateInfo->ppEnabledExtensionNames. */
    auto layer_platforms_to_enable = wsi::find_enabled_layer_platforms(pCreateInfo);
 
-
    /* Following the spec: use the callbacks provided to vkCreateInstance() if not nullptr,
     * otherwise use the default callbacks.
     */
@@ -165,9 +164,26 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       {
          table.DestroyInstance(*pInstance, pAllocator);
       }
+      return result;
    }
 
-   return result;
+   /*
+    * Store the enabled instance extensions in order to return nullptr in
+    * vkGetInstanceProcAddr for functions of disabled extensions.
+    */
+   result =
+      instance_private_data::get(*pInstance)
+         .set_instance_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+   if (result != VK_SUCCESS)
+   {
+      if (table.DestroyInstance != nullptr)
+      {
+         table.DestroyInstance(*pInstance, pAllocator);
+      }
+      return result;
+   }
+
+   return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
@@ -240,7 +256,6 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
       {
          table.DestroyDevice(*pDevice, pAllocator);
       }
-
       return result;
    }
 
@@ -250,16 +265,31 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    util::allocator device_allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator };
    result =
       device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator);
-
    if (result != VK_SUCCESS)
    {
       if (table.DestroyDevice != nullptr)
       {
          table.DestroyDevice(*pDevice, pAllocator);
       }
+      return result;
    }
 
-   return result;
+   /*
+    * Store the enabled device extensions in order to return nullptr in
+    * vkGetDeviceProcAddr for functions of disabled extensions.
+    */
+   result = layer::device_private_data::get(*pDevice).set_device_enabled_extensions(
+      modified_info.ppEnabledExtensionNames, modified_info.enabledExtensionCount);
+   if (result != VK_SUCCESS)
+   {
+      if (table.DestroyDevice != nullptr)
+      {
+         table.DestroyDevice(*pDevice, pAllocator);
+      }
+      return result;
+   }
+
+   return VK_SUCCESS;
 }
 
 } /* namespace layer */
@@ -350,16 +380,19 @@ VK_LAYER_EXPORT wsi_layer_vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLaye
 VWL_VKAPI_CALL(PFN_vkVoidFunction)
 wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POST
 {
-   GET_PROC_ADDR(vkCreateSwapchainKHR);
-   GET_PROC_ADDR(vkDestroySwapchainKHR);
-   GET_PROC_ADDR(vkGetSwapchainImagesKHR);
-   GET_PROC_ADDR(vkAcquireNextImageKHR);
-   GET_PROC_ADDR(vkQueuePresentKHR);
+   if (layer::device_private_data::get(device).is_device_extension_enabled(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+   {
+      GET_PROC_ADDR(vkCreateSwapchainKHR);
+      GET_PROC_ADDR(vkDestroySwapchainKHR);
+      GET_PROC_ADDR(vkGetSwapchainImagesKHR);
+      GET_PROC_ADDR(vkAcquireNextImageKHR);
+      GET_PROC_ADDR(vkQueuePresentKHR);
+      GET_PROC_ADDR(vkAcquireNextImage2KHR);
+      GET_PROC_ADDR(vkGetDeviceGroupPresentCapabilitiesKHR);
+      GET_PROC_ADDR(vkGetDeviceGroupSurfacePresentModesKHR);
+   }
    GET_PROC_ADDR(vkDestroyDevice);
 
-   GET_PROC_ADDR(vkGetDeviceGroupSurfacePresentModesKHR);
-   GET_PROC_ADDR(vkGetDeviceGroupPresentCapabilitiesKHR);
-   GET_PROC_ADDR(vkAcquireNextImage2KHR);
    GET_PROC_ADDR(vkCreateImage);
    GET_PROC_ADDR(vkBindImageMemory2);
 
@@ -369,24 +402,28 @@ wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POS
 VWL_VKAPI_CALL(PFN_vkVoidFunction)
 wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_API_POST
 {
-   PFN_vkVoidFunction wsi_func = wsi::get_proc_addr(funcName);
-   if (wsi_func)
-   {
-      return wsi_func;
-   }
-
    GET_PROC_ADDR(vkGetDeviceProcAddr);
    GET_PROC_ADDR(vkGetInstanceProcAddr);
    GET_PROC_ADDR(vkCreateInstance);
    GET_PROC_ADDR(vkDestroyInstance);
    GET_PROC_ADDR(vkCreateDevice);
-   GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceSupportKHR);
-   GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
-   GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
-   GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
-   GET_PROC_ADDR(vkDestroySurfaceKHR);
-
    GET_PROC_ADDR(vkGetPhysicalDevicePresentRectanglesKHR);
 
-   return layer::instance_private_data::get(instance).disp.GetInstanceProcAddr(instance, funcName);
+   auto &instance_data = layer::instance_private_data::get(instance);
+   if (instance_data.is_instance_extension_enabled(VK_KHR_SURFACE_EXTENSION_NAME))
+   {
+      PFN_vkVoidFunction wsi_func = wsi::get_proc_addr(funcName, instance_data);
+      if (wsi_func)
+      {
+         return wsi_func;
+      }
+
+      GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceSupportKHR);
+      GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+      GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
+      GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
+      GET_PROC_ADDR(vkDestroySurfaceKHR);
+   }
+
+   return instance_data.disp.GetInstanceProcAddr(instance, funcName);
 }

@@ -104,10 +104,11 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
  * implementation of the @p name function.
  *
  * @param name The name of the target function
+ * @param instance_data The instance specific data.
  *
  * @return A pointer to the implementation of the @p name function or null pointer in case this
  *         function isn't implemented for any platform.
  */
-PFN_vkVoidFunction get_proc_addr(const char *name);
+PFN_vkVoidFunction get_proc_addr(const char *name, const layer::instance_private_data &instance_data);
 
 } // namespace wsi

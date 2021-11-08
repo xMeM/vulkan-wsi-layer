@@ -57,6 +57,33 @@ VkResult extension_list::add(const char *const *extensions, uint32_t count)
    return VK_SUCCESS;
 }
 
+VkResult extension_list::add(const char *const *extensions, uint32_t count, const char *const *extensions_subset,
+                             uint32_t subset_count)
+{
+   util::vector<const char *> extensions_to_add(m_alloc);
+   for (uint32_t ext_index = 0; ext_index < count; ++ext_index)
+   {
+      for (uint32_t subset_index = 0; subset_index < subset_count; ++subset_index)
+      {
+         if (!strcmp(extensions[ext_index], extensions_subset[subset_index]))
+         {
+            if (!extensions_to_add.try_push_back(extensions[ext_index]))
+            {
+               return VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+         }
+      }
+   }
+
+   VkResult result = add(extensions_to_add.data(), extensions_to_add.size());
+   if (result != VK_SUCCESS)
+   {
+      return result;
+   }
+
+   return VK_SUCCESS;
+}
+
 VkResult extension_list::add(VkExtensionProperties ext_prop)
 {
    if (!contains(ext_prop.extensionName))

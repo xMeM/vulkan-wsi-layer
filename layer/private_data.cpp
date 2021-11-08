@@ -40,6 +40,14 @@ static std::mutex g_data_lock;
 static util::unordered_map<void *, instance_private_data *> g_instance_data{ util::allocator::get_generic() };
 static util::unordered_map<void *, device_private_data *> g_device_data{ util::allocator::get_generic() };
 
+static const std::array<const char *, 3> supported_instance_extensions = {
+   VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
+};
+
+static const std::array<const char *, 1> supported_device_extensions = {
+   VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+};
+
 template <typename object_type, typename get_proc_type>
 static PFN_vkVoidFunction get_proc_helper(object_type obj, get_proc_type get_proc,
                                           const char* proc_name, bool required, bool &ok)
@@ -78,11 +86,12 @@ instance_private_data::instance_private_data(const instance_dispatch_table &tabl
                                              PFN_vkSetInstanceLoaderData set_loader_data,
                                              util::wsi_platform_set enabled_layer_platforms,
                                              const util::allocator &alloc)
-   : disp(table)
-   , SetInstanceLoaderData(set_loader_data)
-   , enabled_layer_platforms(enabled_layer_platforms)
-   , allocator(alloc)
-   , surfaces(alloc)
+   : disp{ table }
+   , SetInstanceLoaderData{ set_loader_data }
+   , enabled_layer_platforms{ enabled_layer_platforms }
+   , allocator{ alloc }
+   , surfaces{ alloc }
+   , enabled_extensions{ allocator }
 {
 }
 
@@ -261,6 +270,18 @@ bool instance_private_data::should_layer_handle_surface(VkPhysicalDevice phys_de
    return ret;
 }
 
+VkResult instance_private_data::set_instance_enabled_extensions(const char *const *extension_names,
+                                                                size_t extension_count)
+{
+   return enabled_extensions.add(extension_names, extension_count, supported_instance_extensions.data(),
+                                 supported_instance_extensions.size());
+}
+
+bool instance_private_data::is_instance_extension_enabled(const char *extension_name) const
+{
+   return enabled_extensions.contains(extension_name);
+}
+
 device_private_data::device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
                                          const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
                                          const util::allocator &alloc)
@@ -271,6 +292,7 @@ device_private_data::device_private_data(instance_private_data &inst_data, VkPhy
    , device{ dev }
    , allocator{ alloc }
    , swapchains{ allocator }
+   , enabled_extensions{ allocator }
 {
 }
 
@@ -380,6 +402,17 @@ bool device_private_data::should_layer_create_swapchain(VkSurfaceKHR vk_surface)
 bool device_private_data::can_icds_create_swapchain(VkSurfaceKHR vk_surface)
 {
    return disp.CreateSwapchainKHR != nullptr;
+}
+
+VkResult device_private_data::set_device_enabled_extensions(const char *const *extension_names, size_t extension_count)
+{
+   return enabled_extensions.add(extension_names, extension_count, supported_device_extensions.data(),
+                                 supported_device_extensions.size());
+}
+
+bool device_private_data::is_device_extension_enabled(const char *extension_name) const
+{
+   return enabled_extensions.contains(extension_name);
 }
 
 void device_private_data::destroy(device_private_data *device_data)

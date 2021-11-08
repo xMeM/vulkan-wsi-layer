@@ -202,5 +202,10 @@ PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
    return nullptr;
 }
 
+bool surface_properties::is_surface_extension_enabled(const layer::instance_private_data &instance_data)
+{
+   return instance_data.is_instance_extension_enabled(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+}
+
 } /* namespace headless */
 } /* namespace wsi */

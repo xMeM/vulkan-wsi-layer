@@ -85,6 +85,21 @@ public:
    VkResult add(const extension_list &ext_list);
    VkResult add(const char *const *extensions, uint32_t count);
 
+   /**
+    * @brief Perform intersection between extensions and add them to the list.
+    *
+    * Adds the extensions from @p extensions that are also part of @p extensions_subset.
+    *
+    * @param extensions        A list with the names of the extensions to be added.
+    * @param count             Length of the extensions list.
+    * @param extensions_subset A list with the names of the target extensions.
+    * @param subset_count      Length of the target list.
+    *
+    * @return VK_SUCCESS on success, otherwise an error.
+    */
+   VkResult add(const char *const *extensions, uint32_t count, const char *const *extensions_subset,
+                uint32_t subset_count);
+
 private:
    util::allocator m_alloc;
 

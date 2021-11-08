@@ -47,6 +47,8 @@ public:
 
    PFN_vkVoidFunction get_proc_addr(const char *name) override;
 
+   bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) override;
+
    static surface_properties &get_instance();
 };
 

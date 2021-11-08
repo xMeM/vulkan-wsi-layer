@@ -28,6 +28,7 @@
 #include "util/custom_allocator.hpp"
 #include "util/unordered_set.hpp"
 #include "util/unordered_map.hpp"
+#include "util/extension_list.hpp"
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
@@ -278,6 +279,25 @@ public:
       return allocator;
    }
 
+   /**
+    * @brief Store the enabled instance extensions.
+    *
+    * @param extension_names Names of the enabled instance extensions.
+    * @param extension_count Size of the enabled instance extensions.
+    *
+    * @return VK_SUCCESS if successful, otherwise an error.
+    */
+   VkResult set_instance_enabled_extensions(const char *const *extension_names, size_t extension_count);
+
+   /**
+    * @brief Check whether an instance extension is enabled.
+    *
+    * param extension_name Extension's name.
+    *
+    * @return true if is enabled, false otherwise.
+    */
+   bool is_instance_extension_enabled(const char *extension_name) const;
+
    const instance_dispatch_table disp;
 
 private:
@@ -324,6 +344,11 @@ private:
     * @brief Lock for thread safe access to @ref surfaces
     */
    std::mutex surfaces_lock;
+
+   /**
+    * @brief List with the names of the enabled instance extensions.
+    */
+   util::extension_list enabled_extensions;
 };
 
 /**
@@ -400,6 +425,25 @@ public:
       return allocator;
    }
 
+   /**
+    * @brief Store the enabled device extensions.
+    *
+    * @param extension_names Names of the enabled device extensions.
+    * @param extension_count Size of the enabled device extensions.
+    *
+    * @return VK_SUCCESS if successful, otherwise an error.
+    */
+   VkResult set_device_enabled_extensions(const char *const *extension_names, size_t extension_count);
+
+   /**
+    * @brief Check whether a device extension is enabled.
+    *
+    * param extension_name Extension's name.
+    *
+    * @return true if is enabled, false otherwise.
+    */
+   bool is_device_extension_enabled(const char *extension_name) const;
+
    const device_dispatch_table disp;
    instance_private_data &instance_data;
    const PFN_vkSetDeviceLoaderData SetDeviceLoaderData;
@@ -435,6 +479,11 @@ private:
    const util::allocator allocator;
    util::unordered_set<VkSwapchainKHR> swapchains;
    mutable std::mutex swapchains_lock;
+
+   /**
+    * @brief List with the names of the enabled device extensions.
+    */
+   util::extension_list enabled_extensions;
 };
 
 } /* namespace layer */
