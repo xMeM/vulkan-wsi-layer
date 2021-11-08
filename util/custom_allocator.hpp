@@ -30,6 +30,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include "helpers.hpp"
+
 #pragma once
 
 namespace util
@@ -280,7 +282,7 @@ util::unique_ptr<T> allocator::make_unique(Args &&...args) const noexcept
  *   vector.
  */
 template <typename T>
-class vector : public std::vector<T, custom_allocator<T>>
+class vector : public std::vector<T, custom_allocator<T>>, private noncopyable
 {
 public:
    using base = std::vector<T, custom_allocator<T>>;

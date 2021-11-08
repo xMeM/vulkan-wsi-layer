@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include "custom_allocator.hpp"
 #include "optional.hpp"
+#include "helpers.hpp"
 
 namespace util
 {
@@ -39,7 +40,7 @@ template <typename Key, typename Value,
 	typename Hash = std::hash<Key>,
 	typename Comparator = std::equal_to<Key>,
 	typename Allocator = util::custom_allocator<std::pair<const Key, Value>>>
-class unordered_map : public std::unordered_map<Key, Value, Hash, Comparator, Allocator>
+class unordered_map : public std::unordered_map<Key, Value, Hash, Comparator, Allocator>, private noncopyable
 {
    using base = std::unordered_map<Key, Value, Hash, Comparator, Allocator>;
    using size_type = typename base::size_type;
@@ -51,9 +52,6 @@ public:
     */
    Value &operator[](const Key &key) = delete;
    Value &operator[](Key &&key) = delete;
-
-   unordered_map(const unordered_map &) = delete;
-   unordered_map &operator=(const unordered_map &) = delete;
 
    void insert() = delete;
    void emplace() = delete;

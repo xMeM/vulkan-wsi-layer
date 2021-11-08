@@ -26,6 +26,7 @@
 #include <unordered_set>
 #include "custom_allocator.hpp"
 #include "optional.hpp"
+#include "helpers.hpp"
 
 namespace util
 {
@@ -39,7 +40,7 @@ template <typename Key,
    typename Hash = std::hash<Key>,
    typename Comparator = std::equal_to<Key>,
    typename Allocator = util::custom_allocator<Key>>
-class unordered_set : public std::unordered_set<Key, Hash, Comparator, Allocator>
+class unordered_set : public std::unordered_set<Key, Hash, Comparator, Allocator>, private noncopyable
 {
    using value_type = Key;
    using base = std::unordered_set<Key, Hash, Comparator, Allocator>;
@@ -50,9 +51,6 @@ public:
    /**
     * Delete all member functions that can cause allocation failure by throwing std::bad_alloc.
     */
-   unordered_set(const unordered_set &) = delete;
-   unordered_set &operator=(const unordered_set &) = delete;
-
    void insert() = delete;
    void emplace() = delete;
    void emplace_hint() = delete;

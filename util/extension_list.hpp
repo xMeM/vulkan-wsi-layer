@@ -23,7 +23,8 @@
  */
 #pragma once
 
-#include "util/custom_allocator.hpp"
+#include "custom_allocator.hpp"
+#include "helpers.hpp"
 
 #include <vector>
 #include <algorithm>
@@ -38,13 +39,10 @@ namespace util
  *
  * @note This class does not store the extension versions.
  */
-class extension_list
+class extension_list : private noncopyable
 {
 public:
    extension_list(const util::allocator& allocator);
-
-   extension_list(const extension_list &rhs) = delete;
-   const extension_list &operator=(const extension_list &rhs) = delete;
 
    /**
     * @brief Get the allocator used to manage the memory of this object.

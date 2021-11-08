@@ -44,4 +44,15 @@ const T *find_extension(VkStructureType sType, const void *pNext)
    }
    return reinterpret_cast<const T *>(entry);
 }
+
+class noncopyable
+{
+protected:
+   noncopyable() = default;
+   ~noncopyable() = default;
+
+private:
+   noncopyable(const noncopyable &) = delete;
+   noncopyable& operator=(const noncopyable &) = delete;
+};
 } // namespace util
