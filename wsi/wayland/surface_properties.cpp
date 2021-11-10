@@ -39,6 +39,7 @@
 #include "wl_object_owner.hpp"
 #include "util/drm/drm_utils.hpp"
 #include "util/log.hpp"
+#include "util/macros.hpp"
 
 #define NELEMS(x) (sizeof(x) / sizeof(x[0]))
 
@@ -222,8 +223,9 @@ VkResult surface_properties::get_required_device_extensions(util::extension_list
 }
 
 /* TODO: Check for zwp_linux_dmabuf_v1 protocol in display */
-VkBool32 GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physical_device, uint32_t queue_index,
-                                                        struct wl_display *display)
+VWL_VKAPI_CALL(VkBool32)
+GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physical_device, uint32_t queue_index,
+                                               struct wl_display *display)
 {
    bool dev_supports_sync =
       sync_fd_fence_sync::is_supported(layer::instance_private_data::get(physical_device), physical_device);
@@ -235,8 +237,9 @@ VkBool32 GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physica
    return VK_TRUE;
 }
 
-extern "C" VkResult CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR *pCreateInfo,
-                                            const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
+VWL_VKAPI_CALL(VkResult)
+CreateWaylandSurfaceKHR(VkInstance instance, const VkWaylandSurfaceCreateInfoKHR *pCreateInfo,
+                        const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface) VWL_API_POST
 {
    auto &instance_data = layer::instance_private_data::get(instance);
    util::allocator allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };

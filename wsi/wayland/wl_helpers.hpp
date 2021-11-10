@@ -28,21 +28,19 @@
 #include <wayland-client.h>
 #include "util/custom_allocator.hpp"
 
-extern "C" {
-   /**
-    * @brief Dispatch events from a Wayland event queue
-    *
-    * Dispatch events from a given Wayland display event queue, including calling event handlers, and flush out any
-    * requests the event handlers may have written. Specification of a timeout allows the wait to be bounded. If any
-    * events are already pending dispatch (have been read from the display by another thread or event queue), they
-    * will be dispatched and the function will return immediately, without waiting for new events to arrive.
-    *
-    * @param  display Wayland display to dispatch events from
-    * @param  queue   Event queue to dispatch events from; other event queues will not have their handlers called from
-    *                 within this function
-    * @param  timeout Maximum time to wait for events to arrive, in milliseconds
-    * @return         1 if one or more events were dispatched on this queue, 0 if the timeout was reached without any
-    *                 events being dispatched, or -1 on error.
-    */
-   int dispatch_queue(struct wl_display *display, struct wl_event_queue *queue, int timeout);
-}
+/**
+ * @brief Dispatch events from a Wayland event queue
+ *
+ * Dispatch events from a given Wayland display event queue, including calling event handlers, and flush out any
+ * requests the event handlers may have written. Specification of a timeout allows the wait to be bounded. If any
+ * events are already pending dispatch (have been read from the display by another thread or event queue), they
+ * will be dispatched and the function will return immediately, without waiting for new events to arrive.
+ *
+ * @param  display Wayland display to dispatch events from
+ * @param  queue   Event queue to dispatch events from; other event queues will not have their handlers called from
+ *                 within this function
+ * @param  timeout Maximum time to wait for events to arrive, in milliseconds
+ * @return         1 if one or more events were dispatched on this queue, 0 if the timeout was reached without any
+ *                 events being dispatched, or -1 on error.
+ */
+int dispatch_queue(struct wl_display *display, struct wl_event_queue *queue, int timeout);

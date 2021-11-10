@@ -33,6 +33,7 @@
 #include "wsi/surface.hpp"
 #include "surface_properties.hpp"
 #include "wl_object_owner.hpp"
+#include "util/macros.hpp"
 
 namespace wsi
 {
@@ -48,8 +49,9 @@ struct drm_format_pair
 /**
  * Wayland callback for global wl_registry events to handle global objects required by @ref wsi::wayland::surface
  */
-extern "C" void surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name,
-                                         const char *interface, uint32_t version);
+VWL_CAPI_CALL(void)
+surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
+                         uint32_t version) VWL_API_POST;
 
 class surface : public wsi::surface
 {
@@ -148,7 +150,7 @@ private:
    bool init();
 
    friend void surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name,
-                                        const char *interface, uint32_t version);
+                                        const char *interface, uint32_t version) VWL_API_POST;
 
    /** The native Wayland display */
    wl_display *wayland_display;

@@ -7,6 +7,9 @@
         "api_version": "1.2.191",
         "implementation_version": "1",
         "description": "Window system integration layer",
+        "functions": {
+            "vkNegotiateLoaderLayerInterfaceVersion": "wsi_layer_vkNegotiateLoaderLayerInterfaceVersion"
+        },
         "instance_extensions": [
             {"name" : "VK_EXT_headless_surface", "spec_version" : "1"},
             {"name" : "VK_KHR_wayland_surface", "spec_version" : "6"},

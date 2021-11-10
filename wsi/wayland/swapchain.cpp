@@ -41,6 +41,7 @@
 #include "util/drm/drm_utils.hpp"
 #include "util/log.hpp"
 #include "util/helpers.hpp"
+#include "util/macros.hpp"
 
 #define MAX_PLANES 4
 
@@ -143,8 +144,8 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    return VK_SUCCESS;
 }
 
-extern "C" void create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *params,
-                                 struct wl_buffer *buffer)
+VWL_CAPI_CALL(void)
+create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *params, struct wl_buffer *buffer) VWL_API_POST
 {
    auto wayland_buffer = reinterpret_cast<wl_buffer **>(data);
    *wayland_buffer = buffer;
@@ -152,14 +153,14 @@ extern "C" void create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *
    zwp_linux_buffer_params_v1_destroy(params);
 }
 
-extern "C" void create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
+VWL_CAPI_CALL(void) create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
 {
    zwp_linux_buffer_params_v1_destroy(params);
 }
 
 static const struct zwp_linux_buffer_params_v1_listener params_listener = { create_succeeded, create_failed };
 
-extern "C" void buffer_release(void *data, struct wl_buffer *wayl_buffer)
+VWL_CAPI_CALL(void) buffer_release(void *data, struct wl_buffer *wayl_buffer) VWL_API_POST
 {
    auto sc = reinterpret_cast<swapchain *>(data);
    sc->release_buffer(wayl_buffer);

@@ -23,27 +23,27 @@
  */
 
 #include "custom_allocator.hpp"
+#include "macros.hpp"
+#include <vulkan/vulkan.h>
 
-extern "C" {
+namespace util
+{
 
-static void *default_allocation(void *, size_t size, size_t, VkSystemAllocationScope)
+VWL_VKAPI_CALL(void *) default_allocation(void *, size_t size, size_t, VkSystemAllocationScope) VWL_API_POST
 {
    return malloc(size);
 }
 
-static void *default_reallocation(void *, void *pOriginal, size_t size, size_t, VkSystemAllocationScope)
+VWL_VKAPI_CALL(void *)
+default_reallocation(void *, void *pOriginal, size_t size, size_t, VkSystemAllocationScope) VWL_API_POST
 {
    return realloc(pOriginal, size);
 }
 
-static void default_free(void *, void *pMemory)
+VWL_VKAPI_CALL(void) default_free(void *, void *pMemory) VWL_API_POST
 {
    free(pMemory);
 }
-}
-
-namespace util
-{
 
 const allocator& allocator::get_generic()
 {

@@ -49,6 +49,7 @@ struct image_data
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
    : wsi::swapchain_base(dev_data, pAllocator)
+   , m_image_create_info()
 {
 }
 
@@ -60,7 +61,7 @@ swapchain::~swapchain()
 
 VkResult swapchain::create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image)
 {
-   return m_device_data.disp.CreateImage(m_device, image_create_info, get_allocation_callbacks(), image);
+   return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image);
 }
 
 VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
@@ -68,6 +69,7 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    VkResult res = VK_SUCCESS;
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
 
+   m_image_create_info = image_create;
    res = m_device_data.disp.CreateImage(m_device, &image_create, get_allocation_callbacks(), &image.image);
    if (res != VK_SUCCESS)
    {

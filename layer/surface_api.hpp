@@ -30,41 +30,41 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-
-extern "C" {
+#include "util/macros.hpp"
 
 /**
  * @brief Implements vkGetPhysicalDeviceSurfaceCapabilitiesKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice,
-                                                                        VkSurfaceKHR surface,
-                                                                        VkSurfaceCapabilitiesKHR *pSurfaceCapabilities);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                    VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) VWL_API_POST;
 
 /**
  * @brief Implements vkGetPhysicalDeviceSurfaceFormatsKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,
-                                                                   VkSurfaceKHR surface, uint32_t *pSurfaceFormatCount,
-                                                                   VkSurfaceFormatKHR *pSurfaceFormats);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                               uint32_t *pSurfaceFormatCount,
+                                               VkSurfaceFormatKHR *pSurfaceFormats) VWL_API_POST;
 
 /**
  * @brief Implements vkGetPhysicalDeviceSurfacePresentModesKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice,
-                                                                        VkSurfaceKHR surface,
-                                                                        uint32_t *pPresentModeCount,
-                                                                        VkPresentModeKHR *pPresentModes);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                    uint32_t *pPresentModeCount,
+                                                    VkPresentModeKHR *pPresentModes) VWL_API_POST;
 
 /**
  * @brief Implements vkGetPhysicalDeviceSurfaceSupportKHR Vulkan entrypoint.
  */
-VKAPI_ATTR VkResult wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
-                                                                   uint32_t queueFamilyIndex, VkSurfaceKHR surface,
-                                                                   VkBool32 *pSupported);
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+                                               VkSurfaceKHR surface, VkBool32 *pSupported) VWL_API_POST;
 
 /**
  * @brief Implements vkDestroySurfaceKHR Vulkan entrypoint.
  */
-VKAPI_ATTR void wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
-                                              const VkAllocationCallbacks *pAllocator);
-}
+VWL_VKAPI_CALL(void)
+wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                              const VkAllocationCallbacks *pAllocator) VWL_API_POST;

@@ -47,13 +47,15 @@ struct formats_vector
 namespace
 {
 /* Handler for format event of the zwp_linux_dmabuf_v1 interface. */
-extern "C" void zwp_linux_dmabuf_v1_format_impl(void *data, struct zwp_linux_dmabuf_v1 *dma_buf, uint32_t drm_format)
+VWL_CAPI_CALL(void)
+zwp_linux_dmabuf_v1_format_impl(void *data, struct zwp_linux_dmabuf_v1 *dma_buf, uint32_t drm_format) VWL_API_POST
 {
 }
 
 /* Handler for modifier event of the zwp_linux_dmabuf_v1 interface. */
-extern "C" void zwp_linux_dmabuf_v1_modifier_impl(void *data, struct zwp_linux_dmabuf_v1 *dma_buf, uint32_t drm_format,
-                                                  uint32_t modifier_hi, uint32_t modifier_low)
+VWL_CAPI_CALL(void)
+zwp_linux_dmabuf_v1_modifier_impl(void *data, struct zwp_linux_dmabuf_v1 *dma_buf, uint32_t drm_format,
+                                  uint32_t modifier_hi, uint32_t modifier_low) VWL_API_POST
 {
    auto *drm_supported_formats = reinterpret_cast<formats_vector *>(data);
 
@@ -135,8 +137,9 @@ surface::surface(const init_parameters &params)
 {
 }
 
-void surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
-                              uint32_t version)
+VWL_CAPI_CALL(void)
+surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t name, const char *interface,
+                         uint32_t version) VWL_API_POST
 {
    auto wsi_surface = reinterpret_cast<wsi::wayland::surface *>(data);
 

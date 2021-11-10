@@ -37,6 +37,7 @@
 
 #include "surface_properties.hpp"
 #include "surface.hpp"
+#include "util/macros.hpp"
 
 #define UNUSED(x) ((void)(x))
 
@@ -169,10 +170,9 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    return res;
 }
 
-extern "C" VKAPI_ATTR VkResult VKAPI_CALL CreateHeadlessSurfaceEXT(VkInstance instance,
-                                                                   const VkHeadlessSurfaceCreateInfoEXT *pCreateInfo,
-                                                                   const VkAllocationCallbacks *pAllocator,
-                                                                   VkSurfaceKHR *pSurface)
+VWL_VKAPI_CALL(VkResult)
+CreateHeadlessSurfaceEXT(VkInstance instance, const VkHeadlessSurfaceCreateInfoEXT *pCreateInfo,
+                         const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface) VWL_API_POST
 {
    auto &instance_data = layer::instance_private_data::get(instance);
    util::allocator allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };

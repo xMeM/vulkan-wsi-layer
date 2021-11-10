@@ -22,7 +22,17 @@ enabled via a build option [as explained below](#building-with-wayland-support).
 * [CMake](https://cmake.org) version 3.4.3 or above.
 * C++11 compiler.
 * Vulkan® loader and associated headers with support for the
-  `VK_EXT_headless_surface` extension.
+  `VK_EXT_headless_surface` extension and for the Vulkan 1.1, or later API.
+
+The Vulkan WSI Layer uses Vulkan extensions to communicate with the Vulkan ICDs.
+The ICDs installed in the system are required to support the Vulkan 1.1, or
+later API, and the following device extensions:
+* When Wayland support is enabled:
+  * VK_EXT_image_drm_format_modifier
+  * VK_KHR_image_format_list
+  * VK_EXT_external_memory_dma_buf
+  * VK_KHR_external_memory_fd
+  * VK_KHR_external_fence_fd
 
 ### Building the Vulkan® loader
 
@@ -40,7 +50,7 @@ make
 make install
 ```
 
-### Building the layer
+### Building with headless support
 
 The layer requires a version of the loader and headers that includes support for
 the `VK_EXT_headless_surface` extension. By default, the build system will use
@@ -59,19 +69,46 @@ cmake . -Bbuild
 make -C build
 ```
 
-#### Building with Wayland support
+### Building with Wayland support
 
 In order to build with Wayland support the `BUILD_WSI_WAYLAND` build option
 must be used, the `SELECT_EXTERNAL_ALLOCATOR` option has to be set to
-an allocator (currently only ion is supported) and the `KERNEL_DIR` option must
-be defined as the root of the Linux kernel source.
+a graphics memory allocator (currently only ion is supported) and
+the `KERNEL_DIR` option must be defined as the root of the Linux kernel
+source.
 
 ```
 cmake . -DVULKAN_CXX_INCLUDE="path/to/vulkan-header" \
+        -DBUILD_WSI_HEADLESS=0 \
         -DBUILD_WSI_WAYLAND=1 \
         -DSELECT_EXTERNAL_ALLOCATOR=ion \
         -DKERNEL_DIR="path/to/linux-kernel-source"
 ```
+
+In the command line above, `-DBUILD_WSI_HEADLESS=0` is used to disable support
+for `VK_EXT_headless_surface`, which is otherwise enabled by default.
+
+Note that a custom graphics memory allocator implementation can be provided
+using the `EXTERNAL_WSIALLOC_LIBRARY` option. For example,
+
+```
+cmake . -DVULKAN_CXX_INCLUDE="path/to/vulkan-header" \
+        -DBUILD_WSI_WAYLAND=1 \
+        -DEXTERNAL_WSIALLOC_LIBRARY="path/to/custom/libwsialloc" \
+        -DKERNEL_DIR="path/to/linux-kernel-source"
+```
+
+The `EXTERNAL_WSIALLOC_LIBRARY` option allows to specify the path to a library
+containing the implementation of the graphics memory allocator API, as
+described in [the wsialloc.h header file](util/wsialloc/wsialloc.h).
+The allocator is not only responsible for allocating graphics buffers, but is
+also responsible for selecting a suitable format that can be
+efficiently shared between the different devices in the system, e.g. GPU,
+display. It is therefore an important point of integration. It is expected
+that each system will need a tailored implementation, although the layer
+provides a generic ion implementation that may work in systems that support
+linear formats. This is selected by the `-DSELECT_EXTERNAL_ALLOCATOR=ion`
+option, as shown above.
 
 Wayland support is still **EXPERIMENTAL**. What this means in practice is that
 the support is incomplete and not ready for prime time.
@@ -80,7 +117,7 @@ the support is incomplete and not ready for prime time.
 
 Copy the shared library `libVkLayer_window_system_integration.so` and JSON
 configuration `VkLayer_window_system_integration.json` into a Vulkan®
-[implicit layer directory](https://vulkan.lunarg.com/doc/view/1.0.39.0/windows/layers.html#user-content-configuring-layers-on-linux).
+[implicit layer directory](https://github.com/KhronosGroup/Vulkan-Loader/blob/master/docs/LoaderLayerInterface.md#linux-layer-discovery).
 
 ## Contributing
 
