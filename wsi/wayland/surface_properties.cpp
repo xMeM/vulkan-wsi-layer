@@ -221,7 +221,70 @@ VkResult surface_properties::get_required_device_extensions(util::extension_list
    return extension_list.add(required_device_extensions, NELEMS(required_device_extensions));
 }
 
-/* TODO: Check for zwp_linux_dmabuf_v1 protocol in display */
+struct required_properties
+{
+   bool dmabuf;
+   bool explicit_sync;
+};
+
+VWL_CAPI_CALL(void)
+check_required_protocols(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
+                         uint32_t version) VWL_API_POST
+{
+   auto supported = static_cast<required_properties *>(data);
+
+   if (!strcmp(interface, zwp_linux_dmabuf_v1_interface.name) && version >= ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION)
+   {
+      supported->dmabuf = true;
+   }
+   else if (!strcmp(interface, zwp_linux_explicit_synchronization_v1_interface.name))
+   {
+      supported->explicit_sync = true;
+   }
+}
+
+static const wl_registry_listener registry_listener = { check_required_protocols };
+
+static bool check_wl_protocols(struct wl_display *display)
+{
+   required_properties supported = {};
+
+   auto protocol_queue = wayland_owner<wl_event_queue>{ wl_display_create_queue(display) };
+   if (protocol_queue.get() == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to create wl surface queue.");
+      return false;
+   }
+   auto display_proxy = make_proxy_with_queue(display, protocol_queue.get());
+   if (display_proxy == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to create wl display proxy.");
+      return false;
+   };
+   auto registry = wayland_owner<wl_registry>{ wl_display_get_registry(display_proxy.get()) };
+   if (registry.get() == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to get wl display registry.");
+      return false;
+   }
+
+   int res = wl_registry_add_listener(registry.get(), &registry_listener, &supported);
+   if (res < 0)
+   {
+      WSI_LOG_ERROR("Failed to add registry listener.");
+      return false;
+   }
+
+   res = wl_display_roundtrip_queue(display, protocol_queue.get());
+   if (res < 0)
+   {
+      WSI_LOG_ERROR("Roundtrip failed.");
+      return false;
+   }
+
+   return (supported.dmabuf && supported.explicit_sync);
+}
+
 VWL_VKAPI_CALL(VkBool32)
 GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physical_device, uint32_t queue_index,
                                                struct wl_display *display)
@@ -229,6 +292,11 @@ GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physical_device,
    bool dev_supports_sync =
       sync_fd_fence_sync::is_supported(layer::instance_private_data::get(physical_device), physical_device);
    if (!dev_supports_sync)
+   {
+      return VK_FALSE;
+   }
+
+   if (!check_wl_protocols(display))
    {
       return VK_FALSE;
    }
