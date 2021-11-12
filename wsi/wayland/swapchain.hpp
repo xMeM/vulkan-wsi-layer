@@ -174,8 +174,6 @@ private:
     * surface is valid until swapchain is destroyed. */
    surface *m_wsi_surface;
 
-   /* The queue on which we dispatch the swapchain related events, mostly frame completion */
-   struct wl_event_queue *m_swapchain_queue;
    /* The queue on which we dispatch buffer related events, mostly buffer_release */
    struct wl_event_queue *m_buffer_queue;
 

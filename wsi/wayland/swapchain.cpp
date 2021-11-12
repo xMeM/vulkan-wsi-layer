@@ -78,7 +78,6 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
    , m_display(wsi_surface.get_wl_display())
    , m_surface(wsi_surface.get_wl_surface())
    , m_wsi_surface(&wsi_surface)
-   , m_swapchain_queue(nullptr)
    , m_buffer_queue(nullptr)
    , m_wsi_allocator(nullptr)
    , m_image_creation_parameters({}, {}, m_allocator, {}, {})
@@ -95,10 +94,6 @@ swapchain::~swapchain()
       wsialloc_delete(m_wsi_allocator);
    }
    m_wsi_allocator = nullptr;
-   if (m_swapchain_queue != nullptr)
-   {
-      wl_event_queue_destroy(m_swapchain_queue);
-   }
    if (m_buffer_queue != nullptr)
    {
       wl_event_queue_destroy(m_buffer_queue);
@@ -110,14 +105,6 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
 {
    if ((m_display == nullptr) || (m_surface == nullptr) || (m_wsi_surface->get_dmabuf_interface() == nullptr))
    {
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   m_swapchain_queue = wl_display_create_queue(m_display);
-
-   if (m_swapchain_queue == nullptr)
-   {
-      WSI_LOG_ERROR("Failed to create swapchain wl queue.");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -144,22 +131,6 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
 
    return VK_SUCCESS;
 }
-
-VWL_CAPI_CALL(void)
-create_succeeded(void *data, struct zwp_linux_buffer_params_v1 *params, struct wl_buffer *buffer) VWL_API_POST
-{
-   auto wayland_buffer = reinterpret_cast<wl_buffer **>(data);
-   *wayland_buffer = buffer;
-
-   zwp_linux_buffer_params_v1_destroy(params);
-}
-
-VWL_CAPI_CALL(void) create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
-{
-   zwp_linux_buffer_params_v1_destroy(params);
-}
-
-static const struct zwp_linux_buffer_params_v1_listener params_listener = { create_succeeded, create_failed };
 
 VWL_CAPI_CALL(void) buffer_release(void *data, struct wl_buffer *wayl_buffer) VWL_API_POST
 {
@@ -590,45 +561,20 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    }
 
    /* create a wl_buffer using the dma_buf protocol */
-   auto dmabuf_interface_proxy = make_proxy_with_queue(m_wsi_surface->get_dmabuf_interface(), m_swapchain_queue);
-   if (dmabuf_interface_proxy == nullptr)
-   {
-      WSI_LOG_ERROR("Failed to allocate dma-buf interface proxy.");
-      destroy_image(image);
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(dmabuf_interface_proxy.get());
+   zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(m_wsi_surface->get_dmabuf_interface());
    for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
    {
       zwp_linux_buffer_params_v1_add(params, image_data->buffer_fd[plane], plane,
                                      image_data->offset[plane], image_data->stride[plane], 0, 0);
    }
 
-   auto res = zwp_linux_buffer_params_v1_add_listener(params, &params_listener, &image_data->buffer);
-   if (res < 0)
-   {
-      destroy_image(image);
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
    const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
-   zwp_linux_buffer_params_v1_create(params, image_create_info.extent.width,
-                                     image_create_info.extent.height, fourcc, 0);
-
-   /* TODO: don't roundtrip - we should be able to send the create request now,
-    * and only wait for it on first present. only do this once, not for all buffers created */
-   res = wl_display_roundtrip_queue(m_display, m_swapchain_queue);
-   if (res < 0)
-   {
-      destroy_image(image);
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   /* should now have a wl_buffer */
-   assert(image_data->buffer);
+   image_data->buffer = zwp_linux_buffer_params_v1_create_immed(params, image_create_info.extent.width,
+                                                                image_create_info.extent.height, fourcc, 0);
+   zwp_linux_buffer_params_v1_destroy(params);
 
    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(image_data->buffer), m_buffer_queue);
-   res = wl_buffer_add_listener(image_data->buffer, &buffer_listener, this);
+   auto res = wl_buffer_add_listener(image_data->buffer, &buffer_listener, this);
    if (res < 0)
    {
       destroy_image(image);
