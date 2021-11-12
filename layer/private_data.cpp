@@ -125,7 +125,7 @@ VkResult instance_private_data::associate(VkInstance instance, instance_dispatch
    auto result = g_instance_data.try_insert(std::make_pair(key, instance_data.get()));
    if (result.has_value())
    {
-      instance_data.release();
+      instance_data.release(); // NOLINT(bugprone-unused-return-value)
       return VK_SUCCESS;
    }
    else
@@ -302,7 +302,7 @@ VkResult device_private_data::associate(VkDevice dev, instance_private_data &ins
    auto result = g_device_data.try_insert(std::make_pair(key, device_data.get()));
    if (result.has_value())
    {
-      device_data.release();
+      device_data.release(); // NOLINT(bugprone-unused-return-value)
       return VK_SUCCESS;
    }
    else

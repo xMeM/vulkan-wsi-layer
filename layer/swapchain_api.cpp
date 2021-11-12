@@ -89,7 +89,7 @@ wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
    }
 
    assert(swapc != VK_NULL_HANDLE);
-   wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
+   auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
    wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
 }
 
@@ -106,7 +106,7 @@ wsi_layer_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapc, uint32_
 
    assert(pSwapchainImageCount != nullptr);
    assert(swapc != VK_NULL_HANDLE);
-   wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
+   auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
    return sc->get_swapchain_images(pSwapchainImageCount, pSwapchainImages);
 }
 
@@ -124,7 +124,7 @@ wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t 
    assert(swapc != VK_NULL_HANDLE);
    assert(semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE);
    assert(pImageIndex != nullptr);
-   wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
+   auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
    return sc->acquire_next_image(timeout, semaphore, fence, pImageIndex);
 }
 
@@ -209,7 +209,7 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
    {
       VkSwapchainKHR swapc = pPresentInfo->pSwapchains[i];
 
-      wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
+      auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
       assert(sc != nullptr);
 
       res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i]);
@@ -326,7 +326,7 @@ wsi_layer_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageInfoKH
       return device_data.disp.AcquireNextImage2KHR(device, pAcquireInfo, pImageIndex);
    }
 
-   wsi::swapchain_base *sc = reinterpret_cast<wsi::swapchain_base *>(pAcquireInfo->swapchain);
+   auto *sc = reinterpret_cast<wsi::swapchain_base *>(pAcquireInfo->swapchain);
 
    return sc->acquire_next_image(pAcquireInfo->timeout, pAcquireInfo->semaphore, pAcquireInfo->fence, pImageIndex);
 }
@@ -337,9 +337,8 @@ wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo, c
 {
    auto &device_data = layer::device_private_data::get(device);
 
-   const VkImageSwapchainCreateInfoKHR *image_sc_create_info =
-      util::find_extension<VkImageSwapchainCreateInfoKHR>(VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR,
-         pCreateInfo->pNext);
+   const auto *image_sc_create_info = util::find_extension<VkImageSwapchainCreateInfoKHR>(
+      VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR, pCreateInfo->pNext);
 
    if (image_sc_create_info == nullptr || !device_data.layer_owns_swapchain(image_sc_create_info->swapchain))
    {
@@ -358,7 +357,7 @@ wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
 
    for (uint32_t i = 0; i < bindInfoCount; i++)
    {
-      const VkBindImageMemorySwapchainInfoKHR *bind_sc_info = util::find_extension<VkBindImageMemorySwapchainInfoKHR>(
+      const auto *bind_sc_info = util::find_extension<VkBindImageMemorySwapchainInfoKHR>(
          VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR, pBindInfos[i].pNext);
 
       if (bind_sc_info == nullptr || bind_sc_info->swapchain == VK_NULL_HANDLE ||

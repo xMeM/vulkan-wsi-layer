@@ -25,7 +25,7 @@
 #include "extension_list.hpp"
 #include "util/custom_allocator.hpp"
 #include <layer/private_data.hpp>
-#include <string.h>
+#include <cstring>
 #include <cassert>
 
 namespace util

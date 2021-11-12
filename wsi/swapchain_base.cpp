@@ -171,9 +171,11 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
 swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *callbacks)
    : m_device_data(dev_data)
    , m_page_flip_thread_run(false)
+   , m_is_valid(false)
+   , m_start_present_semaphore()
    , m_thread_sem_defined(false)
    , m_first_present(true)
-   , m_pending_buffer_pool{}
+   , m_pending_buffer_pool()
    , m_allocator(dev_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, callbacks)
    , m_swapchain_images(m_allocator)
    , m_surface(VK_NULL_HANDLE)
@@ -385,7 +387,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
 
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
 
-   uint32_t i;
+   size_t i;
    for (i = 0; i < m_swapchain_images.size(); ++i)
    {
       if (m_swapchain_images[i].status == swapchain_image::FREE)
@@ -549,7 +551,7 @@ void swapchain_base::wait_for_pending_buffers()
    /* Waiting for free images waits for both free and pending. One pending image may be presented and acquired by a
     * compositor. The WSI backend may not necessarily know which pending image is presented to change its state. It may
     * be impossible to wait for that one presented image. */
-   wait = m_swapchain_images.size() - acquired_images - 1;
+   wait = static_cast<int>(m_swapchain_images.size()) - acquired_images - 1;
    image_status_lock.unlock();
 
    while (wait > 0)

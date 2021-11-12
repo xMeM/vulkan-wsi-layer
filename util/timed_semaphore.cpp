@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -62,7 +62,7 @@ VkResult timed_semaphore::init(unsigned count)
    /* only programming error can cause _destroy to fail */
    assert(res == 0);
 
-   res = pthread_mutex_init(&m_mutex, NULL);
+   res = pthread_mutex_init(&m_mutex, nullptr);
    /* only programming errors can result in failure */
    assert(res == 0);
 
@@ -114,7 +114,7 @@ VkResult timed_semaphore::wait(uint64_t timeout)
                                   static_cast<long>(timeout % (1000 * 1000 * 1000))
          };
 
-         struct timespec now;
+         struct timespec now = {};
          res = clock_gettime(CLOCK_MONOTONIC, &now);
          assert(res == 0); /* only fails with programming error (EINVAL, EFAULT, EPERM) */
 

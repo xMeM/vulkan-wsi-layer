@@ -24,17 +24,15 @@
 
 #pragma once
 #include <cassert>
+#include "helpers.hpp"
 
 namespace util
 {
 template <typename T>
-class optional
+class optional : private noncopyable
 {
 public:
    using value_type = T;
-
-   optional(const optional &) = delete;
-   optional &operator=(const optional &) = delete;
 
    /**
     * @brief Construct an empty optional object.

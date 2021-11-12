@@ -45,6 +45,7 @@ extern "C"
 }
 
 #include <vulkan/vulkan.h>
+#include "helpers.hpp"
 
 namespace util
 {
@@ -61,13 +62,9 @@ namespace util
  *
  * This code does not use the C++ standard library to avoid exceptions.
  */
-class timed_semaphore
+class timed_semaphore : private noncopyable
 {
 public:
-   /* copying not implemented */
-   timed_semaphore &operator=(const timed_semaphore &) = delete;
-   timed_semaphore(const timed_semaphore &) = delete;
-
    ~timed_semaphore();
    timed_semaphore()
       : initialized(false){};

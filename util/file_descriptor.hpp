@@ -33,13 +33,15 @@
 #include <unistd.h>
 #include <utility>
 
+#include "helpers.hpp"
+
 namespace util
 {
 
 /**
  * Manages a POSIX file descriptor.
  */
-class fd_owner
+class fd_owner : private noncopyable
 {
 public:
 
@@ -48,9 +50,6 @@ public:
     : fd_handle{ fd }
    {
    }
-
-   fd_owner(const fd_owner &) = delete;
-   fd_owner &operator=(const fd_owner &) = delete;
 
    fd_owner(fd_owner &&rhs)
    {

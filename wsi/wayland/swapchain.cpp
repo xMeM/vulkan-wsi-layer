@@ -398,8 +398,8 @@ VkResult swapchain::create_aliased_image_handle(const VkImageCreateInfo *image_c
                                          get_allocation_callbacks(), image);
 }
 
-VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
-                                      util::vector<wsialloc_format> importable_formats,
+VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data &image_data,
+                                      util::vector<wsialloc_format> &importable_formats,
                                       wsialloc_format *allocated_format)
 {
    bool is_protected_memory = (image_create_info.flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0;
@@ -407,8 +407,8 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
    wsialloc_allocate_info alloc_info = { importable_formats.data(), static_cast<unsigned>(importable_formats.size()),
                                        image_create_info.extent.width, image_create_info.extent.height,
                                        allocation_flags };
-   const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, allocated_format, image_data->stride,
-                                   image_data->buffer_fd, image_data->offset);
+   const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, allocated_format, image_data.stride,
+                                   image_data.buffer_fd, image_data.offset);
    if (res != WSIALLOC_ERROR_NONE)
    {
       WSI_LOG_ERROR("Failed allocation of DMA Buffer. WSI error: %d", static_cast<int>(res));
@@ -442,7 +442,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       {
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
-      VkResult result = allocate_wsialloc(m_image_create_info, image_data, importable_formats, &m_allocated_format);
+      VkResult result = allocate_wsialloc(m_image_create_info, *image_data, importable_formats, &m_allocated_format);
       if (result != VK_SUCCESS)
       {
          return result;
@@ -473,7 +473,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       }
 
       wsialloc_format allocated_format = { 0 };
-      result = allocate_wsialloc(image_create_info, image_data, importable_formats, &allocated_format);
+      result = allocate_wsialloc(image_create_info, *image_data, importable_formats, &allocated_format);
       if (result != VK_SUCCESS)
       {
          return result;

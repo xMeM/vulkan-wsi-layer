@@ -163,8 +163,8 @@ private:
    struct wayland_image_data;
 
    VkResult allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image);
-   VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
-                              util::vector<wsialloc_format> importable_formats, wsialloc_format *allocated_format);
+   VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data &image_data,
+                              util::vector<wsialloc_format> &importable_formats, wsialloc_format *allocated_format);
    VkResult internal_bind_swapchain_image(VkDevice &device, wayland_image_data *swapchain_image,
                                           const VkImage &image);
 

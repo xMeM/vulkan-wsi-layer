@@ -26,6 +26,13 @@ project(VkLayer_window_system_integration)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(VULKAN_PKG_CONFIG vulkan)
 
+find_program(CLANG_TIDY clang-tidy-8)
+
+if (NOT CLANG_TIDY STREQUAL "CLANG_TIDY-NOTFOUND")
+   message(STATUS "Using clang-tidy: ${CLANG_TIDY}")
+   set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY} -checks=bugprone-*,modernize-*)
+endif()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pthread -fPIC")
 if (DEFINED DEBUG)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
