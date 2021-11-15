@@ -128,6 +128,7 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
+   WSIALLOC_ASSERT_VERSION();
    if (wsialloc_new(&m_wsi_allocator) != WSIALLOC_ERROR_NONE)
    {
       WSI_LOG_ERROR("Failed to create wsi allocator.");

@@ -80,10 +80,11 @@ if(BUILD_DRM_UTILS)
    target_sources(drm_utils PRIVATE util/drm/format_table.c)
    target_include_directories(drm_utils PRIVATE ${VULKAN_CXX_INCLUDE})
    target_include_directories(drm_utils PUBLIC ${LIBDRM_INCLUDE_DIRS})
+   target_include_directories(drm_utils PUBLIC util/wsialloc)
    target_compile_options(drm_utils PUBLIC ${LIBDRM_CFLAGS})
 endif()
 
-# External WSI Alloctator
+# External WSI Allocator
 if(NOT SELECT_EXTERNAL_ALLOCATOR STREQUAL "none" AND EXTERNAL_WSIALLOC_LIBRARY STREQUAL "")
    add_library(wsialloc STATIC)
    set_target_properties(wsialloc PROPERTIES C_STANDARD 99)

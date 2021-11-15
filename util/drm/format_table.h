@@ -26,14 +26,12 @@
 
 #include <vulkan/vulkan.h>
 #include <drm_fourcc.h>
+#include "wsialloc.h"
 
 /* Define DRM linear modifier for compatibility with older DRM header versions. */
 #ifndef DRM_FORMAT_MOD_LINEAR
 #define DRM_FORMAT_MOD_LINEAR 0
 #endif
-
-/* Maximum number of planes that can be returned */
-#define WSIALLOCP_MAX_PLANES 4
 
 #define NELEMS(x) (sizeof(x) / sizeof(x[0]))
 
@@ -41,7 +39,7 @@ typedef struct fmt_spec
 {
    uint32_t drm_format;
    uint32_t nr_planes;
-   uint8_t bpp[WSIALLOCP_MAX_PLANES];
+   uint8_t bpp[WSIALLOC_MAX_PLANES];
    VkFormat vk_format;
 } fmt_spec;
 

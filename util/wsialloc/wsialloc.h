@@ -53,7 +53,42 @@ extern "C" {
  * All API Public entry points are implemented in a way that is thread safe, and the client does not need to be
  * concerned with locking when using these APIs. If implementers make use of non-threadsafe functions, writable global
  * data etc they must make appropriate use of locks.
+ *
+ * Version History:
+ * 1 - Initial wsialloc interface
  */
+
+#define WSIALLOC_INTERFACE_VERSION 1
+
+#define WSIALLOC_CONCAT(x, y) x##y
+#define WSIALLOC_SYMBOL_VERSION(symbol, version) WSIALLOC_CONCAT(symbol, version)
+
+/**
+ * @brief This symbol must be defined by any implementation of the wsialloc interface as defined in this header.
+ *
+ * A wsialloc implementation defining this symbol is declaring it implements
+ * the exact version of the wsialloc interface defined in this header.
+ */
+#define WSIALLOC_IMPLEMENTATION_VERSION_SYMBOL \
+   WSIALLOC_SYMBOL_VERSION(wsialloc_symbol_version_, WSIALLOC_INTERFACE_VERSION)
+extern const uint32_t WSIALLOC_IMPLEMENTATION_VERSION_SYMBOL;
+
+/**
+ * @brief Aborts if the wsialloc implementation version is not the expected one.
+ *
+ * This macro calls abort() if the version of the wsialloc implementation that was linked to the code using this
+ * macro is not matching the version defined in the wsialloc.h header that is being included. This can be useful
+ * to catch compatibility issues in code that links to an external static library implementing the wsialloc
+ * interface.
+ */
+#define WSIALLOC_ASSERT_VERSION()                                            \
+   if (WSIALLOC_IMPLEMENTATION_VERSION_SYMBOL != WSIALLOC_INTERFACE_VERSION) \
+   {                                                                         \
+      abort();                                                               \
+   }
+
+/* Maximum number of planes that can be returned */
+#define WSIALLOC_MAX_PLANES 4
 
 /**
  * @brief Allocator type.

@@ -39,6 +39,20 @@
 #include <unistd.h>
 #include <string.h>
 
+/**
+ * @brief Version of the wsialloc interface we are implementing in this file.
+ *
+ * This should only be increased when this implementation is updated to match newer versions of wsialloc.h.
+ */
+#define WSIALLOC_IMPLEMENTATION_VERSION 1
+
+/* Ensure we are implementing the wsialloc version matching the wsialloc.h header we are using. */
+#if WSIALLOC_IMPLEMENTATION_VERSION != WSIALLOC_INTERFACE_VERSION
+#error "Version mismatch between wsialloc implementation and interface version"
+#endif
+
+const uint32_t WSIALLOC_IMPLEMENTATION_VERSION_SYMBOL = WSIALLOC_IMPLEMENTATION_VERSION;
+
 /** Default alignment */
 #define WSIALLOCP_MIN_ALIGN_SZ (64u)
 /** Maximum image size allowed for each dimension */
@@ -252,7 +266,7 @@ static const fmt_spec *find_format(uint32_t fourcc)
       if (fourcc == fourcc_format_table[i].drm_format)
       {
          const fmt_spec *found_fmt = &fourcc_format_table[i];
-         assert(found_fmt->nr_planes <= WSIALLOCP_MAX_PLANES);
+         assert(found_fmt->nr_planes <= WSIALLOC_MAX_PLANES);
 
          return found_fmt;
       }
@@ -298,9 +312,9 @@ wsialloc_error wsialloc_alloc(wsialloc_allocator *allocator, const wsialloc_allo
       return WSIALLOC_ERROR_INVALID;
    }
 
-   int local_strides[WSIALLOCP_MAX_PLANES];
-   int local_fds[WSIALLOCP_MAX_PLANES] = { -1 };
-   int local_offsets[WSIALLOCP_MAX_PLANES];
+   int local_strides[WSIALLOC_MAX_PLANES];
+   int local_fds[WSIALLOC_MAX_PLANES] = { -1 };
+   int local_offsets[WSIALLOC_MAX_PLANES];
    wsialloc_error err = WSIALLOC_ERROR_NONE;
    wsialloc_format_descriptor selected_format_desc = {};
 
