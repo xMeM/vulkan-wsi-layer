@@ -32,9 +32,6 @@
                 ]
             }
         ],
-        "enable_environment": {
-            "ENABLE_WSI_LAYER": "1"
-        },
         "disable_environment": {
             "DISABLE_WSI_LAYER": "1"
         }
