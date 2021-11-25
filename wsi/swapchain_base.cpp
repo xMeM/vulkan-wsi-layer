@@ -131,15 +131,7 @@ bool swapchain_base::has_descendant_started_presenting()
    }
 
    auto *desc = reinterpret_cast<swapchain_base *>(m_descendant);
-   for (auto &image : desc->m_swapchain_images)
-   {
-      if (image.status == swapchain_image::PRESENTED || image.status == swapchain_image::PENDING)
-      {
-         return true;
-      }
-   }
-
-   return false;
+   return desc->m_started_presenting;
 }
 
 VkResult swapchain_base::init_page_flip_thread()
@@ -194,6 +186,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_queue(VK_NULL_HANDLE)
    , m_image_acquire_lock()
    , m_error_state(VK_NOT_READY)
+   , m_started_presenting(false)
 {
 }
 
@@ -486,6 +479,7 @@ VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
    }
 
    m_swapchain_images[image_index].status = swapchain_image::PENDING;
+   m_started_presenting = true;
 
    if (m_page_flip_thread_run)
    {

@@ -513,7 +513,7 @@ private:
    void call_present(uint32_t image_index);
 
    /**
-    * @brief Return true if the descendant has an image with PENDING or PRESENTED status.
+    * @brief Return true if the descendant has started presenting.
     */
    bool has_descendant_started_presenting();
 
@@ -536,6 +536,11 @@ private:
     * @return VK_SUCCESS on success or an error code otherwise.
     */
    VkResult notify_presentation_engine(uint32_t image_index);
+
+   /**
+    * @brief A flag to track if swapchain has started presenting.
+    */
+   bool m_started_presenting;
 };
 
 } /* namespace wsi */
