@@ -103,7 +103,7 @@ static int find_alloc_heap_id(int fd)
    return alloc_heap_id;
 }
 
-static int allocate(int fd, uint64_t size, uint32_t heap_id)
+static int allocate(int fd, size_t size, uint32_t heap_id)
 {
    assert(size > 0);
    assert(fd != -1);
@@ -225,6 +225,7 @@ static wsialloc_error allocate_format(const wsialloc_allocator *allocator, const
    assert(info != NULL);
    assert(offsets != NULL);
    assert(strides != NULL);
+   assert(strides[0] >= 0);
    assert(buffer_fds != NULL);
 
    const uint64_t flags = descriptor->format.flags;
@@ -244,9 +245,13 @@ static wsialloc_error allocate_format(const wsialloc_allocator *allocator, const
       alloc_heap_id = allocator->protected_alloc_heap_id;
    }
 
-   size_t total_size = offsets[0] + (strides[0] * info->height);
+   uint64_t total_size = offsets[0] + (uint64_t)strides[0] * info->height;
+   if (total_size > SIZE_MAX)
+   {
+      return WSIALLOC_ERROR_NO_RESOURCE;
+   }
+   buffer_fds[0] = allocate(allocator->fd, (size_t)total_size, alloc_heap_id);
 
-   buffer_fds[0] = allocate(allocator->fd, total_size, alloc_heap_id);
    if (buffer_fds[0] < 0)
    {
       return WSIALLOC_ERROR_NO_RESOURCE;
