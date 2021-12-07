@@ -562,10 +562,12 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
 
    /* create a wl_buffer using the dma_buf protocol */
    zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(m_wsi_surface->get_dmabuf_interface());
+   uint32_t modifier_hi = m_image_creation_parameters.m_allocated_format.modifier >> 32;
+   uint32_t modifier_low = m_image_creation_parameters.m_allocated_format.modifier & 0xFFFFFFFF;
    for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
    {
       zwp_linux_buffer_params_v1_add(params, image_data->buffer_fd[plane], plane,
-                                     image_data->offset[plane], image_data->stride[plane], 0, 0);
+                                     image_data->offset[plane], image_data->stride[plane], modifier_hi, modifier_low);
    }
 
    const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
