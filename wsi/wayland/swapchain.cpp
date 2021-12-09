@@ -144,7 +144,7 @@ void swapchain::release_buffer(struct wl_buffer *wayl_buffer)
    for (i = 0; i < m_swapchain_images.size(); i++)
    {
       auto data = reinterpret_cast<wayland_image_data *>(m_swapchain_images[i].data);
-      if (data->buffer == wayl_buffer)
+      if (data && data->buffer == wayl_buffer)
       {
          unpresent_image(i);
          break;
