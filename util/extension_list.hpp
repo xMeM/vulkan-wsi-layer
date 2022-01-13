@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021 Arm Limited.
+ * Copyright (c) 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -84,6 +84,11 @@ public:
    VkResult add(const VkExtensionProperties *props, uint32_t count);
    VkResult add(const extension_list &ext_list);
    VkResult add(const char *const *extensions, uint32_t count);
+
+   VkResult add(const char *extension)
+   {
+       return add(&extension, 1);
+   }
 
    /**
     * @brief Perform intersection between extensions and add them to the list.

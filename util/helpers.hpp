@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,6 +31,41 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+
+/*
+ * Conditional return statement. This allows functions to return early for
+ * failing Vulkan commands with a terse syntax.
+ *
+ * Example usage:
+ *
+ * VkResult foo()
+ * {
+ *    TRY(vkCommand());
+ *    return VK_SUCCESS;
+ * }
+ *
+ * The above is equivalent to:
+ *
+ * VkResult foo()
+ * {
+ *    VkResult result = vkCommand();
+ *    if (result != VK_SUCCESS)
+ *    {
+ *       return result;
+ *    }
+ *    return VK_SUCCESS;
+ * }
+ */
+#define TRY(expression) \
+   do \
+   { \
+      VkResult try_result = expression; \
+      if (try_result != VK_SUCCESS) \
+      { \
+         return try_result; \
+      } \
+   } \
+   while (0)
 
 namespace util
 {

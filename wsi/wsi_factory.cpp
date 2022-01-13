@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -119,38 +119,58 @@ util::wsi_platform_set find_enabled_layer_platforms(const VkInstanceCreateInfo *
    return ret;
 }
 
+static VkResult get_available_device_extensions(VkPhysicalDevice physical_device,
+                                                util::extension_list &available_extensions)
+{
+   auto &instance_data = layer::instance_private_data::get(physical_device);
+   util::vector<VkExtensionProperties> properties{available_extensions.get_allocator()};
+   uint32_t count;
+   TRY(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, nullptr));
+
+   if (!properties.try_resize(count))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   TRY(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, properties.data()));
+   TRY(available_extensions.add(properties.data(), count));
+
+   return VK_SUCCESS;
+}
+
 VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util::wsi_platform_set enabled_platforms,
                                           util::extension_list &extensions_to_enable)
 {
    util::allocator allocator{extensions_to_enable.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND};
-   util::extension_list device_extensions{allocator};
 
-   util::vector<VkExtensionProperties> ext_props{allocator};
-   layer::instance_private_data &inst_data = layer::instance_private_data::get(phys_dev);
-   uint32_t count;
-   VkResult res = inst_data.disp.EnumerateDeviceExtensionProperties(phys_dev, nullptr, &count, nullptr);
+   util::extension_list available_device_extensions{allocator};
+   TRY(get_available_device_extensions(phys_dev, available_device_extensions));
 
-   if (res == VK_SUCCESS)
+   /* Add optional extensions independent of winsys. */
    {
-      if (!ext_props.try_resize(count))
+      const char *optional_extensions[] =
       {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
+         VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+         VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
+         VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
+
+         VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+         VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+         VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
+
+         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+      };
+
+      for (auto extension : optional_extensions)
+      {
+         if (available_device_extensions.contains(extension))
+         {
+            TRY(extensions_to_enable.add(extension));
+         }
       }
-      res = inst_data.disp.EnumerateDeviceExtensionProperties(phys_dev, nullptr, &count, ext_props.data());
    }
 
-   if (res != VK_SUCCESS)
-   {
-      return res;
-   }
-
-   res = device_extensions.add(ext_props.data(), count);
-
-   if (res != VK_SUCCESS)
-   {
-      return res;
-   }
-
+   layer::instance_private_data &inst_data = layer::instance_private_data::get(phys_dev);
    for (const auto &wsi_ext : supported_wsi_extensions)
    {
       /* Skip iterating over platforms not enabled in the instance. */
@@ -166,13 +186,8 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
          return VK_ERROR_INITIALIZATION_FAILED;
       }
 
-      res = props->get_required_device_extensions(extensions_required_by_layer);
-      if (res != VK_SUCCESS)
-      {
-         return res;
-      }
-
-      bool supported = device_extensions.contains(extensions_required_by_layer);
+      TRY(props->get_required_device_extensions(extensions_required_by_layer));
+      bool supported = available_device_extensions.contains(extensions_required_by_layer);
       if (!supported)
       {
          /* Can we accept failure? The layer unconditionally advertises support for this platform and the loader uses
@@ -183,12 +198,9 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
          return VK_ERROR_INITIALIZATION_FAILED;
       }
 
-      res = extensions_to_enable.add(extensions_required_by_layer);
-      if (res != VK_SUCCESS)
-      {
-         return res;
-      }
+      TRY(extensions_to_enable.add(extensions_required_by_layer));
    }
+
    return VK_SUCCESS;
 }
 

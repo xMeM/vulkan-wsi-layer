@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -404,6 +404,62 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
 
    image_status_lock.unlock();
 
+   /* Try to signal fences/semaphores with a sync FD for optimal performance. */
+   if (m_device_data.disp.ImportFenceFdKHR != nullptr &&
+       m_device_data.disp.ImportSemaphoreFdKHR != nullptr)
+   {
+      if (fence != VK_NULL_HANDLE)
+      {
+         int already_signalled_sentinel_fd = -1;
+         auto info = VkImportFenceFdInfoKHR{};
+         {
+            info.sType = VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR;
+            info.fence = fence;
+            info.handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
+            info.fd = already_signalled_sentinel_fd;
+         }
+
+         auto result = m_device_data.disp.ImportFenceFdKHR(m_device, &info);
+         switch (result)
+         {
+         case VK_SUCCESS:
+            fence = VK_NULL_HANDLE;
+            break;
+         case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+            /* Leave to fallback. */
+            break;
+         default:
+            return result;
+         }
+      }
+
+      if (semaphore != VK_NULL_HANDLE)
+      {
+         int already_signalled_sentinel_fd = -1;
+         auto info = VkImportSemaphoreFdInfoKHR{};
+         {
+            info.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+            info.semaphore = semaphore;
+            info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+            info.fd = already_signalled_sentinel_fd;
+         }
+
+         auto result = m_device_data.disp.ImportSemaphoreFdKHR(m_device, &info);
+         switch (result)
+         {
+         case VK_SUCCESS:
+            semaphore = VK_NULL_HANDLE;
+            break;
+         case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+            /* Leave to fallback. */
+            break;
+         default:
+            return result;
+         }
+      }
+   }
+
+   /* Fallback for when importing fence/semaphore sync FDs is unsupported by the ICD. */
    if (VK_NULL_HANDLE != semaphore || VK_NULL_HANDLE != fence)
    {
       VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
