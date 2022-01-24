@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,7 +28,7 @@
 #include "wl_helpers.hpp"
 #include "surface_properties.hpp"
 
-#include <stdint.h>
+#include <cstdint>
 #include <cstring>
 #include <cassert>
 #include <unistd.h>
@@ -508,32 +508,7 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
       WSI_LOG_ERROR("Image creation failed.");
       return result;
    }
-
-   if (is_disjoint)
-   {
-      for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
-      {
-         const auto fd_index = get_same_fd_index(image_data->buffer_fd[plane], image_data->buffer_fd);
-         if (fd_index == plane)
-         {
-            VkResult result = allocate_plane_memory(image_data->buffer_fd[plane], &image_data->memory[fd_index]);
-            if (result != VK_SUCCESS)
-            {
-               return result;
-            }
-         }
-      }
-   }
-   else
-   {
-      VkResult result = allocate_plane_memory(image_data->buffer_fd[0], &image_data->memory[0]);
-      if (result != VK_SUCCESS)
-      {
-         return result;
-      }
-   }
-
-   return internal_bind_swapchain_image(m_device, image_data, *image);
+   return result;
 }
 
 VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image)
@@ -581,6 +556,36 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    {
       destroy_image(image);
       return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   if (image_data->is_disjoint)
+   {
+      for (uint32_t plane = 0; plane < image_data->num_planes; plane++)
+      {
+         const auto fd_index = get_same_fd_index(image_data->buffer_fd[plane], image_data->buffer_fd);
+         if (fd_index == plane)
+         {
+            VkResult result = allocate_plane_memory(image_data->buffer_fd[plane], &image_data->memory[fd_index]);
+            if (result != VK_SUCCESS)
+            {
+               return result;
+            }
+         }
+      }
+   }
+   else
+   {
+      VkResult result = allocate_plane_memory(image_data->buffer_fd[0], &image_data->memory[0]);
+      if (result != VK_SUCCESS)
+      {
+         return result;
+      }
+   }
+
+   result = internal_bind_swapchain_image(m_device, image_data, image.image);
+   if (result != VK_SUCCESS)
+   {
+      return result;
    }
 
    /* Initialize presentation fence. */
