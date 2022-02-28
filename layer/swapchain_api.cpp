@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -295,7 +295,7 @@ wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevic
       *pRectCount = 1;
 
       VkSurfaceCapabilitiesKHR surface_caps;
-      result = props->get_surface_capabilities(physicalDevice, surface, &surface_caps);
+      result = props->get_surface_capabilities(physicalDevice, &surface_caps);
 
       if (result != VK_SUCCESS)
       {

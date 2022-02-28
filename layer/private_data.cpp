@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,7 +41,9 @@ static util::unordered_map<void *, instance_private_data *> g_instance_data{ uti
 static util::unordered_map<void *, device_private_data *> g_device_data{ util::allocator::get_generic() };
 
 static const std::array<const char *, 3> supported_instance_extensions = {
-   VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
+   VK_KHR_SURFACE_EXTENSION_NAME,
+   VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
+   VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
 };
 
 static const std::array<const char *, 1> supported_device_extensions = {

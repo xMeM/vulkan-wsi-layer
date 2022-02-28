@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, 2019, 2021 Arm Limited.
+ * Copyright (c) 2016-2017, 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -39,7 +39,7 @@ wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDev
    {
       wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
       assert(props != nullptr);
-      return props->get_surface_capabilities(physicalDevice, surface, pSurfaceCapabilities);
+      return props->get_surface_capabilities(physicalDevice, pSurfaceCapabilities);
    }
 
    /* If the layer cannot handle this surface, then necessarily the surface must have been created by the ICDs (or a
@@ -62,7 +62,7 @@ wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, 
    {
       wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
       assert(props != nullptr);
-      return props->get_surface_formats(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats);
+      return props->get_surface_formats(physicalDevice, pSurfaceFormatCount, pSurfaceFormats);
    }
 
    return instance.disp.GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, pSurfaceFormatCount,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -66,10 +66,9 @@ surface_properties &surface_properties::get_instance()
    return instance;
 }
 
-VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
                                                       VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
 {
-   /* Image count limits */
    pSurfaceCapabilities->minImageCount = 2;
    pSurfaceCapabilities->maxImageCount = MAX_SWAPCHAIN_IMAGE_COUNT;
 
@@ -127,8 +126,8 @@ static VkResult get_vk_supported_formats(const util::vector<drm_format_pair> &dr
    return VK_SUCCESS;
 }
 
-VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                                 uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats)
+VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
+                                                 VkSurfaceFormatKHR *surfaceFormats)
 {
    assert(specific_surface);
    if (!supported_formats.size())
@@ -140,33 +139,7 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
       }
    }
 
-   assert(surfaceFormatCount != nullptr);
-   if (nullptr == surfaceFormats)
-   {
-      *surfaceFormatCount = supported_formats.size();
-      return VK_SUCCESS;
-   }
-
-   VkResult res = VK_SUCCESS;
-
-   if (supported_formats.size() > *surfaceFormatCount)
-   {
-      res = VK_INCOMPLETE;
-   }
-
-   uint32_t format_count = 0;
-   for (const auto &format : supported_formats)
-   {
-      if (format_count >= *surfaceFormatCount)
-      {
-         break;
-      }
-      surfaceFormats[format_count].format = format;
-      surfaceFormats[format_count++].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-   }
-   *surfaceFormatCount = format_count;
-
-   return res;
+   return set_surface_formats(supported_formats.begin(), supported_formats.end(), surfaceFormatCount, surfaceFormats);
 }
 
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -51,9 +51,9 @@ public:
 
    static surface_properties &get_instance();
 
-   VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+   VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                      VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
-   VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *surfaceFormatCount,
+   VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
                                 VkSurfaceFormatKHR *surfaceFormats) override;
    VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                       uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -46,16 +46,17 @@ namespace wsi
 namespace headless
 {
 
+constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
+
 surface_properties& surface_properties::get_instance()
 {
    static surface_properties instance;
    return instance;
 }
 
-VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
                                                       VkSurfaceCapabilitiesKHR *surface_capabilities)
 {
-   UNUSED(surface);
    /* Image count limits */
    surface_capabilities->minImageCount = 1;
    surface_capabilities->maxImageCount = MAX_SWAPCHAIN_IMAGE_COUNT;
@@ -88,25 +89,19 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    return VK_SUCCESS;
 }
 
-VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                                 uint32_t *surface_format_count, VkSurfaceFormatKHR *surface_formats)
+static uint32_t fill_supported_formats(VkPhysicalDevice physical_device,
+                                       std::array<VkFormat, max_core_1_0_formats> &formats)
 {
-   UNUSED(surface);
-
-   VkResult res = VK_SUCCESS;
-   /* Construct a list of all formats supported by the driver - for color attachment */
-   constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
-   std::array<VkFormat, max_core_1_0_formats> formats{};
    uint32_t format_count = 0;
-
    for (int id = 0; id < max_core_1_0_formats; id++)
    {
       VkImageFormatProperties image_format_props;
 
-      res = layer::instance_private_data::get(physical_device)
-               .disp.GetPhysicalDeviceImageFormatProperties(
-                  physical_device, static_cast<VkFormat>(id), VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, &image_format_props);
+      VkResult res =
+         layer::instance_private_data::get(physical_device)
+            .disp.GetPhysicalDeviceImageFormatProperties(physical_device, static_cast<VkFormat>(id), VK_IMAGE_TYPE_2D,
+                                                         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                                         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, &image_format_props);
 
       if (res != VK_ERROR_FORMAT_NOT_SUPPORTED)
       {
@@ -114,29 +109,18 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
          format_count++;
       }
    }
-   assert(format_count > 0);
-   assert(surface_format_count != nullptr);
-   res = VK_SUCCESS;
-   if (nullptr == surface_formats)
-   {
-      *surface_format_count = format_count;
-   }
-   else
-   {
-      if (format_count > *surface_format_count)
-      {
-         res = VK_INCOMPLETE;
-      }
 
-      *surface_format_count = std::min(*surface_format_count, format_count);
-      for (uint32_t i = 0; i < *surface_format_count; ++i)
-      {
-         surface_formats[i].format = formats[i];
-         surface_formats[i].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-      }
-   }
+   return format_count;
+}
 
-   return res;
+VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_format_count,
+                                                 VkSurfaceFormatKHR *surface_formats)
+{
+   /* Construct a list of all formats supported by the driver - for color attachment */
+   std::array<VkFormat, max_core_1_0_formats> formats{};
+   auto format_count = fill_supported_formats(physical_device, formats);
+
+   return set_surface_formats(formats.begin(), formats.begin() + format_count, surface_format_count, surface_formats);
 }
 
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,

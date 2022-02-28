@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -46,14 +46,14 @@ public:
    /**
     * @brief Implementation of vkGetPhysicalDeviceSurfaceCapabilitiesKHR for the specific VkSurface type.
     */
-   virtual VkResult get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+   virtual VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                              VkSurfaceCapabilitiesKHR *surface_capabilities) = 0;
 
    /**
     * @brief Implementation of vkGetPhysicalDeviceSurfaceFormatsKHR for the specific VkSurface type.
     */
-   virtual VkResult get_surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                        uint32_t *surface_format_count, VkSurfaceFormatKHR *surface_formats) = 0;
+   virtual VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_format_count,
+                                        VkSurfaceFormatKHR *surface_formats) = 0;
 
    /**
     * @brief Implementation of vkGetPhysicalDeviceSurfacePresentModesKHR for the specific VkSurface type.
@@ -84,6 +84,53 @@ public:
 
    /* There is no maximum theoretically speaking however we choose 3 for practicality */
    static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 3;
+
+protected:
+   /**
+    * @brief Helper function for the vkGetPhysicalDeviceSurfaceFormatsKHR entrypoint.
+    *
+    * Implements the common logic, which is used by all the WSI backends for
+    * setting the supported formats by the surface.
+    *
+    * @param begin                 Beginning of an iterator with the supported VkFormats.
+    * @param end                   End of the iterator.
+    * @param surface_formats_count Pointer for setting the length of the supported
+    *                              formats.
+    * @param surface_formats       The supported formats by the surface.
+    *
+    * return VK_SUCCESS on success, an appropriate error code otherwise.
+    *
+    */
+   template <typename It>
+   VkResult set_surface_formats(It begin, It end, uint32_t *surface_formats_count, VkSurfaceFormatKHR *surface_formats)
+   {
+      assert(surface_formats_count != nullptr);
+
+      const uint32_t supported_formats_count = std::distance(begin, end);
+      if (surface_formats == nullptr)
+      {
+         *surface_formats_count = supported_formats_count;
+         return VK_SUCCESS;
+      }
+
+      VkResult res = VK_SUCCESS;
+      if (supported_formats_count > *surface_formats_count)
+      {
+         res = VK_INCOMPLETE;
+      }
+
+      *surface_formats_count = std::min(*surface_formats_count, supported_formats_count);
+      uint32_t format_count = 0;
+      std::for_each(begin, end, [&](const VkFormat &format) {
+         if (format_count < *surface_formats_count)
+         {
+            surface_formats[format_count].format = format;
+            surface_formats[format_count++].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+         }
+      });
+
+      return res;
+   }
 };
 
 } /* namespace wsi */
