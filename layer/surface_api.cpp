@@ -50,6 +50,31 @@ wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDev
 }
 
 /**
+ * @brief Implements vkGetPhysicalDeviceSurfaceCapabilities2KHR Vulkan entrypoint.
+ */
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice,
+                                                     const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                                     VkSurfaceCapabilities2KHR *pSurfaceCapabilities) VWL_API_POST
+{
+   auto &instance = layer::instance_private_data::get(physicalDevice);
+   if (instance.should_layer_handle_surface(physicalDevice, pSurfaceInfo->surface))
+   {
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, pSurfaceInfo->surface);
+      assert(props != nullptr);
+
+      /*
+       * Any of the extensions that extend pSurfaceInfo are not supported by the
+       * swapchain implementation so it is safe to ignore pNext here, even if
+       * the extensions are supported by the ICD.
+       */
+      return props->get_surface_capabilities(physicalDevice, &pSurfaceCapabilities->surfaceCapabilities);
+   }
+
+   return instance.disp.GetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice, pSurfaceInfo, pSurfaceCapabilities);
+}
+
+/**
  * @brief Implements vkGetPhysicalDeviceSurfaceFormatsKHR Vulkan entrypoint.
  */
 VWL_VKAPI_CALL(VkResult)
@@ -67,6 +92,27 @@ wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, 
 
    return instance.disp.GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, pSurfaceFormatCount,
                                                            pSurfaceFormats);
+}
+
+/**
+ * @brief Implements vkGetPhysicalDeviceSurfaceFormats2KHR Vulkan entrypoint.
+ */
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice,
+                                                const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                                uint32_t *pSurfaceFormatCount,
+                                                VkSurfaceFormat2KHR *pSurfaceFormats) VWL_API_POST
+{
+   auto &instance = layer::instance_private_data::get(physicalDevice);
+   if (instance.should_layer_handle_surface(physicalDevice, pSurfaceInfo->surface))
+   {
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, pSurfaceInfo->surface);
+      assert(props != nullptr);
+      return props->get_surface_formats(physicalDevice, pSurfaceFormatCount, nullptr, pSurfaceFormats);
+   }
+
+   return instance.disp.GetPhysicalDeviceSurfaceFormats2KHR(physicalDevice, pSurfaceInfo, pSurfaceFormatCount,
+                                                            pSurfaceFormats);
 }
 
 /**

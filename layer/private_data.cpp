@@ -40,10 +40,11 @@ static std::mutex g_data_lock;
 static util::unordered_map<void *, instance_private_data *> g_instance_data{ util::allocator::get_generic() };
 static util::unordered_map<void *, device_private_data *> g_device_data{ util::allocator::get_generic() };
 
-static const std::array<const char *, 3> supported_instance_extensions = {
+static const std::array<const char *, 4> supported_instance_extensions = {
    VK_KHR_SURFACE_EXTENSION_NAME,
    VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
    VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
+   VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
 };
 
 static const std::array<const char *, 1> supported_device_extensions = {

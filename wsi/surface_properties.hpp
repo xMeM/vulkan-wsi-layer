@@ -52,8 +52,9 @@ public:
    /**
     * @brief Implementation of vkGetPhysicalDeviceSurfaceFormatsKHR for the specific VkSurface type.
     */
-   virtual VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_format_count,
-                                        VkSurfaceFormatKHR *surface_formats) = 0;
+   virtual VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_formats_count,
+                                        VkSurfaceFormatKHR *surface_formats,
+                                        VkSurfaceFormat2KHR *extended_surface_formats = nullptr) = 0;
 
    /**
     * @brief Implementation of vkGetPhysicalDeviceSurfacePresentModesKHR for the specific VkSurface type.
@@ -92,22 +93,26 @@ protected:
     * Implements the common logic, which is used by all the WSI backends for
     * setting the supported formats by the surface.
     *
-    * @param begin                 Beginning of an iterator with the supported VkFormats.
-    * @param end                   End of the iterator.
-    * @param surface_formats_count Pointer for setting the length of the supported
-    *                              formats.
-    * @param surface_formats       The supported formats by the surface.
+    * @param begin                    Beginning of an iterator with the supported VkFormats.
+    * @param end                      End of the iterator.
+    * @param surface_formats_count    Pointer for setting the length of the supported
+    *                                 formats.
+    * @param surface_formats          The supported formats by the surface.
+    * @param extended_surface_formats Extended surface formats supported by the surface, it
+    *                                 is being used when the vkGetPhysicalDeviceSurfaceFormats2KHR
+    *                                 entrypoint is used.
     *
     * return VK_SUCCESS on success, an appropriate error code otherwise.
     *
     */
    template <typename It>
-   VkResult set_surface_formats(It begin, It end, uint32_t *surface_formats_count, VkSurfaceFormatKHR *surface_formats)
+   VkResult set_surface_formats(It begin, It end, uint32_t *surface_formats_count, VkSurfaceFormatKHR *surface_formats,
+                                VkSurfaceFormat2KHR *extended_surface_formats)
    {
       assert(surface_formats_count != nullptr);
 
       const uint32_t supported_formats_count = std::distance(begin, end);
-      if (surface_formats == nullptr)
+      if (surface_formats == nullptr && extended_surface_formats == nullptr)
       {
          *surface_formats_count = supported_formats_count;
          return VK_SUCCESS;
@@ -124,8 +129,16 @@ protected:
       std::for_each(begin, end, [&](const VkFormat &format) {
          if (format_count < *surface_formats_count)
          {
-            surface_formats[format_count].format = format;
-            surface_formats[format_count++].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+            if (extended_surface_formats == nullptr)
+            {
+               surface_formats[format_count].format = format;
+               surface_formats[format_count++].colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+            }
+            else
+            {
+               extended_surface_formats[format_count].surfaceFormat.format = format;
+               extended_surface_formats[format_count++].surfaceFormat.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+            }
          }
       });
 

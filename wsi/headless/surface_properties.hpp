@@ -40,7 +40,8 @@ public:
                                      VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
 
    VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
-                                VkSurfaceFormatKHR *surfaceFormats) override;
+                                VkSurfaceFormatKHR *surfaceFormats,
+                                VkSurfaceFormat2KHR *extended_surface_formats) override;
 
    VkResult get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                       uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;

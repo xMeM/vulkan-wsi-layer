@@ -69,6 +69,7 @@ surface_properties &surface_properties::get_instance()
 VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
                                                       VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
 {
+   /* Image count limits */
    pSurfaceCapabilities->minImageCount = 2;
    pSurfaceCapabilities->maxImageCount = MAX_SWAPCHAIN_IMAGE_COUNT;
 
@@ -127,7 +128,8 @@ static VkResult get_vk_supported_formats(const util::vector<drm_format_pair> &dr
 }
 
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
-                                                 VkSurfaceFormatKHR *surfaceFormats)
+                                                 VkSurfaceFormatKHR *surfaceFormats,
+                                                 VkSurfaceFormat2KHR *extended_surface_formats)
 {
    assert(specific_surface);
    if (!supported_formats.size())
@@ -139,7 +141,8 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
       }
    }
 
-   return set_surface_formats(supported_formats.begin(), supported_formats.end(), surfaceFormatCount, surfaceFormats);
+   return set_surface_formats(supported_formats.begin(), supported_formats.end(), surfaceFormatCount, surfaceFormats,
+                              extended_surface_formats);
 }
 
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,

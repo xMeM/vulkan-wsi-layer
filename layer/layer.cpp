@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -423,6 +423,12 @@ wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_A
       GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormatsKHR);
       GET_PROC_ADDR(vkGetPhysicalDeviceSurfacePresentModesKHR);
       GET_PROC_ADDR(vkDestroySurfaceKHR);
+
+      if (instance_data.is_instance_extension_enabled(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME))
+      {
+         GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceCapabilities2KHR);
+         GET_PROC_ADDR(vkGetPhysicalDeviceSurfaceFormats2KHR);
+      }
    }
 
    return instance_data.disp.GetInstanceProcAddr(instance, funcName);

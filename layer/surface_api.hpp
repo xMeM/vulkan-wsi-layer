@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019, 2021 Arm Limited.
+ * Copyright (c) 2018-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -40,12 +40,29 @@ wsi_layer_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDev
                                                     VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) VWL_API_POST;
 
 /**
+ * @brief Implements vkGetPhysicalDeviceSurfaceCapabilities2KHR Vulkan entrypoint.
+ */
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice,
+                                                     const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                                     VkSurfaceCapabilities2KHR *pSurfaceCapabilities) VWL_API_POST;
+
+/**
  * @brief Implements vkGetPhysicalDeviceSurfaceFormatsKHR Vulkan entrypoint.
  */
 VWL_VKAPI_CALL(VkResult)
 wsi_layer_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
                                                uint32_t *pSurfaceFormatCount,
                                                VkSurfaceFormatKHR *pSurfaceFormats) VWL_API_POST;
+
+/**
+ * @brief Implements vkGetPhysicalDeviceSurfaceFormats2KHR Vulkan entrypoint.
+ */
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice,
+                                                const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                                uint32_t *pSurfaceFormatCount,
+                                                VkSurfaceFormat2KHR *pSurfaceFormats) VWL_API_POST;
 
 /**
  * @brief Implements vkGetPhysicalDeviceSurfacePresentModesKHR Vulkan entrypoint.

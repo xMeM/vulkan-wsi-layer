@@ -63,7 +63,9 @@ namespace layer
    REQUIRED(GetPhysicalDeviceImageFormatProperties)     \
    REQUIRED(EnumerateDeviceExtensionProperties)         \
    OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)    \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)   \
    OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)         \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)        \
    OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)    \
    OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)         \
    OPTIONAL(CreateHeadlessSurfaceEXT)                   \

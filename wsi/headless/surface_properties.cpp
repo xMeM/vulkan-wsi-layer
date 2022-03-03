@@ -114,13 +114,15 @@ static uint32_t fill_supported_formats(VkPhysicalDevice physical_device,
 }
 
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_format_count,
-                                                 VkSurfaceFormatKHR *surface_formats)
+                                                 VkSurfaceFormatKHR *surface_formats,
+                                                 VkSurfaceFormat2KHR *extended_surface_formats)
 {
    /* Construct a list of all formats supported by the driver - for color attachment */
    std::array<VkFormat, max_core_1_0_formats> formats{};
    auto format_count = fill_supported_formats(physical_device, formats);
 
-   return set_surface_formats(formats.begin(), formats.begin() + format_count, surface_format_count, surface_formats);
+   return set_surface_formats(formats.begin(), formats.begin() + format_count, surface_format_count, surface_formats,
+                              extended_surface_formats);
 }
 
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
