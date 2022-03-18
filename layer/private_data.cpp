@@ -22,11 +22,14 @@
  * SOFTWARE.
  */
 
+#include <vulkan/vulkan.h>
+
 #include "private_data.hpp"
 #include "wsi/wsi_factory.hpp"
 #include "wsi/surface.hpp"
 #include "util/unordered_map.hpp"
 #include "util/log.hpp"
+#include "util/helpers.hpp"
 
 namespace layer
 {
@@ -39,17 +42,6 @@ static std::mutex g_data_lock;
  */
 static util::unordered_map<void *, instance_private_data *> g_instance_data{ util::allocator::get_generic() };
 static util::unordered_map<void *, device_private_data *> g_device_data{ util::allocator::get_generic() };
-
-static const std::array<const char *, 4> supported_instance_extensions = {
-   VK_KHR_SURFACE_EXTENSION_NAME,
-   VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
-   VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
-   VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-};
-
-static const std::array<const char *, 1> supported_device_extensions = {
-   VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-};
 
 template <typename object_type, typename get_proc_type>
 static PFN_vkVoidFunction get_proc_helper(object_type obj, get_proc_type get_proc,
@@ -273,11 +265,24 @@ bool instance_private_data::should_layer_handle_surface(VkPhysicalDevice phys_de
    return ret;
 }
 
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+bool instance_private_data::has_image_compression_support(VkPhysicalDevice phys_dev)
+{
+   VkPhysicalDeviceImageCompressionControlFeaturesEXT compression = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT, nullptr, VK_FALSE
+   };
+   VkPhysicalDeviceFeatures2KHR features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR, &compression };
+
+   disp.GetPhysicalDeviceFeatures2KHR(phys_dev, &features);
+
+   return compression.imageCompressionControl != VK_FALSE;
+}
+#endif
+
 VkResult instance_private_data::set_instance_enabled_extensions(const char *const *extension_names,
                                                                 size_t extension_count)
 {
-   return enabled_extensions.add(extension_names, extension_count, supported_instance_extensions.data(),
-                                 supported_instance_extensions.size());
+   return enabled_extensions.add(extension_names, extension_count);
 }
 
 bool instance_private_data::is_instance_extension_enabled(const char *extension_name) const
@@ -296,6 +301,9 @@ device_private_data::device_private_data(instance_private_data &inst_data, VkPhy
    , allocator{ alloc }
    , swapchains{ allocator }
    , enabled_extensions{ allocator }
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   , compression_control_enabled{ false }
+#endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 {
 }
 
@@ -409,8 +417,7 @@ bool device_private_data::can_icds_create_swapchain(VkSurfaceKHR vk_surface)
 
 VkResult device_private_data::set_device_enabled_extensions(const char *const *extension_names, size_t extension_count)
 {
-   return enabled_extensions.add(extension_names, extension_count, supported_device_extensions.data(),
-                                 supported_device_extensions.size());
+   return enabled_extensions.add(extension_names, extension_count);
 }
 
 bool device_private_data::is_device_extension_enabled(const char *extension_name) const
@@ -426,4 +433,15 @@ void device_private_data::destroy(device_private_data *device_data)
    alloc.destroy<device_private_data>(1, device_data);
 }
 
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+void device_private_data::set_swapchain_compression_control_enabled(bool enable)
+{
+   compression_control_enabled = enable;
+}
+
+bool device_private_data::is_swapchain_compression_control_enabled() const
+{
+   return compression_control_enabled;
+}
+#endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 } /* namespace layer */

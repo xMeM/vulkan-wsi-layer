@@ -90,22 +90,31 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
 }
 
 static uint32_t fill_supported_formats(VkPhysicalDevice physical_device,
-                                       std::array<VkFormat, max_core_1_0_formats> &formats)
+                                       std::array<surface_format_properties, max_core_1_0_formats> &formats)
 {
    uint32_t format_count = 0;
    for (int id = 0; id < max_core_1_0_formats; id++)
    {
-      VkImageFormatProperties image_format_props;
+      formats[format_count] = surface_format_properties{ static_cast<VkFormat>(id) };
 
-      VkResult res =
-         layer::instance_private_data::get(physical_device)
-            .disp.GetPhysicalDeviceImageFormatProperties(physical_device, static_cast<VkFormat>(id), VK_IMAGE_TYPE_2D,
-                                                         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                                         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, &image_format_props);
+      VkPhysicalDeviceImageFormatInfo2KHR format_info = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
+                                                          nullptr,
+                                                          static_cast<VkFormat>(id),
+                                                          VK_IMAGE_TYPE_2D,
+                                                          VK_IMAGE_TILING_OPTIMAL,
+                                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                                          0 };
 
-      if (res != VK_ERROR_FORMAT_NOT_SUPPORTED)
+      VkResult res = formats[format_count].check_device_support(physical_device, format_info);
+
+      if (res == VK_SUCCESS)
       {
-         formats[format_count] = static_cast<VkFormat>(id);
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+         if (layer::instance_private_data::get(physical_device).has_image_compression_support(physical_device))
+         {
+            formats[format_count].add_device_compression_support(physical_device, format_info);
+         }
+#endif
          format_count++;
       }
    }
@@ -118,11 +127,11 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
                                                  VkSurfaceFormat2KHR *extended_surface_formats)
 {
    /* Construct a list of all formats supported by the driver - for color attachment */
-   std::array<VkFormat, max_core_1_0_formats> formats{};
+   std::array<surface_format_properties, max_core_1_0_formats> formats{};
    auto format_count = fill_supported_formats(physical_device, formats);
 
-   return set_surface_formats(formats.begin(), formats.begin() + format_count, surface_format_count, surface_formats,
-                              extended_surface_formats);
+   return surface_properties_formats_helper(formats.begin(), formats.begin() + format_count, surface_format_count,
+                                            surface_formats, extended_surface_formats);
 }
 
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,

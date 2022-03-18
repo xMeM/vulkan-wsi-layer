@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -56,9 +56,10 @@ extern "C" {
  *
  * Version History:
  * 1 - Initial wsialloc interface
+ * 2 - Added WSIALLOC_ALLOCATE_HIGHEST_FIXED_RATE_COMPRESSION
  */
 
-#define WSIALLOC_INTERFACE_VERSION 1
+#define WSIALLOC_INTERFACE_VERSION 2
 
 #define WSIALLOC_CONCAT(x, y) x##y
 #define WSIALLOC_SYMBOL_VERSION(symbol, version) WSIALLOC_CONCAT(symbol, version)
@@ -145,6 +146,8 @@ enum wsialloc_allocate_flag
    WSIALLOC_ALLOCATE_PROTECTED = 0x1,
    /** Performs allocation calculations and format selection without allocating any memory. */
    WSIALLOC_ALLOCATE_NO_MEMORY = 0x2,
+   /** Sets a preference for selecting the format with the highest fixed compression rate. */
+   WSIALLOC_ALLOCATE_HIGHEST_FIXED_RATE_COMPRESSION = 0x4,
 };
 
 typedef struct wsialloc_format

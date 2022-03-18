@@ -40,6 +40,7 @@
 #include "util/drm/drm_utils.hpp"
 #include "util/log.hpp"
 #include "util/macros.hpp"
+#include "util/helpers.hpp"
 
 #define NELEMS(x) (sizeof(x) / sizeof(x[0]))
 
@@ -100,32 +101,114 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    return VK_SUCCESS;
 }
 
-static VkResult get_vk_supported_formats(const util::vector<drm_format_pair> &drm_supported_formats,
-                                         vk_format_set &vk_supported_formats)
+static VkResult surface_format_properties_add_modifier_support(VkPhysicalDevice phys_dev,
+                                                               surface_format_properties &format_props,
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+                                                               const drm_format_pair &drm_format,
+                                                               bool add_compression = false)
+#else
+                                                               const drm_format_pair &drm_format)
+#endif
 {
-   for (const auto &drm_format : drm_supported_formats)
+   VkPhysicalDeviceExternalImageFormatInfoKHR external_info = {};
+   external_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR;
+   external_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
+   VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_mod_info = {};
+   drm_mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
+   drm_mod_info.pNext = &external_info;
+   drm_mod_info.drmFormatModifier = drm_format.modifier;
+   drm_mod_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+   VkPhysicalDeviceImageFormatInfo2KHR image_info = {};
+   image_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR;
+   image_info.pNext = &drm_mod_info;
+   image_info.format = format_props.m_surface_format.format;
+   image_info.type = VK_IMAGE_TYPE_2D;
+   image_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+   image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   if (add_compression)
+   {
+      return format_props.add_device_compression_support(phys_dev, image_info);
+   }
+#endif
+
+   return format_props.check_device_support(phys_dev, image_info);
+}
+
+static VkResult surface_format_properties_map_add(VkPhysicalDevice phys_dev, surface_format_properties_map &format_map,
+                                                  VkFormat format, const drm_format_pair &drm_format)
+{
+   surface_format_properties format_props{ format };
+   VkResult res = surface_format_properties_add_modifier_support(phys_dev, format_props, drm_format);
+   if (res == VK_SUCCESS)
+   {
+      auto it = format_map.try_insert(std::make_pair(format, format_props));
+      if (!it.has_value())
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+   }
+
+   if (res == VK_ERROR_FORMAT_NOT_SUPPORTED)
+   {
+      return VK_SUCCESS;
+   }
+
+   return res;
+}
+
+static VkResult surface_format_properties_map_init(VkPhysicalDevice phys_dev, surface_format_properties_map &format_map,
+                                                   const util::vector<drm_format_pair> &drm_format_list)
+{
+   for (const auto &drm_format : drm_format_list)
+   {
+      const VkFormat vk_format = util::drm::drm_to_vk_format(drm_format.fourcc);
+      if (vk_format != VK_FORMAT_UNDEFINED && format_map.find(vk_format) == format_map.end())
+      {
+         TRY(surface_format_properties_map_add(phys_dev, format_map, vk_format, drm_format));
+      }
+      const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
+      if (srgb_vk_format != VK_FORMAT_UNDEFINED && format_map.find(srgb_vk_format) == format_map.end())
+      {
+         TRY(surface_format_properties_map_add(phys_dev, format_map, srgb_vk_format, drm_format));
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+static VkResult surface_format_properties_map_add_compression(VkPhysicalDevice phys_dev,
+                                                              surface_format_properties_map &format_map,
+                                                              const util::vector<drm_format_pair> &drm_format_list)
+{
+   for (const auto &drm_format : drm_format_list)
    {
       const VkFormat vk_format = util::drm::drm_to_vk_format(drm_format.fourcc);
       if (vk_format != VK_FORMAT_UNDEFINED)
       {
-         auto it = vk_supported_formats.try_insert(vk_format);
-         if (!it.has_value())
+         auto entry = format_map.find(vk_format);
+         if (entry != format_map.end())
          {
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
+            TRY(surface_format_properties_add_modifier_support(phys_dev, entry->second, drm_format, true));
          }
       }
       const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
       if (srgb_vk_format != VK_FORMAT_UNDEFINED)
       {
-         auto it = vk_supported_formats.try_insert(srgb_vk_format);
-         if (!it.has_value())
+         auto entry = format_map.find(srgb_vk_format);
+         if (entry != format_map.end())
          {
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
+            TRY(surface_format_properties_add_modifier_support(phys_dev, entry->second, drm_format, true));
          }
       }
    }
    return VK_SUCCESS;
 }
+#endif
 
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
                                                  VkSurfaceFormatKHR *surfaceFormats,
@@ -134,15 +217,18 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
    assert(specific_surface);
    if (!supported_formats.size())
    {
-      VkResult res = get_vk_supported_formats(specific_surface->get_formats(), supported_formats);
-      if (res != VK_SUCCESS)
+      TRY(surface_format_properties_map_init(physical_device, supported_formats, specific_surface->get_formats()));
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+      if (layer::instance_private_data::get(physical_device).has_image_compression_support(physical_device))
       {
-         return res;
+         TRY(surface_format_properties_map_add_compression(physical_device, supported_formats,
+                                                           specific_surface->get_formats()));
       }
+#endif
    }
 
-   return set_surface_formats(supported_formats.begin(), supported_formats.end(), surfaceFormatCount, surfaceFormats,
-                              extended_surface_formats);
+   return surface_properties_formats_helper(supported_formats.begin(), supported_formats.end(), surfaceFormatCount,
+                                            surfaceFormats, extended_surface_formats);
 }
 
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,

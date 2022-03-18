@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -215,19 +215,6 @@ private:
     */
    VkResult get_fd_mem_type_index(int fd, uint32_t &mem_idx);
 
-   /*
-    * @brief Get the properties a format has when combined with a DRM modifier.
-    *
-    * @param      format            The target format.
-    * @param[out] format_props_list A vector which will store the supported properties
-    *                               for every modifier.
-    *
-    * @return VK_SUCCESS on success. VK_ERROR_OUT_OF_HOST_MEMORY is returned when
-    * the host gets out of memory.
-    */
-   VkResult get_drm_format_properties(
-      VkFormat format, util::vector<VkDrmFormatModifierPropertiesEXT> &format_props_list);
-
    /**
     * @brief Finds what formats are compatible with the requested swapchain image Vulkan Device and Wayland surface.
     *
@@ -240,6 +227,7 @@ private:
    VkResult get_surface_compatible_formats(const VkImageCreateInfo &info,
                                            util::vector<wsialloc_format> &importable_formats,
                                            util::vector<uint64_t> &exportable_modifers);
+
 };
 } // namespace wayland
 } // namespace wsi

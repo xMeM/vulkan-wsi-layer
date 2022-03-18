@@ -170,7 +170,6 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
       }
    }
 
-   layer::instance_private_data &inst_data = layer::instance_private_data::get(phys_dev);
    for (const auto &wsi_ext : supported_wsi_extensions)
    {
       /* Skip iterating over platforms not enabled in the instance. */

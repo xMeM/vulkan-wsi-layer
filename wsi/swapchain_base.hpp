@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -34,6 +34,7 @@
 #include <semaphore.h>
 #include <vulkan/vulkan.h>
 #include <thread>
+#include <array>
 
 #include <layer/private_data.hpp>
 #include <util/timed_semaphore.hpp>
@@ -62,6 +63,17 @@ struct swapchain_image
    status status{swapchain_image::INVALID};
    VkSemaphore present_semaphore{ VK_NULL_HANDLE };
 };
+
+constexpr uint32_t MAX_PLANES = 4;
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+struct image_compression_control
+{
+   VkImageCompressionFlagsEXT flags;
+   uint32_t compression_control_plane_count;
+   std::array<VkImageCompressionFixedRateFlagsEXT, MAX_PLANES> fixed_rate_flags;
+};
+#endif
 
 /**
  * @brief Base swapchain class
@@ -286,6 +298,14 @@ protected:
     *  @brief Handle to the queue used for signalling submissions
     */
    VkQueue m_queue;
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   /**
+    * @brief Describes the image compression the swapchain will use
+    *
+    */
+   image_compression_control m_image_compression_control;
+#endif
 
    /**
     * @brief Return the VkAllocationCallbacks passed in this object constructor.

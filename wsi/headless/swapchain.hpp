@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -121,6 +121,11 @@ protected:
                                  const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
 
 private:
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   VkImageCompressionControlEXT construct_image_compression_control();
+#endif
+
    /**
     * @brief Image creation info used for all swapchain images.
     */

@@ -42,8 +42,7 @@
 #include "util/log.hpp"
 #include "util/helpers.hpp"
 #include "util/macros.hpp"
-
-#define MAX_PLANES 4
+#include "util/format_modifiers.hpp"
 
 namespace wsi
 {
@@ -222,31 +221,6 @@ VkResult swapchain::get_fd_mem_type_index(int fd, uint32_t &mem_idx)
    return VK_SUCCESS;
 }
 
-VkResult swapchain::get_drm_format_properties(
-   VkFormat format, util::vector<VkDrmFormatModifierPropertiesEXT> &format_props_list)
-{
-   VkDrmFormatModifierPropertiesListEXT format_modifier_props = {};
-   format_modifier_props.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
-
-   VkFormatProperties2KHR format_props = {};
-   format_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2_KHR;
-   format_props.pNext = &format_modifier_props;
-
-   m_device_data.instance_data.disp.GetPhysicalDeviceFormatProperties2KHR(
-      m_device_data.physical_device, format, &format_props);
-
-   if (!format_props_list.try_resize(format_modifier_props.drmFormatModifierCount))
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
-
-   format_modifier_props.pDrmFormatModifierProperties = format_props_list.data();
-   m_device_data.instance_data.disp.GetPhysicalDeviceFormatProperties2KHR(
-      m_device_data.physical_device, format, &format_props);
-
-   return VK_SUCCESS;
-}
-
 static uint32_t get_same_fd_index(int fd, int const *fds)
 {
    uint32_t index = 0;
@@ -265,7 +239,7 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
    /* Query supported modifers. */
    util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(
       util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-   VkResult result = get_drm_format_properties(info.format, drm_format_props);
+   VkResult result = util::get_drm_format_properties(m_device_data.physical_device, info.format, drm_format_props);
    if (result != VK_SUCCESS)
    {
       WSI_LOG_ERROR("Failed to get format properties.");
@@ -275,6 +249,7 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
    {
       bool is_supported = false;
       drm_format_pair drm_format{ util::drm::vk_to_drm_format(info.format), prop.drmFormatModifier };
+
       for (const auto &format : m_wsi_surface->get_formats())
       {
          if (format.fourcc == drm_format.fourcc && format.modifier == drm_format.modifier)
@@ -316,6 +291,19 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
          image_info.usage = info.usage;
          image_info.flags = info.flags;
 
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+         VkImageCompressionControlEXT compression_control = {};
+         compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
+         compression_control.flags =  m_image_compression_control.flags;
+         compression_control.compressionControlPlaneCount = m_image_compression_control.compression_control_plane_count;
+         compression_control.pFixedRateFlags = m_image_compression_control.fixed_rate_flags.data();
+
+         if (m_device_data.is_swapchain_compression_control_enabled())
+         {
+            compression_control.pNext = image_info.pNext;
+            image_info.pNext = &compression_control;
+         }
+#endif
          result = m_device_data.instance_data.disp.GetPhysicalDeviceImageFormatProperties2KHR(
             m_device_data.physical_device, &image_info, &format_props);
       }
@@ -375,10 +363,19 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
                                       wsialloc_format *allocated_format)
 {
    bool is_protected_memory = (image_create_info.flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0;
-   const uint64_t allocation_flags = is_protected_memory ? WSIALLOC_ALLOCATE_PROTECTED : 0;
+   uint64_t allocation_flags = is_protected_memory ? WSIALLOC_ALLOCATE_PROTECTED : 0;
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   if (m_image_compression_control.flags & VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT)
+   {
+      allocation_flags |= WSIALLOC_ALLOCATE_HIGHEST_FIXED_RATE_COMPRESSION;
+   }
+#endif
+
    wsialloc_allocate_info alloc_info = { importable_formats.data(), static_cast<unsigned>(importable_formats.size()),
-                                       image_create_info.extent.width, image_create_info.extent.height,
-                                       allocation_flags };
+                                         image_create_info.extent.width, image_create_info.extent.height,
+                                         allocation_flags };
+
    const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, allocated_format, image_data.stride,
                                    image_data.buffer_fd, image_data.offset);
    if (res != WSIALLOC_ERROR_NONE)

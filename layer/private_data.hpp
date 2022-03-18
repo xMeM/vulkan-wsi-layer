@@ -74,7 +74,8 @@ namespace layer
    OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR) \
    OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)      \
    OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)      \
-   OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)
+   OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)\
+   OPTIONAL(GetPhysicalDeviceFeatures2KHR)
 
 struct instance_dispatch_table
 {
@@ -273,6 +274,16 @@ public:
     */
    bool does_layer_support_surface(VkSurfaceKHR surface);
 
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   /**
+    * @brief Check if a physical device supports controlling image compression.
+    *
+    * @param phys_dev The physical device to query.
+    * @return Whether image compression control is supported by the ICD.
+    */
+   bool has_image_compression_support(VkPhysicalDevice phys_dev);
+#endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
    /**
     * @brief Get the instance allocator
     *
@@ -353,6 +364,7 @@ private:
     * @brief List with the names of the enabled instance extensions.
     */
    util::extension_list enabled_extensions;
+
 };
 
 /**
@@ -454,6 +466,22 @@ public:
    const VkPhysicalDevice physical_device;
    const VkDevice device;
 
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   /**
+    * @brief Set whether the device supports controlling the swapchain image compression.
+    *
+    * @param enable Value to set compression_control_enabled member variable.
+    */
+   void set_swapchain_compression_control_enabled(bool enable);
+
+   /**
+    * @brief Check whether the device supports controlling the swapchain image compression.
+    *
+    * @return true if enabled, false otherwise.
+    */
+   bool is_swapchain_compression_control_enabled() const;
+#endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
 private:
    /* Allow util::allocator to access the private constructor */
    friend util::allocator;
@@ -488,6 +516,14 @@ private:
     * @brief List with the names of the enabled device extensions.
     */
    util::extension_list enabled_extensions;
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   /**
+    * @brief Stores whether the device supports controlling the swapchain image compression.
+    *
+    */
+   bool compression_control_enabled;
+#endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 };
 
 } /* namespace layer */

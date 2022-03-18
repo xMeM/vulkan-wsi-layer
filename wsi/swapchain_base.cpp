@@ -41,6 +41,7 @@
 #include <vulkan/vulkan.h>
 
 #include "util/log.hpp"
+#include "util/helpers.hpp"
 
 #include "swapchain_base.hpp"
 namespace wsi
@@ -184,6 +185,9 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_ancestor(VK_NULL_HANDLE)
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   , m_image_compression_control({VK_IMAGE_COMPRESSION_DEFAULT_EXT, 0})
+#endif
    , m_image_acquire_lock()
    , m_error_state(VK_NOT_READY)
    , m_started_presenting(false)
@@ -200,6 +204,20 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    m_surface = swapchain_create_info->surface;
 
    m_present_mode = swapchain_create_info->presentMode;
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   const auto *image_compression_control = util::find_extension<VkImageCompressionControlEXT>(
+      VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT, swapchain_create_info->pNext);
+   if (m_device_data.is_swapchain_compression_control_enabled() && image_compression_control != nullptr)
+   {
+      m_image_compression_control.compression_control_plane_count = image_compression_control->compressionControlPlaneCount;
+      m_image_compression_control.flags = image_compression_control->flags;
+      for (uint32_t i = 0; i < image_compression_control->compressionControlPlaneCount; i++)
+      {
+         m_image_compression_control.fixed_rate_flags[i] = image_compression_control->pFixedRateFlags[i];
+      }
+   }
+#endif
 
    /* Init image to invalid values. */
    if (!m_swapchain_images.try_resize(swapchain_create_info->minImageCount))

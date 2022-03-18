@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2021 Arm Limited.
+# Copyright (c) 2019-2022 Arm Limited.
 #
 # SPDX-License-Identifier: MIT
 #
@@ -55,17 +55,17 @@ endif()
 # Build Configuration options
 option(BUILD_WSI_HEADLESS "Build with support for VK_EXT_headless_surface" ON)
 option(BUILD_WSI_WAYLAND "Build with support for VK_KHR_wayland_surface" OFF)
+option(BUILD_WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN "Build with support for VK_EXT_image_compression_control_swapchain" OFF)
 set(SELECT_EXTERNAL_ALLOCATOR "none" CACHE STRING "Select an external system allocator (none, ion)")
 set(EXTERNAL_WSIALLOC_LIBRARY "" CACHE STRING "External implementation of the wsialloc interface to use")
 
 if(BUILD_WSI_WAYLAND)
+   set(BUILD_DRM_UTILS true)
    if(SELECT_EXTERNAL_ALLOCATOR STREQUAL "none")
       message(FATAL_ERROR "Wayland only supported with an external allocator.")
    endif()
-   set(BUILD_DRM_UTILS True)
 endif()
 
-# DRM Utilities
 if(BUILD_DRM_UTILS)
    add_library(drm_utils STATIC util/drm/drm_utils.cpp)
 
@@ -192,6 +192,8 @@ add_library(${PROJECT_NAME} SHARED
    util/custom_allocator.cpp
    util/extension_list.cpp
    util/log.cpp
+   util/format_modifiers.cpp
+   wsi/surface_properties.cpp
    wsi/swapchain_base.cpp
    wsi/synchronization.cpp
    wsi/wsi_factory.cpp)
@@ -199,6 +201,13 @@ add_library(${PROJECT_NAME} SHARED
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${WSI_DEFINES})
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${VULKAN_CXX_INCLUDE})
+
+if (BUILD_WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN)
+   add_definitions("-DWSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN=1")
+else()
+   add_definitions("-DWSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN=0")
+   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_EXT_image_compression_control_swapchain/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+endif()
 
 target_link_libraries(${PROJECT_NAME} ${LINK_WSI_LIBS})
 

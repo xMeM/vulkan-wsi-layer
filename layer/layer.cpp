@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include <vulkan/vk_layer.h>
+#include <vulkan/vulkan.h>
 
 #include "private_data.hpp"
 #include "surface_api.hpp"
@@ -36,6 +37,7 @@
 #include "wsi/wsi_factory.hpp"
 #include "util/log.hpp"
 #include "util/macros.hpp"
+#include "util/helpers.hpp"
 
 #define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
 
@@ -176,6 +178,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
          .set_instance_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
    if (result != VK_SUCCESS)
    {
+      instance_private_data::disassociate(*pInstance);
       if (table.DestroyInstance != nullptr)
       {
          table.DestroyInstance(*pInstance, pAllocator);
@@ -282,12 +285,24 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
       modified_info.ppEnabledExtensionNames, modified_info.enabledExtensionCount);
    if (result != VK_SUCCESS)
    {
+      layer::device_private_data::disassociate(*pDevice);
       if (table.DestroyDevice != nullptr)
       {
          table.DestroyDevice(*pDevice, pAllocator);
       }
       return result;
    }
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   const auto *swapchain_compression_feature =
+   util::find_extension<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT>(
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT, pCreateInfo->pNext);
+   if (swapchain_compression_feature != nullptr)
+   {
+      layer::device_private_data::get(*pDevice).set_swapchain_compression_control_enabled(
+         swapchain_compression_feature->imageCompressionControlSwapchain);
+   }
+#endif
 
    return VK_SUCCESS;
 }
@@ -373,6 +388,26 @@ VK_LAYER_EXPORT wsi_layer_vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLaye
    return VK_SUCCESS;
 }
 
+VWL_VKAPI_CALL(void)
+wsi_layer_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
+                                          VkPhysicalDeviceFeatures2 *pFeatures) VWL_API_POST
+{
+   auto &instance = layer::instance_private_data::get(physicalDevice);
+
+   instance.disp.GetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   auto *image_compression_control_swapchain_features =
+      util::find_extension<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT>(
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT, pFeatures->pNext);
+   if (image_compression_control_swapchain_features != nullptr)
+   {
+      image_compression_control_swapchain_features->imageCompressionControlSwapchain =
+         instance.has_image_compression_support(physicalDevice);
+   }
+#endif
+}
+
 #define GET_PROC_ADDR(func)      \
    if (!strcmp(funcName, #func)) \
       return (PFN_vkVoidFunction)&wsi_layer_##func;
@@ -409,7 +444,18 @@ wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_A
    GET_PROC_ADDR(vkCreateDevice);
    GET_PROC_ADDR(vkGetPhysicalDevicePresentRectanglesKHR);
 
+   if (!strcmp(funcName, "vkGetPhysicalDeviceFeatures2"))
+   {
+      return (PFN_vkVoidFunction)wsi_layer_vkGetPhysicalDeviceFeatures2KHR;
+   }
+
    auto &instance_data = layer::instance_private_data::get(instance);
+
+   if (instance_data.is_instance_extension_enabled(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+   {
+      GET_PROC_ADDR(vkGetPhysicalDeviceFeatures2KHR);
+   }
+
    if (instance_data.is_instance_extension_enabled(VK_KHR_SURFACE_EXTENSION_NAME))
    {
       PFN_vkVoidFunction wsi_func = wsi::get_proc_addr(funcName, instance_data);

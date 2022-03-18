@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,15 +25,23 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include "custom_allocator.hpp"
 
 namespace util
 {
-namespace drm
-{
 
-uint32_t vk_to_drm_format(VkFormat vk_format);
-VkFormat drm_to_vk_format(uint32_t drm_format);
-VkFormat drm_to_vk_srgb_format(uint32_t drm_format);
+/**
+ * @brief Get the properties a format has when combined with a DRM modifier.
+ *
+ * @param      physical_device   The physical device
+ * @param      format            The target format.
+ * @param[out] format_props_list A vector which will store the supported properties
+ *                               for every modifier.
+ *
+ * @return VK_SUCCESS on success. VK_ERROR_OUT_OF_HOST_MEMORY is returned when
+ * the host gets out of memory.
+ */
+VkResult get_drm_format_properties(VkPhysicalDevice physical_device, VkFormat format,
+                                   util::vector<VkDrmFormatModifierPropertiesEXT> &format_props_list);
 
-} // namespace drm
-} // namespace util
+} /* namespace util */

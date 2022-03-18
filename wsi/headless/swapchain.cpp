@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,9 +59,40 @@ swapchain::~swapchain()
    teardown();
 }
 
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+VkImageCompressionControlEXT swapchain::construct_image_compression_control()
+{
+   VkImageCompressionControlEXT compression_control = {};
+   compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
+   compression_control.compressionControlPlaneCount = m_image_compression_control.compression_control_plane_count;
+   compression_control.flags = m_image_compression_control.flags;
+   compression_control.pFixedRateFlags = m_image_compression_control.fixed_rate_flags.data();
+   return compression_control;
+}
+#endif
+
 VkResult swapchain::create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image)
 {
-   return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image);
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   VkImageCompressionControlEXT compression_control;
+   if (m_device_data.is_swapchain_compression_control_enabled())
+   {
+      compression_control = construct_image_compression_control();
+      compression_control.pNext = m_image_create_info.pNext;
+      m_image_create_info.pNext = &compression_control;
+   }
+#endif
+
+   VkResult res = m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image);
+
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   if (m_device_data.is_swapchain_compression_control_enabled())
+   {
+      /* Restore pNext pointer of m_image_create_info as compression_control will be garbage after this function exits */
+      m_image_create_info.pNext = compression_control.pNext;
+   }
+#endif
+   return res;
 }
 
 VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
@@ -70,7 +101,23 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
 
    m_image_create_info = image_create;
-   res = m_device_data.disp.CreateImage(m_device, &image_create, get_allocation_callbacks(), &image.image);
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   VkImageCompressionControlEXT compression_control;
+   if (m_device_data.is_swapchain_compression_control_enabled())
+   {
+      compression_control = construct_image_compression_control();
+      compression_control.pNext = m_image_create_info.pNext;
+      m_image_create_info.pNext = &compression_control;
+   }
+#endif
+   res = m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   if (m_device_data.is_swapchain_compression_control_enabled())
+   {
+      /* Restore pNext pointer of m_image_create_info as compression_control will be garbage after this function exits */
+      m_image_create_info.pNext = compression_control.pNext;
+   }
+#endif
    if (res != VK_SUCCESS)
    {
       return res;

@@ -32,15 +32,15 @@ namespace wsi
 namespace wayland
 {
 
-struct vk_format_hasher
+struct surface_format_properties_hasher
 {
-   size_t operator()(const VkFormat format) const
+   size_t operator()(const VkFormat &format) const
    {
       return std::hash<uint64_t>()(static_cast<uint64_t>(format));
    }
 };
 
-using vk_format_set = util::unordered_set<VkFormat, vk_format_hasher>;
+using surface_format_properties_map = util::unordered_map<VkFormat, surface_format_properties, surface_format_properties_hasher>;
 
 class surface;
 
@@ -73,7 +73,7 @@ private:
     */
    surface *specific_surface;
    /** Set of supported Vulkan formats by the @ref specific_surface. */
-   vk_format_set supported_formats;
+   surface_format_properties_map supported_formats;
 };
 
 } // namespace wayland

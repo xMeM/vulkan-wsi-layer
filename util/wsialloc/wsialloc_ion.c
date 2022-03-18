@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -44,7 +44,7 @@
  *
  * This should only be increased when this implementation is updated to match newer versions of wsialloc.h.
  */
-#define WSIALLOC_IMPLEMENTATION_VERSION 1
+#define WSIALLOC_IMPLEMENTATION_VERSION 2
 
 /* Ensure we are implementing the wsialloc version matching the wsialloc.h header we are using. */
 #if WSIALLOC_IMPLEMENTATION_VERSION != WSIALLOC_INTERFACE_VERSION

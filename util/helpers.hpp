@@ -80,6 +80,17 @@ const T *find_extension(VkStructureType sType, const void *pNext)
    return reinterpret_cast<const T *>(entry);
 }
 
+template <typename T>
+T *find_extension(VkStructureType sType, void *pNext)
+{
+   auto entry = reinterpret_cast<VkBaseOutStructure *>(pNext);
+   while (entry && entry->sType != sType)
+   {
+      entry = entry->pNext;
+   }
+   return reinterpret_cast<T *>(entry);
+}
+
 class noncopyable
 {
 protected:
