@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -48,6 +48,11 @@ public:
    bool contains(VkIcdWsiPlatform p) const
    {
       return (m_platforms & (static_cast<uint64_t>(1) << to_int(p))) != 0;
+   }
+
+   bool empty() const
+   {
+      return m_platforms == 0;
    }
 
 private:

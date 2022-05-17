@@ -150,15 +150,11 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
    {
       const char *optional_extensions[] =
       {
-         VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
          VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
          VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
 
-         VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
          VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
          VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
-
-         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
       };
 
       for (auto extension : optional_extensions)

@@ -56,26 +56,37 @@ namespace layer
  * guarantee than we can safely call them. We still mark the entrypoints with REQUIRED() and OPTIONAL(). The layer
  * fails if vkGetInstanceProcAddr returns null for entrypoints that are REQUIRED().
  */
-#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL)   \
-   REQUIRED(GetInstanceProcAddr)                        \
-   REQUIRED(DestroyInstance)                            \
-   REQUIRED(GetPhysicalDeviceProperties)                \
-   REQUIRED(GetPhysicalDeviceImageFormatProperties)     \
-   REQUIRED(EnumerateDeviceExtensionProperties)         \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)    \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)   \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)         \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)        \
-   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)    \
-   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)         \
-   OPTIONAL(CreateHeadlessSurfaceEXT)                   \
-   OPTIONAL(CreateWaylandSurfaceKHR)                    \
-   OPTIONAL(DestroySurfaceKHR)                          \
-   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR) \
-   OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)      \
-   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)      \
-   OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)\
-   OPTIONAL(GetPhysicalDeviceFeatures2KHR)
+#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL)    \
+   /* Vulkan 1.0 */                                      \
+   REQUIRED(GetInstanceProcAddr)                         \
+   REQUIRED(DestroyInstance)                             \
+   REQUIRED(GetPhysicalDeviceProperties)                 \
+   REQUIRED(GetPhysicalDeviceImageFormatProperties)      \
+   REQUIRED(EnumerateDeviceExtensionProperties)          \
+   /* VK_KHR_surface */                                  \
+   OPTIONAL(DestroySurfaceKHR)                           \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)     \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)          \
+   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)     \
+   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)          \
+   /* VK_EXT_headless_surface */                         \
+   OPTIONAL(CreateHeadlessSurfaceEXT)                    \
+   /* VK_KHR_wayland_surface */                          \
+   OPTIONAL(CreateWaylandSurfaceKHR)                     \
+   /* VK_KHR_get_surface_capabilities2 */                \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)    \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)         \
+   /* VK_KHR_get_physical_device_properties2 or */       \
+   /* 1.1 (without KHR suffix) */                        \
+   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR)  \
+   OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)       \
+   OPTIONAL(GetPhysicalDeviceFeatures2KHR)               \
+   /* VK_KHR_device_group + VK_KHR_surface or */         \
+   /* 1.1 with VK_KHR_swapchain */                       \
+   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)       \
+   /* VK_KHR_external_fence_capabilities or */           \
+   /* 1.1 (without KHR suffix) */                        \
+   OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)
 
 struct instance_dispatch_table
 {
@@ -105,6 +116,7 @@ struct instance_dispatch_table
  * them automatically to the output of vkEnumeratePhysicalDeviceProperties.
  */
 #define DEVICE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL) \
+   /* Vulkan 1.0 */                                 \
    REQUIRED(GetDeviceProcAddr)                      \
    REQUIRED(GetDeviceQueue)                         \
    REQUIRED(QueueSubmit)                            \
@@ -129,18 +141,28 @@ struct instance_dispatch_table
    REQUIRED(ResetFences)                            \
    REQUIRED(WaitForFences)                          \
    REQUIRED(DestroyDevice)                          \
+   /* VK_KHR_swapchain */                           \
    OPTIONAL(CreateSwapchainKHR)                     \
    OPTIONAL(DestroySwapchainKHR)                    \
    OPTIONAL(GetSwapchainImagesKHR)                  \
    OPTIONAL(AcquireNextImageKHR)                    \
    OPTIONAL(QueuePresentKHR)                        \
-   OPTIONAL(GetMemoryFdPropertiesKHR)               \
-   OPTIONAL(BindImageMemory2KHR)                    \
+   /* VK_KHR_device_group + VK_KHR_swapchain or */  \
+   /* 1.1 with VK_KHR_swapchain */                  \
+   OPTIONAL(AcquireNextImage2KHR)                   \
+   /* VK_KHR_device_group + VK_KHR_surface or */    \
+   /* 1.1 with VK_KHR_swapchain */                  \
    OPTIONAL(GetDeviceGroupSurfacePresentModesKHR)   \
    OPTIONAL(GetDeviceGroupPresentCapabilitiesKHR)   \
-   OPTIONAL(AcquireNextImage2KHR)                   \
+   /* VK_KHR_external_memory_fd */                  \
+   OPTIONAL(GetMemoryFdPropertiesKHR)               \
+   /* VK_KHR_bind_memory2 or */                     \
+   /* 1.1 (without KHR suffix) */                   \
+   OPTIONAL(BindImageMemory2KHR)                    \
+   /* VK_KHR_external_fence_fd */                   \
    OPTIONAL(GetFenceFdKHR)                          \
    OPTIONAL(ImportFenceFdKHR)                       \
+   /* VK_KHR_external_semaphore_fd */               \
    OPTIONAL(ImportSemaphoreFdKHR)
 
 struct device_dispatch_table

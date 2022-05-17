@@ -25,6 +25,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <array>
 
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
@@ -102,45 +103,58 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
+   /* For instances handled by the layer, we need to enable extra extensions, therefore take a copy of pCreateInfo. */
+   VkInstanceCreateInfo modified_info = *pCreateInfo;
+
+   /* Create a util::vector in case we need to modify the modified_info.ppEnabledExtensionNames list.
+    * This object and the extension_list object need to be in the global scope so they can be alive by the time
+    * vkCreateInstance is called.
+    */
+   util::allocator allocator{VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator};
+   util::vector<const char *> modified_enabled_extensions{allocator};
+   util::extension_list extensions{allocator};
+
+   /* Find all the platforms that the layer can handle based on pCreateInfo->ppEnabledExtensionNames. */
+   auto layer_platforms_to_enable = wsi::find_enabled_layer_platforms(pCreateInfo);
+   if (!layer_platforms_to_enable.empty())
+   {
+      /* Create a list of extensions to enable, including the provided extensions and those required by the layer. */
+      TRY(extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
+
+      if (!extensions.contains(VK_KHR_SURFACE_EXTENSION_NAME))
+      {
+         return VK_ERROR_EXTENSION_NOT_PRESENT;
+      }
+
+      /* The extensions listed below are those strictly required by the layer. Other extensions may be used by the
+       * layer (such as calling their entrypoints), when they are enabled by the application.
+       */
+      std::array<const char*, 4> extra_extensions = {
+         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+         VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+         VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+         /* The extension below is only needed for Wayland. For now, enable it also for headless. */
+         VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
+      };
+      TRY(extensions.add(extra_extensions.data(), extra_extensions.size()));
+      TRY(extensions.get_extension_strings(modified_enabled_extensions));
+
+      modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
+      modified_info.enabledExtensionCount = modified_enabled_extensions.size();
+   }
+
    /* Advance the link info for the next element on the chain. */
    layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
-
-   /* The layer needs some Vulkan 1.1 functionality in order to operate correctly.
-    * We thus change the application info to require this API version, if necessary.
-    * This may have consequences for ICDs whose behaviour depends on apiVersion.
-    */
-   const uint32_t minimum_required_vulkan_version = VK_API_VERSION_1_1;
-   VkApplicationInfo modified_app_info{};
-   if (nullptr != pCreateInfo->pApplicationInfo)
-   {
-      modified_app_info = *pCreateInfo->pApplicationInfo;
-      if (modified_app_info.apiVersion < minimum_required_vulkan_version)
-      {
-         modified_app_info.apiVersion = minimum_required_vulkan_version;
-      }
-   }
-   else
-   {
-      modified_app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-      modified_app_info.apiVersion = minimum_required_vulkan_version;
-   }
-
-   VkInstanceCreateInfo modified_info = *pCreateInfo;
-   modified_info.pApplicationInfo = &modified_app_info;
 
    /* Now call create instance on the chain further down the list.
     * Note that we do not remove the extensions that the layer supports from modified_info.ppEnabledExtensionNames.
     * Layers have to abide the rule that vkCreateInstance must not generate an error for unrecognized extension names.
     * Also, the loader filters the extension list to ensure that ICDs do not see extensions that they do not support.
     */
-   VkResult result;
-   result = fpCreateInstance(&modified_info, pAllocator, pInstance);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
+   TRY(fpCreateInstance(&modified_info, pAllocator, pInstance));
 
    instance_dispatch_table table{};
+   VkResult result;
    result = table.populate(*pInstance, fpGetInstanceProcAddr);
    if (result != VK_SUCCESS)
    {
@@ -150,9 +164,6 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       }
       return result;
    }
-
-   /* Find all the platforms that the layer can handle based on pCreateInfo->ppEnabledExtensionNames. */
-   auto layer_platforms_to_enable = wsi::find_enabled_layer_platforms(pCreateInfo);
 
    /* Following the spec: use the callbacks provided to vkCreateInstance() if not nullptr,
     * otherwise use the default callbacks.
@@ -214,45 +225,30 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    /* Advance the link info for the next element on the chain. */
    layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
 
-   /* Copy the extension to a util::extension_list. */
+   /* Enable extra extensions if needed by the layer, similarly to what done in vkCreateInstance. */
+   VkDeviceCreateInfo modified_info = *pCreateInfo;
+
    auto &inst_data = instance_private_data::get(physicalDevice);
-
    util::allocator allocator{inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator};
-   util::extension_list enabled_extensions{allocator};
-   VkResult result;
-   result = enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
-   /* Add the extensions required by the platforms that are being enabled in the layer. */
-   const util::wsi_platform_set& enabled_platforms = inst_data.get_enabled_platforms();
-   result = wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
    util::vector<const char *> modified_enabled_extensions{allocator};
-   result = enabled_extensions.get_extension_strings(modified_enabled_extensions);
-   if (result != VK_SUCCESS)
+   util::extension_list enabled_extensions{allocator};
+
+   const util::wsi_platform_set& enabled_platforms = inst_data.get_enabled_platforms();
+   if (!enabled_platforms.empty())
    {
-      return result;
+      TRY(enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
+      TRY(wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
+      TRY(enabled_extensions.get_extension_strings(modified_enabled_extensions));
+
+      modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
+      modified_info.enabledExtensionCount = modified_enabled_extensions.size();
    }
 
    /* Now call create device on the chain further down the list. */
-   VkDeviceCreateInfo modified_info = *pCreateInfo;
-   modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
-   modified_info.enabledExtensionCount = modified_enabled_extensions.size();
-   result = fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
+   TRY(fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice));
 
    device_dispatch_table table{};
-   result = table.populate(*pDevice, fpGetDeviceProcAddr);
+   VkResult result = table.populate(*pDevice, fpGetDeviceProcAddr);
    if (result != VK_SUCCESS)
    {
       if (table.DestroyDevice != nullptr)
@@ -265,7 +261,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    /* Following the spec: use the callbacks provided to vkCreateDevice() if not nullptr, otherwise use the callbacks
     * provided to the instance (if no allocator callbacks was provided to the instance, it will use default ones).
     */
-   util::allocator device_allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator };
+   util::allocator device_allocator{inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator};
    result =
       device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator);
    if (result != VK_SUCCESS)

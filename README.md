@@ -25,14 +25,19 @@ enabled via a build option [as explained below](#building-with-wayland-support).
   `VK_EXT_headless_surface` extension and for the Vulkan 1.1, or later API.
 
 The Vulkan WSI Layer uses Vulkan extensions to communicate with the Vulkan ICDs.
-The ICDs installed in the system are required to support the Vulkan 1.1, or
-later API, and the following device extensions:
-* When Wayland support is enabled:
+The ICDs installed in the system are required to support the following extensions:
+* Instance extensions:
+  * VK_KHR_get_physical_device_properties_2
+  * VK_KHR_external_fence_capabilities
+  * VK_KHR_external_semaphore_capabilities
+  * VK_KHR_external_memory_capabilities
+* Device extensions (only required when Wayland support is enabled):
   * VK_EXT_image_drm_format_modifier
   * VK_KHR_image_format_list
   * VK_EXT_external_memory_dma_buf
   * VK_KHR_external_memory_fd
   * VK_KHR_external_fence_fd
+* Any dependencies of the above extensions
 
 ### Building the Vulkan® loader
 
@@ -109,9 +114,6 @@ that each system will need a tailored implementation, although the layer
 provides a generic ion implementation that may work in systems that support
 linear formats. This is selected by the `-DSELECT_EXTERNAL_ALLOCATOR=ion`
 option, as shown above.
-
-Wayland support is still **EXPERIMENTAL**. What this means in practice is that
-the support is incomplete and not ready for prime time.
 
 ## Installation
 
