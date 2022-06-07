@@ -141,6 +141,11 @@ We are open for contributions.
 Contributors are expected to abide by the
 [freedesktop.org code of conduct](https://www.freedesktop.org/wiki/CodeOfConduct/).
 
+### Implement a new WSI backend
+
+Instructions on how to implement a WSI backend can be found in the
+[README](wsi/README.md) in the wsi folder.
+
 ## Khronos® Conformance
 
 This software is based on a published Khronos® Specification and is expected to

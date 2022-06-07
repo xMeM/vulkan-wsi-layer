@@ -163,6 +163,10 @@ public:
    /**
     * @brief Creates a VkImage handle.
     *
+    * It is used to bind images to memory from the swapchain. It is called if a
+    * VkImageSwapchainCreateInfoKHR struct has been provided in the vkCreateImage
+    * function.
+    *
     * @param      image_create_info Data to be used to create the image.
     * @param[out] image             Handle to the image.
     *
@@ -174,6 +178,10 @@ public:
 
    /**
     * @brief Bind image to a swapchain
+    *
+    * It is used to bind images to memory from the swapchain. It is called if a
+    * VkBindImageMemorySwapchainInfoKHR struct has been provided in the vkBindImageMemory2
+    * function.
     *
     * @param device              is the logical device that owns the images and memory.
     * @param bind_image_mem_info details the image we want to bind.
@@ -382,6 +390,8 @@ protected:
    /**
     * @brief Method to present and image
     *
+    * It sends the next image for presentation to the presentation engine.
+    *
     * @param pending_index Index of the pending image to be presented.
     *
     */
@@ -399,12 +409,18 @@ protected:
    /**
     * @brief Method to release a swapchain image
     *
+    * Releases resources stored in the data member of a swapchain_image.
+    *
     * @param image Handle to the image about to be released.
     */
    virtual void destroy_image(swapchain_image &image){};
 
    /**
     * @brief Hook for any actions to free up a buffer for acquire
+    *
+    * If specific actions are required by the windowing system to query whether a buffer
+    * is still used by it, this function should be implemented by the WSI backend's
+    * swapchain implementation.
     *
     * @param[in,out] timeout time to wait, in nanoseconds. 0 doesn't block,
     *                        UINT64_MAX waits indefinately. The timeout should
