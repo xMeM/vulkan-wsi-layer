@@ -429,7 +429,15 @@ public:
     */
    static device_private_data &get(VkQueue queue);
 
+   /**
+    * @brief Add a swapchain to the swapchains member variable.
+    */
    VkResult add_layer_swapchain(VkSwapchainKHR swapchain);
+
+   /**
+    * @brief Remove a swapchain from the swapchains member variable.
+    */
+   void remove_layer_swapchain(VkSwapchainKHR swapchain);
 
    /**
     * @brief Return whether all the provided swapchains are owned by us (the WSI Layer).

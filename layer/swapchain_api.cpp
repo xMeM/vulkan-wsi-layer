@@ -91,6 +91,8 @@ wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
    assert(swapc != VK_NULL_HANDLE);
    auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
    wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
+
+   device_data.remove_layer_swapchain(swapc);
 }
 
 VWL_VKAPI_CALL(VkResult)

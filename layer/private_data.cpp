@@ -392,6 +392,16 @@ VkResult device_private_data::add_layer_swapchain(VkSwapchainKHR swapchain)
    return result.has_value() ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
+void device_private_data::remove_layer_swapchain(VkSwapchainKHR swapchain)
+{
+   scoped_mutex lock(swapchains_lock);
+   auto it = swapchains.find(swapchain);
+   if (it != swapchains.end())
+   {
+      swapchains.erase(swapchain);
+   }
+}
+
 bool device_private_data::layer_owns_all_swapchains(const VkSwapchainKHR *swapchain, uint32_t swapchain_count) const
 {
    scoped_mutex lock(swapchains_lock);
