@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -54,7 +54,8 @@ VkResult timed_semaphore::init(unsigned count)
    assert(res == 0 || res == ENOMEM);
    if (res != 0)
    {
-      pthread_condattr_destroy(&attr);
+      res = pthread_condattr_destroy(&attr);
+      assert(res == 0);
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 

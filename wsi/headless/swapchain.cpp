@@ -123,7 +123,7 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
       return res;
    }
 
-   VkMemoryRequirements memory_requirements;
+   VkMemoryRequirements memory_requirements = {};
    m_device_data.disp.GetImageMemoryRequirements(m_device, image.image, &memory_requirements);
 
    /* Find a memory type */

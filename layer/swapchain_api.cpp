@@ -296,7 +296,7 @@ wsi_layer_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevic
    {
       *pRectCount = 1;
 
-      VkSurfaceCapabilitiesKHR surface_caps;
+      VkSurfaceCapabilitiesKHR surface_caps = {};
       result = props->get_surface_capabilities(physicalDevice, &surface_caps);
 
       if (result != VK_SUCCESS)

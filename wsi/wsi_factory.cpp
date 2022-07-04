@@ -124,7 +124,7 @@ static VkResult get_available_device_extensions(VkPhysicalDevice physical_device
 {
    auto &instance_data = layer::instance_private_data::get(physical_device);
    util::vector<VkExtensionProperties> properties{available_extensions.get_allocator()};
-   uint32_t count;
+   uint32_t count = 0;
    TRY(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, nullptr));
 
    if (!properties.try_resize(count))

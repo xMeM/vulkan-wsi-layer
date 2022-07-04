@@ -86,20 +86,26 @@ static T get_instance_proc_addr(PFN_vkGetInstanceProcAddr fp_get_instance_proc_a
 VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
                                     VkInstance *pInstance)
 {
-   VkLayerInstanceCreateInfo *layerCreateInfo = get_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
-   PFN_vkSetInstanceLoaderData loader_callback =
-      get_chain_info(pCreateInfo, VK_LOADER_DATA_CALLBACK)->u.pfnSetInstanceLoaderData;
-
-   if (nullptr == layerCreateInfo || nullptr == layerCreateInfo->u.pLayerInfo)
+   VkLayerInstanceCreateInfo *layer_link_info = get_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
+   VkLayerInstanceCreateInfo *loader_data_callback = get_chain_info(pCreateInfo, VK_LOADER_DATA_CALLBACK);
+   if (nullptr == layer_link_info || nullptr == layer_link_info->u.pLayerInfo || nullptr == loader_data_callback)
    {
+      WSI_LOG_ERROR("Unexpected NULL pointer in layer initialization structures during vkCreateInstance");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layerCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+   PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layer_link_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+   PFN_vkSetInstanceLoaderData loader_callback = loader_data_callback->u.pfnSetInstanceLoaderData;
+   if (nullptr == fpGetInstanceProcAddr || nullptr == loader_callback)
+   {
+      WSI_LOG_ERROR("Unexpected NULL pointer for loader callback functions during vkCreateInstance");
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
 
    auto fpCreateInstance = get_instance_proc_addr<PFN_vkCreateInstance>(fpGetInstanceProcAddr, "vkCreateInstance");
    if (nullptr == fpCreateInstance)
    {
+      WSI_LOG_ERROR("Unexpected NULL return value from pfnNextGetInstanceProcAddr");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -144,7 +150,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
    }
 
    /* Advance the link info for the next element on the chain. */
-   layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
+   layer_link_info->u.pLayerInfo = layer_link_info->u.pLayerInfo->pNext;
 
    /* Now call create instance on the chain further down the list.
     * Note that we do not remove the extensions that the layer supports from modified_info.ppEnabledExtensionNames.
@@ -203,27 +209,33 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
 VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                                   const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
 {
-   VkLayerDeviceCreateInfo *layerCreateInfo = get_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
-   PFN_vkSetDeviceLoaderData loader_callback =
-      get_chain_info(pCreateInfo, VK_LOADER_DATA_CALLBACK)->u.pfnSetDeviceLoaderData;
-
-   if (nullptr == layerCreateInfo || nullptr == layerCreateInfo->u.pLayerInfo)
+   VkLayerDeviceCreateInfo *layer_link_info = get_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
+   VkLayerDeviceCreateInfo *loader_data_callback = get_chain_info(pCreateInfo, VK_LOADER_DATA_CALLBACK);
+   if (nullptr == layer_link_info || nullptr == layer_link_info->u.pLayerInfo || nullptr == loader_data_callback)
    {
+      WSI_LOG_ERROR("Unexpected NULL pointer in layer initialization structures during vkCreateDevice");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    /* Retrieve the vkGetDeviceProcAddr and the vkCreateDevice function pointers for the next layer in the chain. */
-   PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layerCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
-   PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = layerCreateInfo->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+   PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layer_link_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+   PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = layer_link_info->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+   PFN_vkSetDeviceLoaderData loader_callback = loader_data_callback->u.pfnSetDeviceLoaderData;
+   if (nullptr == fpGetInstanceProcAddr || nullptr == fpGetDeviceProcAddr || nullptr == loader_callback)
+   {
+      WSI_LOG_ERROR("Unexpected NULL pointer for loader callback functions during vkCreateDevice");
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
 
    auto fpCreateDevice = get_instance_proc_addr<PFN_vkCreateDevice>(fpGetInstanceProcAddr, "vkCreateDevice");
    if (nullptr == fpCreateDevice)
    {
+      WSI_LOG_ERROR("Unexpected NULL return value from pfnNextGetInstanceProcAddr");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    /* Advance the link info for the next element on the chain. */
-   layerCreateInfo->u.pLayerInfo = layerCreateInfo->u.pLayerInfo->pNext;
+   layer_link_info->u.pLayerInfo = layer_link_info->u.pLayerInfo->pNext;
 
    /* Enable extra extensions if needed by the layer, similarly to what done in vkCreateInstance. */
    VkDeviceCreateInfo modified_info = *pCreateInfo;
