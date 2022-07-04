@@ -64,18 +64,6 @@ protected:
    };
 
    /**
-    * @brief Creates a VkImage handle.
-    *
-    * @param      image_create_info Data to be used to create the image.
-    * @param[out] image             Handle to the image.
-    *
-    * @return If image creation is successful returns VK_SUCCESS, otherwise
-    * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_OUT_OF_HOST_MEMORY
-    * depending on the error that occured.
-    */
-   VkResult create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image) override;
-
-   /**
     * @brief Creates and binds a new swapchain image.
     *
     * @param image_create_info Data to be used to create the image.
@@ -123,13 +111,8 @@ protected:
 private:
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   VkImageCompressionControlEXT construct_image_compression_control();
+   VkImageCompressionControlEXT m_image_compression_control;
 #endif
-
-   /**
-    * @brief Image creation info used for all swapchain images.
-    */
-   VkImageCreateInfo m_image_create_info;
 };
 
 } /* namespace headless */

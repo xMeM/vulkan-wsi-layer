@@ -45,17 +45,15 @@ namespace wayland
 
 struct image_creation_parameters
 {
-   VkImageCreateInfo m_image_create_info;
    wsialloc_format m_allocated_format;
    util::vector<VkSubresourceLayout> m_image_layout;
    VkExternalMemoryImageCreateInfoKHR m_external_info;
    VkImageDrmFormatModifierExplicitCreateInfoEXT m_drm_mod_info;
 
-   image_creation_parameters(VkImageCreateInfo image_create_info, wsialloc_format allocated_format,
+   image_creation_parameters(wsialloc_format allocated_format,
                              util::allocator allocator, VkExternalMemoryImageCreateInfoKHR external_info,
                              VkImageDrmFormatModifierExplicitCreateInfoEXT drm_mod_info)
-      : m_image_create_info(image_create_info)
-      , m_allocated_format(allocated_format)
+      : m_allocated_format(allocated_format)
       , m_image_layout(allocator)
       , m_external_info(external_info)
       , m_drm_mod_info(drm_mod_info)
@@ -80,22 +78,6 @@ protected:
     */
    VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
                           bool &use_presentation_thread) override;
-
-   /**
-    * @brief Creates a VkImage handle.
-    *
-    * The image_create_info argument is ignored in favour of m_image_create_info. This is because in
-    * order to guarantee a VkImage can be bound to any swapchain index, all swapchain images must
-    * be created with the same creation parameters.
-    *
-    * @param      image_create_info Data to be used to create the image.
-    * @param[out] image             Handle to the image.
-    *
-    * @return If image creation is successful returns VK_SUCCESS, otherwise
-    * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_OUT_OF_HOST_MEMORY
-    * depending on the error that occured.
-    */
-   VkResult create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image) override;
 
    /**
     * @brief Creates and binds a new swapchain image.

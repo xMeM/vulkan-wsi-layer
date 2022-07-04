@@ -79,9 +79,9 @@ swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCal
    , m_wsi_surface(&wsi_surface)
    , m_buffer_queue(nullptr)
    , m_wsi_allocator(nullptr)
-   , m_image_creation_parameters({}, {}, m_allocator, {}, {})
+   , m_image_creation_parameters({}, m_allocator, {}, {})
 {
-   m_image_creation_parameters.m_image_create_info.format = VK_FORMAT_UNDEFINED;
+   m_image_create_info.format = VK_FORMAT_UNDEFINED;
 }
 
 swapchain::~swapchain()
@@ -294,9 +294,10 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
          VkImageCompressionControlEXT compression_control = {};
          compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
-         compression_control.flags =  m_image_compression_control.flags;
-         compression_control.compressionControlPlaneCount = m_image_compression_control.compression_control_plane_count;
-         compression_control.pFixedRateFlags = m_image_compression_control.fixed_rate_flags.data();
+         compression_control.flags = m_image_compression_control_params.flags;
+         compression_control.compressionControlPlaneCount =
+            m_image_compression_control_params.compression_control_plane_count;
+         compression_control.pFixedRateFlags = m_image_compression_control_params.fixed_rate_flags.data();
 
          if (m_device_data.is_swapchain_compression_control_enabled())
          {
@@ -352,12 +353,6 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
    return VK_SUCCESS;
 }
 
-VkResult swapchain::create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image)
-{
-   return m_device_data.disp.CreateImage(m_device, &m_image_creation_parameters.m_image_create_info,
-                                         get_allocation_callbacks(), image);
-}
-
 VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data &image_data,
                                       util::vector<wsialloc_format> &importable_formats,
                                       wsialloc_format *allocated_format)
@@ -366,7 +361,7 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
    uint64_t allocation_flags = is_protected_memory ? WSIALLOC_ALLOCATE_PROTECTED : 0;
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   if (m_image_compression_control.flags & VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT)
+   if (m_image_compression_control_params.flags & VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT)
    {
       allocation_flags |= WSIALLOC_ALLOCATE_HIGHEST_FIXED_RATE_COMPRESSION;
    }
@@ -402,7 +397,6 @@ VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, wayland
 
    bool is_disjoint = false;
    util::vector<wsialloc_format> importable_formats(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-   auto &m_image_create_info = m_image_creation_parameters.m_image_create_info;
    auto &m_allocated_format = m_image_creation_parameters.m_allocated_format;
    if (m_image_create_info.format != VK_FORMAT_UNDEFINED)
    {

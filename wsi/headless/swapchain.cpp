@@ -49,7 +49,9 @@ struct image_data
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
    : wsi::swapchain_base(dev_data, pAllocator)
-   , m_image_create_info()
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   , m_image_compression_control{}
+#endif
 {
 }
 
@@ -59,42 +61,6 @@ swapchain::~swapchain()
    teardown();
 }
 
-#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-VkImageCompressionControlEXT swapchain::construct_image_compression_control()
-{
-   VkImageCompressionControlEXT compression_control = {};
-   compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
-   compression_control.compressionControlPlaneCount = m_image_compression_control.compression_control_plane_count;
-   compression_control.flags = m_image_compression_control.flags;
-   compression_control.pFixedRateFlags = m_image_compression_control.fixed_rate_flags.data();
-   return compression_control;
-}
-#endif
-
-VkResult swapchain::create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image)
-{
-#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   VkImageCompressionControlEXT compression_control;
-   if (m_device_data.is_swapchain_compression_control_enabled())
-   {
-      compression_control = construct_image_compression_control();
-      compression_control.pNext = m_image_create_info.pNext;
-      m_image_create_info.pNext = &compression_control;
-   }
-#endif
-
-   VkResult res = m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image);
-
-#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   if (m_device_data.is_swapchain_compression_control_enabled())
-   {
-      /* Restore pNext pointer of m_image_create_info as compression_control will be garbage after this function exits */
-      m_image_create_info.pNext = compression_control.pNext;
-   }
-#endif
-   return res;
-}
-
 VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
 {
    VkResult res = VK_SUCCESS;
@@ -102,22 +68,20 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
 
    m_image_create_info = image_create;
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   VkImageCompressionControlEXT compression_control;
    if (m_device_data.is_swapchain_compression_control_enabled())
    {
-      compression_control = construct_image_compression_control();
-      compression_control.pNext = m_image_create_info.pNext;
-      m_image_create_info.pNext = &compression_control;
+      /* Initialize compression control */
+      m_image_compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
+      m_image_compression_control.compressionControlPlaneCount =
+         m_image_compression_control_params.compression_control_plane_count;
+      m_image_compression_control.flags = m_image_compression_control_params.flags;
+      m_image_compression_control.pFixedRateFlags = m_image_compression_control_params.fixed_rate_flags.data();
+      m_image_compression_control.pNext = m_image_create_info.pNext;
+
+      m_image_create_info.pNext = &m_image_compression_control;
    }
 #endif
    res = m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
-#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   if (m_device_data.is_swapchain_compression_control_enabled())
-   {
-      /* Restore pNext pointer of m_image_create_info as compression_control will be garbage after this function exits */
-      m_image_create_info.pNext = compression_control.pNext;
-   }
-#endif
    if (res != VK_SUCCESS)
    {
       return res;

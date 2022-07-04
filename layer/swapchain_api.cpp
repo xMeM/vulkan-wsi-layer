@@ -348,7 +348,7 @@ wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo, c
    }
 
    auto sc = reinterpret_cast<wsi::swapchain_base *>(image_sc_create_info->swapchain);
-   return sc->create_aliased_image_handle(pCreateInfo, pImage);
+   return sc->create_aliased_image_handle(pImage);
 }
 
 VWL_VKAPI_CALL(VkResult)

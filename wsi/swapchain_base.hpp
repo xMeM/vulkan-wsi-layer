@@ -67,7 +67,7 @@ struct swapchain_image
 constexpr uint32_t MAX_PLANES = 4;
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-struct image_compression_control
+struct image_compression_control_params
 {
    VkImageCompressionFlagsEXT flags;
    uint32_t compression_control_plane_count;
@@ -165,16 +165,16 @@ public:
     *
     * It is used to bind images to memory from the swapchain. It is called if a
     * VkImageSwapchainCreateInfoKHR struct has been provided in the vkCreateImage
-    * function.
+    * function. All images created by the swapchain will use the same VkImageCreateInfo,
+    * initialized in create_and_bind_swapchain_image().
     *
-    * @param      image_create_info Data to be used to create the image.
     * @param[out] image             Handle to the image.
     *
     * @return If image creation is successful returns VK_SUCCESS, otherwise
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_OUT_OF_HOST_MEMORY
     * depending on the error that occured.
     */
-   virtual VkResult create_aliased_image_handle(const VkImageCreateInfo *image_create_info, VkImage *image) = 0;
+   VkResult create_aliased_image_handle(VkImage *image);
 
    /**
     * @brief Bind image to a swapchain
@@ -312,8 +312,13 @@ protected:
     * @brief Describes the image compression the swapchain will use
     *
     */
-   image_compression_control m_image_compression_control;
+   image_compression_control_params m_image_compression_control_params;
 #endif
+
+   /**
+    * @brief Image creation info used for all swapchain images.
+    */
+   VkImageCreateInfo m_image_create_info;
 
    /**
     * @brief Return the VkAllocationCallbacks passed in this object constructor.

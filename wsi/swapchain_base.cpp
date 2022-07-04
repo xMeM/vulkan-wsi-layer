@@ -186,8 +186,9 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   , m_image_compression_control({VK_IMAGE_COMPRESSION_DEFAULT_EXT, 0})
+   , m_image_compression_control_params({VK_IMAGE_COMPRESSION_DEFAULT_EXT, 0})
 #endif
+   , m_image_create_info()
    , m_image_acquire_lock()
    , m_error_state(VK_NOT_READY)
    , m_started_presenting(false)
@@ -210,11 +211,12 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT, swapchain_create_info->pNext);
    if (m_device_data.is_swapchain_compression_control_enabled() && image_compression_control != nullptr)
    {
-      m_image_compression_control.compression_control_plane_count = image_compression_control->compressionControlPlaneCount;
-      m_image_compression_control.flags = image_compression_control->flags;
+      m_image_compression_control_params.compression_control_plane_count =
+         image_compression_control->compressionControlPlaneCount;
+      m_image_compression_control_params.flags = image_compression_control->flags;
       for (uint32_t i = 0; i < image_compression_control->compressionControlPlaneCount; i++)
       {
-         m_image_compression_control.fixed_rate_flags[i] = image_compression_control->pFixedRateFlags[i];
+         m_image_compression_control_params.fixed_rate_flags[i] = image_compression_control->pFixedRateFlags[i];
       }
    }
 #endif
@@ -535,6 +537,11 @@ VkResult swapchain_base::get_swapchain_images(uint32_t *swapchain_image_count, V
 
       return VK_INCOMPLETE;
    }
+}
+
+VkResult swapchain_base::create_aliased_image_handle(VkImage *image)
+{
+   return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image);
 }
 
 VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
