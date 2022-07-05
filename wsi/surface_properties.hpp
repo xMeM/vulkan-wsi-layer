@@ -200,5 +200,55 @@ VkResult surface_properties_formats_helper(It begin, It end, uint32_t *surface_f
    return res;
 }
 
+/**
+ * @brief Common function for the get_surface_capabilities.
+ *
+ * Initiates the different fields in surface_capabilities struct, also
+ * according to the physical_device.
+ *
+ * @param physical_device          Vulkan physical_device.
+ * @param surface_capabilities     address of Vulkan surface capabilities struct.
+ *
+ */
+void get_surface_capabilities_common(VkPhysicalDevice physical_device, VkSurfaceCapabilitiesKHR *surface_capabilities);
+
+/**
+ * @brief Common function for the get_surface_present_modes.
+ *
+ * Preparing the present_modes array for get_surface_present_modes.
+ *
+ * @param present_mode_count          address of counter for the present modes.
+ * @param present_modes               array of present modes.
+ * @param modes                       array of modes
+ *
+ * @return VK_SUCCESS on success, VK_INCOMPLETE otherwise.
+ *
+ */
+template <std::size_t SIZE>
+VkResult get_surface_present_modes_common(uint32_t *present_mode_count, VkPresentModeKHR *present_modes,
+                                          const std::array<VkPresentModeKHR, SIZE> &modes)
+{
+   VkResult res = VK_SUCCESS;
+
+   assert(present_mode_count != nullptr);
+
+   if (nullptr == present_modes)
+   {
+      *present_mode_count = modes.size();
+      return VK_SUCCESS;
+   }
+
+   if (modes.size() > *present_mode_count)
+   {
+      res = VK_INCOMPLETE;
+   }
+   *present_mode_count = std::min(*present_mode_count, static_cast<uint32_t>(modes.size()));
+   for (uint32_t i = 0; i < *present_mode_count; ++i)
+   {
+      present_modes[i] = modes[i];
+   }
+
+   return res;
+}
 
 } /* namespace wsi */

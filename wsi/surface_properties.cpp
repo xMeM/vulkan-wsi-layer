@@ -96,4 +96,36 @@ void surface_format_properties::fill_format_properties(VkSurfaceFormat2KHR &surf
 #endif
 }
 
+void get_surface_capabilities_common(VkPhysicalDevice physical_device, VkSurfaceCapabilitiesKHR *surface_capabilities)
+{
+   /* Image count limits */
+   surface_capabilities->minImageCount = 1;
+   surface_capabilities->maxImageCount = surface_properties::MAX_SWAPCHAIN_IMAGE_COUNT;
+
+   /* Surface extents */
+   surface_capabilities->currentExtent = { 0xffffffff, 0xffffffff };
+   surface_capabilities->minImageExtent = { 1, 1 };
+   /* Ask the device for max */
+   VkPhysicalDeviceProperties dev_props;
+   layer::instance_private_data::get(physical_device).disp.GetPhysicalDeviceProperties(physical_device, &dev_props);
+
+   surface_capabilities->maxImageExtent = { dev_props.limits.maxImageDimension2D,
+                                            dev_props.limits.maxImageDimension2D };
+   surface_capabilities->maxImageArrayLayers = 1;
+
+   /* Surface transforms */
+   surface_capabilities->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+   surface_capabilities->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+   /* Composite alpha */
+   surface_capabilities->supportedCompositeAlpha = static_cast<VkCompositeAlphaFlagBitsKHR>(
+      VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR | VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
+      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR | VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR);
+
+   /* Image usage flags */
+   surface_capabilities->supportedUsageFlags =
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+}
+
 } /* namespace wsi */

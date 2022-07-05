@@ -57,34 +57,7 @@ surface_properties& surface_properties::get_instance()
 VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
                                                       VkSurfaceCapabilitiesKHR *surface_capabilities)
 {
-   /* Image count limits */
-   surface_capabilities->minImageCount = 1;
-   surface_capabilities->maxImageCount = MAX_SWAPCHAIN_IMAGE_COUNT;
-
-   /* Surface extents */
-   surface_capabilities->currentExtent = { 0xffffffff, 0xffffffff };
-   surface_capabilities->minImageExtent = { 1, 1 };
-   /* Ask the device for max */
-   VkPhysicalDeviceProperties dev_props;
-   layer::instance_private_data::get(physical_device).disp.GetPhysicalDeviceProperties(physical_device, &dev_props);
-
-   surface_capabilities->maxImageExtent = { dev_props.limits.maxImageDimension2D,
-                                            dev_props.limits.maxImageDimension2D };
-   surface_capabilities->maxImageArrayLayers = 1;
-
-   /* Surface transforms */
-   surface_capabilities->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-   surface_capabilities->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-
-   /* Composite alpha */
-   surface_capabilities->supportedCompositeAlpha = static_cast<VkCompositeAlphaFlagBitsKHR>(
-      VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR | VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
-      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR | VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR);
-
-   /* Image usage flags */
-   surface_capabilities->supportedUsageFlags =
-      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+   get_surface_capabilities_common(physical_device, surface_capabilities);
 
    return VK_SUCCESS;
 }
@@ -140,29 +113,9 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    UNUSED(physical_device);
    UNUSED(surface);
 
-   VkResult res = VK_SUCCESS;
    static const std::array<VkPresentModeKHR, 2> modes = { VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR };
 
-   assert(present_mode_count != nullptr);
-
-   if (nullptr == present_modes)
-   {
-      *present_mode_count = modes.size();
-   }
-   else
-   {
-      if (modes.size() > *present_mode_count)
-      {
-         res = VK_INCOMPLETE;
-      }
-      *present_mode_count = std::min(*present_mode_count, static_cast<uint32_t>(modes.size()));
-      for (uint32_t i = 0; i < *present_mode_count; ++i)
-      {
-         present_modes[i] = modes[i];
-      }
-   }
-
-   return res;
+   return get_surface_present_modes_common(present_mode_count, present_modes, modes);
 }
 
 VWL_VKAPI_CALL(VkResult)

@@ -71,32 +71,12 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
                                                       VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
 {
    /* Image count limits */
+   get_surface_capabilities_common(physical_device, pSurfaceCapabilities);
    pSurfaceCapabilities->minImageCount = 2;
-   pSurfaceCapabilities->maxImageCount = MAX_SWAPCHAIN_IMAGE_COUNT;
-
-   /* Surface extents */
-   pSurfaceCapabilities->currentExtent = { 0xffffffff, 0xffffffff };
-   pSurfaceCapabilities->minImageExtent = { 1, 1 };
-
-   VkPhysicalDeviceProperties dev_props;
-   layer::instance_private_data::get(physical_device).disp.GetPhysicalDeviceProperties(physical_device, &dev_props);
-
-   pSurfaceCapabilities->maxImageExtent = { dev_props.limits.maxImageDimension2D,
-                                            dev_props.limits.maxImageDimension2D };
-   pSurfaceCapabilities->maxImageArrayLayers = 1;
-
-   /* Surface transforms */
-   pSurfaceCapabilities->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-   pSurfaceCapabilities->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
    /* Composite alpha */
    pSurfaceCapabilities->supportedCompositeAlpha = static_cast<VkCompositeAlphaFlagBitsKHR>(
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR | VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR);
-
-   /* Image usage flags */
-   pSurfaceCapabilities->supportedUsageFlags =
-      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
    return VK_SUCCESS;
 }
@@ -235,33 +215,12 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
                                                        uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes)
 {
 
-   VkResult res = VK_SUCCESS;
-
-   static std::array<const VkPresentModeKHR, 2> modes = {
+   static const std::array<VkPresentModeKHR, 2> modes = {
       VK_PRESENT_MODE_FIFO_KHR,
       VK_PRESENT_MODE_MAILBOX_KHR,
    };
 
-   assert(pPresentModeCount != nullptr);
-
-   if (nullptr == pPresentModes)
-   {
-      *pPresentModeCount = modes.size();
-   }
-   else
-   {
-      if (modes.size() > *pPresentModeCount)
-      {
-         res = VK_INCOMPLETE;
-      }
-      *pPresentModeCount = std::min(*pPresentModeCount, static_cast<uint32_t>(modes.size()));
-      for (uint32_t i = 0; i < *pPresentModeCount; ++i)
-      {
-         pPresentModes[i] = modes[i];
-      }
-   }
-
-   return res;
+   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, modes);
 }
 
 static const char *required_device_extensions[] = {
