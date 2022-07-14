@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021 Arm Limited.
+ * Copyright (c) 2019, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,6 +25,7 @@
 #include "extension_list.hpp"
 #include "util/custom_allocator.hpp"
 #include <layer/private_data.hpp>
+#include <cstdio>
 #include <cstring>
 #include <cassert>
 
@@ -47,11 +48,13 @@ VkResult extension_list::add(const char *const *extensions, uint32_t count)
    for (uint32_t i = 0; i < count; i++)
    {
       auto &dst = m_ext_props[initial_size + i];
-      if (strlen(extensions[i]) >= sizeof(dst.extensionName))
+
+      const size_t len = strlen(extensions[i]);
+      if (len >= sizeof(dst.extensionName))
       {
          abort();
       }
-      strcpy(dst.extensionName, extensions[i]);
+      snprintf(dst.extensionName, len + 1, "%s",  extensions[i]);
    }
    return VK_SUCCESS;
 }
