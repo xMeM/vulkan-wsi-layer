@@ -87,8 +87,8 @@ public:
     */
    virtual bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) = 0;
 
-   /* There is no maximum theoretically speaking however we choose 3 for practicality */
-   static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 3;
+   /* There is no maximum theoretically speaking however we choose 6 for practicality */
+   static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 6;
 
 };
 
