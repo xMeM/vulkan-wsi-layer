@@ -230,7 +230,6 @@ implemented there:
 * `util::vector`
 * `util::allocator`
 * `util::allocator::make_unique`
-* `util::optional`
 * `util::fd_owner`
 * `util::ring_buffer`
 * `util::unordered_map`

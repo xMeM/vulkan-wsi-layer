@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,10 +22,9 @@
  * SOFTWARE.
  */
 
-#include <memory>
 #include <array>
-
-#include "optional.hpp"
+#include <memory>
+#include <optional>
 
 namespace util
 {
@@ -62,7 +61,7 @@ public:
          return false;
       }
 
-      m_data[(m_begin + m_size) % N].set(std::forward<U>(item));
+      m_data[(m_begin + m_size) % N].emplace(std::forward<U>(item));
       ++m_size;
 
       return true;
@@ -92,14 +91,14 @@ public:
     *
     * @return Item wrapped in an optional.
     */
-   util::optional<T> pop_front()
+   std::optional<T> pop_front()
    {
       if (size() == 0)
       {
-         return util::optional<T>{};
+         return std::nullopt;
       }
 
-      util::optional<T> value = std::move(m_data[m_begin]);
+      std::optional<T> value = std::move(m_data[m_begin]);
 
       m_begin = (m_begin + 1) % N;
       --m_size;
@@ -120,7 +119,7 @@ private:
       }
    }
 
-   std::array<util::optional<T>, N> m_data{};
+   std::array<std::optional<T>, N> m_data{};
 
    // Marks the start index of the ring buffer.
    std::size_t m_begin{};

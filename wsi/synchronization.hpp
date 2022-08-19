@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,8 +30,9 @@
 
 #pragma once
 
+#include <optional>
+
 #include "util/file_descriptor.hpp"
-#include "util/optional.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -57,9 +58,8 @@ public:
     *
     * @return Empty optional on failure or initialized fence.
     */
-   static util::optional<fence_sync> create(layer::device_private_data &device);
+   static std::optional<fence_sync> create(layer::device_private_data &device);
 
-   /** Default constructor provided for use with @ref util::optional */
    fence_sync() = default;
    fence_sync(const fence_sync &) = delete;
    fence_sync &operator=(const fence_sync &) = delete;
@@ -135,7 +135,6 @@ private:
 class sync_fd_fence_sync : public fence_sync
 {
 public:
-   /** Default constructor provided for use with @ref util::optional */
    sync_fd_fence_sync() = default;
 
    /**
@@ -155,7 +154,7 @@ public:
     *
     * @return Empty optional on failure or initialized fence.
     */
-   static util::optional<sync_fd_fence_sync> create(layer::device_private_data &device);
+   static std::optional<sync_fd_fence_sync> create(layer::device_private_data &device);
 
    /**
     * Exports the fence to a native Sync FD.
@@ -164,7 +163,7 @@ public:
     *
     * @return The exported Sync FD on success or empty optional on failure.
     */
-   util::optional<util::fd_owner> export_sync_fd();
+   std::optional<util::fd_owner> export_sync_fd();
 
 private:
    /**

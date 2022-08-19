@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,7 +41,7 @@ fence_sync::fence_sync(layer::device_private_data &device, VkFence vk_fence)
 {
 }
 
-util::optional<fence_sync> fence_sync::create(layer::device_private_data &device)
+std::optional<fence_sync> fence_sync::create(layer::device_private_data &device)
 {
    VkFence fence{ VK_NULL_HANDLE };
    VkFenceCreateInfo fence_info{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, 0 };
@@ -49,7 +49,7 @@ util::optional<fence_sync> fence_sync::create(layer::device_private_data &device
       device.disp.CreateFence(device.device, &fence_info, device.get_allocator().get_original_callbacks(), &fence);
    if (res != VK_SUCCESS)
    {
-      return {};
+      return std::nullopt;
    }
    return fence_sync(device, fence);
 }
@@ -142,7 +142,7 @@ bool sync_fd_fence_sync::is_supported(layer::instance_private_data &instance, Vk
    return fence_properties.externalFenceFeatures & VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT_KHR;
 }
 
-util::optional<sync_fd_fence_sync> sync_fd_fence_sync::create(layer::device_private_data &device)
+std::optional<sync_fd_fence_sync> sync_fd_fence_sync::create(layer::device_private_data &device)
 {
    VkExportFenceCreateInfo export_fence_create_info = {};
    export_fence_create_info.sType = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO;
@@ -153,12 +153,12 @@ util::optional<sync_fd_fence_sync> sync_fd_fence_sync::create(layer::device_priv
       device.disp.CreateFence(device.device, &fence_info, device.get_allocator().get_original_callbacks(), &fence);
    if (res != VK_SUCCESS)
    {
-      return {};
+      return std::nullopt;
    }
    return sync_fd_fence_sync{ device, fence };
 }
 
-util::optional<util::fd_owner> sync_fd_fence_sync::export_sync_fd()
+std::optional<util::fd_owner> sync_fd_fence_sync::export_sync_fd()
 {
    int exported_fd = -1;
    VkFenceGetFdInfoKHR fence_fd_info = {};
@@ -172,7 +172,7 @@ util::optional<util::fd_owner> sync_fd_fence_sync::export_sync_fd()
       swap_payload(false);
       return util::fd_owner(exported_fd);
    }
-   return {};
+   return std::nullopt;
 }
 
 } /* namespace wsi */

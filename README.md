@@ -20,7 +20,7 @@ enabled via a build option [as explained below](#building-with-wayland-support).
 ### Dependencies
 
 * [CMake](https://cmake.org) version 3.4.3 or above.
-* C++11 compiler.
+* C++17 compiler.
 * Vulkan® loader and associated headers with support for the
   `VK_EXT_headless_surface` extension and for the Vulkan 1.1, or later API.
 

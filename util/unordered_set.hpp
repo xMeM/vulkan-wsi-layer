@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,9 +23,10 @@
  */
 #pragma once
 
+#include <optional>
 #include <unordered_set>
+
 #include "custom_allocator.hpp"
-#include "optional.hpp"
 #include "helpers.hpp"
 
 namespace util
@@ -71,11 +72,11 @@ public:
     * @brief Like std::unordered_set.insert but doesn't throw on out of memory errors.
     *
     * @param value The value to insert in the map.
-    * @return util::optional<std::pair<iterator,bool>> If successful, the optional will
+    * @return std::optional<std::pair<iterator,bool>> If successful, the optional will
     *         contain the same return value as from std::unordered_set.insert, otherwise
-    *         if out of memory, optional will be empty.
+    *         if out of memory, the function returns std::nullopt.
     */
-   util::optional<std::pair<iterator, bool>> try_insert(const value_type &value) noexcept
+   std::optional<std::pair<iterator, bool>> try_insert(const value_type &value) noexcept
    {
       try
       {
@@ -83,7 +84,7 @@ public:
       }
       catch (const std::bad_alloc &e)
       {
-         return {};
+         return std::nullopt;
       }
    }
 
