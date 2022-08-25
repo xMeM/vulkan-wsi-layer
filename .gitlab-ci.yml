@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Arm Limited.
+# Copyright (c) 2019, 2022 Arm Limited.
 #
 # SPDX-License-Identifier: MIT
 #
@@ -20,31 +20,37 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-default:
-  image: "registry.fedoraproject.org/fedora"
-
-# For now start from a standard Fedora image and install everything each time.
-before_script:
-  - pwd
-  - uname -a
-  # Install necessary packages.
-  # Oddly the exit status of the command below is nonzero even on success, just ignore it.
-  - yes | dnf install make cmake gcc g++ python git libxcb-devel libxkbcommon-devel wayland-devel libXrandr-devel || true
-  # Check out and set-up the Vulkan Loader.
-  - mkdir /build
-  - pushd /build
-  - git clone --depth=1 https://github.com/KhronosGroup/Vulkan-Loader.git
-  - cd Vulkan-Loader
-  - mkdir build
-  - cd build/
-  - ../scripts/update_deps.py
-  # Build the Vulkan loader.
-  - cmake -C helper.cmake ..
-  - make
-  - make install
-  - popd
+pre-commit:
+  image: python:3.10.6
+  rules:
+    - if: $CI_MERGE_REQUEST_DIFF_BASE_SHA
+  script:
+    - pip install pre-commit
+    - echo Using $CI_MERGE_REQUEST_DIFF_BASE_SHA as Pre-commit base
+    - pre-commit run --show-diff-on-failure --from-ref $CI_MERGE_REQUEST_DIFF_BASE_SHA --to-ref HEAD
 
 build_vulkan_wsi_layer:
+  # For now start from a standard Fedora image and install everything each time.
+  image: "registry.fedoraproject.org/fedora"
+  before_script:
+    - pwd
+    - uname -a
+    # Install necessary packages.
+    # Oddly the exit status of the command below is nonzero even on success, just ignore it.
+    - yes | dnf install make cmake gcc g++ python git libxcb-devel libxkbcommon-devel wayland-devel libXrandr-devel || true
+    # Check out and set-up the Vulkan Loader.
+    - mkdir /build
+    - pushd /build
+    - git clone --depth=1 https://github.com/KhronosGroup/Vulkan-Loader.git
+    - cd Vulkan-Loader
+    - mkdir build
+    - cd build/
+    - ../scripts/update_deps.py
+    # Build the Vulkan loader.
+    - cmake -C helper.cmake ..
+    - make
+    - make install
+    - popd
   script:
     - pwd
     - mkdir build
