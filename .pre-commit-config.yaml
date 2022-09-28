@@ -8,3 +8,12 @@ repos:
       rev: v10.0.1
       hooks:
           - id: clang-format
+
+    - repo: local
+      hooks:
+          - id: copyright-check
+            name: copyright-check
+            description: Checks for a valid copyright header
+            entry: check_copyright.py
+            language: script
+            types_or: [c, c++]

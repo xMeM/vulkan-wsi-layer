@@ -138,6 +138,13 @@ We are open for contributions.
  * Code should be formatted with clang-format using the project's .clang-format
    configuration.
 
+We use [pre-commit](https://pre-commit.com/) for local git hooks to help ensure
+code quality and standardization. To install the hooks run the following
+commands in the root of the repository:
+
+    $ pip install pre-commit
+    $ pre-commit install
+
 Contributors are expected to abide by the
 [freedesktop.org code of conduct](https://www.freedesktop.org/wiki/CodeOfConduct/).
 
