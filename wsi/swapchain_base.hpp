@@ -42,9 +42,13 @@
 #include <util/ring_buffer.hpp>
 #include "surface_properties.hpp"
 #include "wsi/synchronization.hpp"
+#include "util/helpers.hpp"
 
 namespace wsi
 {
+
+using util::MAX_PLANES;
+
 struct swapchain_image
 {
    enum status
@@ -57,14 +61,12 @@ struct swapchain_image
    };
 
    /* Implementation specific data */
-   void *data{nullptr};
+   void *data{ nullptr };
 
-   VkImage image{VK_NULL_HANDLE};
-   status status{swapchain_image::INVALID};
+   VkImage image{ VK_NULL_HANDLE };
+   status status{ swapchain_image::INVALID };
    VkSemaphore present_semaphore{ VK_NULL_HANDLE };
 };
-
-constexpr uint32_t MAX_PLANES = 4;
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
 struct image_compression_control_params
@@ -206,7 +208,6 @@ public:
    }
 
 protected:
-
    layer::device_private_data &m_device_data;
 
    /**

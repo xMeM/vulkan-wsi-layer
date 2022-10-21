@@ -27,7 +27,8 @@
 #include "wsi/swapchain_base.hpp"
 #include "wl_helpers.hpp"
 
-extern "C" {
+extern "C"
+{
 #include <vulkan/vk_icd.h>
 }
 
@@ -37,11 +38,25 @@ extern "C" {
 #include "util/custom_allocator.hpp"
 #include "wl_object_owner.hpp"
 #include "surface.hpp"
+#include "wsi/external_memory.hpp"
 
 namespace wsi
 {
 namespace wayland
 {
+
+struct wayland_image_data
+{
+   wayland_image_data(const VkDevice &device, const util::allocator &allocator)
+      : external_mem(device, allocator)
+      , buffer(nullptr)
+   {
+   }
+
+   external_memory external_mem;
+   wl_buffer *buffer;
+   sync_fd_fence_sync present_fence;
+};
 
 struct image_creation_parameters
 {
@@ -50,8 +65,8 @@ struct image_creation_parameters
    VkExternalMemoryImageCreateInfoKHR m_external_info;
    VkImageDrmFormatModifierExplicitCreateInfoEXT m_drm_mod_info;
 
-   image_creation_parameters(wsialloc_format allocated_format,
-                             util::allocator allocator, VkExternalMemoryImageCreateInfoKHR external_info,
+   image_creation_parameters(wsialloc_format allocated_format, util::allocator allocator,
+                             VkExternalMemoryImageCreateInfoKHR external_info,
                              VkImageDrmFormatModifierExplicitCreateInfoEXT drm_mod_info)
       : m_allocated_format(allocated_format)
       , m_image_layout(allocator)
@@ -142,13 +157,11 @@ protected:
                                  const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
 
 private:
-   struct wayland_image_data;
-
+   VkResult create_wl_buffer(const VkImageCreateInfo &image_create_info, swapchain_image &image,
+                             wayland_image_data *image_data);
    VkResult allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image);
-   VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data &image_data,
+   VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
                               util::vector<wsialloc_format> &importable_formats, wsialloc_format *allocated_format);
-   VkResult internal_bind_swapchain_image(VkDevice &device, wayland_image_data *swapchain_image,
-                                          const VkImage &image);
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;
@@ -169,34 +182,6 @@ private:
     */
    struct image_creation_parameters m_image_creation_parameters;
 
-   /*
-    * @brief Allocate memory for an image plane.
-    *
-    * Allocates a VkDeviceMemory object from a given fd for an image plane. First
-    * it makes a call to get_fd_mem_type_index() to acquire the memory type for
-    * the given fd and then it allocates device memory by calling vkAllocateMemory().
-    *
-    * @param      fd     The plane's fd.
-    * @param[out] memory The allocated VkDeviceMemory object.
-    *
-    * @return VK_SUCCESS on success. If one of the functions that are being called
-    * fails its return value is returned. VK_ERROR_OUT_OF_HOST_MEMORY is returned
-    * when the host gets out of memory.
-    */
-   VkResult allocate_plane_memory(int fd, VkDeviceMemory *memory);
-
-   /*
-    * @brief Get the memory type which the specified file descriptor can be
-    * imported as.
-    *
-    * @param      fd      The given fd.
-    * @param[out] mem_idx The index of the supported memory type.
-    *
-    * @return VK_SUCCESS on success. On failure the error value of
-    * vkGetMemoryFdPropertiesKHR is returned.
-    */
-   VkResult get_fd_mem_type_index(int fd, uint32_t &mem_idx);
-
    /**
     * @brief Finds what formats are compatible with the requested swapchain image Vulkan Device and Wayland surface.
     *
@@ -209,7 +194,6 @@ private:
    VkResult get_surface_compatible_formats(const VkImageCreateInfo &info,
                                            util::vector<wsialloc_format> &importable_formats,
                                            util::vector<uint64_t> &exportable_modifers);
-
 };
 } // namespace wayland
 } // namespace wsi

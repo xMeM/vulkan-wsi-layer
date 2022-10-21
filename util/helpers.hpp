@@ -56,16 +56,15 @@
  *    return VK_SUCCESS;
  * }
  */
-#define TRY(expression) \
-   do \
-   { \
+#define TRY(expression)                 \
+   do                                   \
+   {                                    \
       VkResult try_result = expression; \
-      if (try_result != VK_SUCCESS) \
-      { \
-         return try_result; \
-      } \
-   } \
-   while (0)
+      if (try_result != VK_SUCCESS)     \
+      {                                 \
+         return try_result;             \
+      }                                 \
+   } while (0)
 
 namespace util
 {
@@ -99,6 +98,19 @@ protected:
 
 private:
    noncopyable(const noncopyable &) = delete;
-   noncopyable& operator=(const noncopyable &) = delete;
+   noncopyable &operator=(const noncopyable &) = delete;
 };
+
+static constexpr uint32_t MAX_PLANES = 4;
+
+/**
+ * @brief Helper variable for plane image aspect flag bits.
+ */
+const VkImageAspectFlagBits PLANE_FLAG_BITS[MAX_PLANES] = {
+   VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT,
+   VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT,
+   VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT,
+   VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT,
+};
+
 } // namespace util

@@ -194,6 +194,7 @@ add_library(${PROJECT_NAME} SHARED
    util/extension_list.cpp
    util/log.cpp
    util/format_modifiers.cpp
+   wsi/external_memory.cpp
    wsi/surface_properties.cpp
    wsi/swapchain_base.cpp
    wsi/synchronization.cpp
