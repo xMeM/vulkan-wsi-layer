@@ -385,6 +385,8 @@ VkResult swapchain::create_wl_buffer(const VkImageCreateInfo &image_create_info,
    }
 
    const auto fourcc = util::drm::vk_to_drm_format(image_create_info.format);
+   assert(image_create_info.extent.width <= INT32_MAX);
+   assert(image_create_info.extent.height <= INT32_MAX);
    image_data->buffer = zwp_linux_buffer_params_v1_create_immed(params, image_create_info.extent.width,
                                                                 image_create_info.extent.height, fourcc, 0);
    zwp_linux_buffer_params_v1_destroy(params);

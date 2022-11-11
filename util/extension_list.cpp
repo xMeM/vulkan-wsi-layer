@@ -32,20 +32,20 @@
 namespace util
 {
 
-extension_list::extension_list(const util::allocator& allocator)
-   : m_alloc{allocator}
+extension_list::extension_list(const util::allocator &allocator)
+   : m_alloc{ allocator }
    , m_ext_props(allocator)
 {
 }
 
-VkResult extension_list::add(const char *const *extensions, uint32_t count)
+VkResult extension_list::add(const char *const *extensions, size_t count)
 {
    auto initial_size = m_ext_props.size();
    if (!m_ext_props.try_resize(initial_size + count))
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
-   for (uint32_t i = 0; i < count; i++)
+   for (size_t i = 0; i < count; i++)
    {
       auto &dst = m_ext_props[initial_size + i];
 
@@ -54,18 +54,18 @@ VkResult extension_list::add(const char *const *extensions, uint32_t count)
       {
          abort();
       }
-      snprintf(dst.extensionName, len + 1, "%s",  extensions[i]);
+      snprintf(dst.extensionName, len + 1, "%s", extensions[i]);
    }
    return VK_SUCCESS;
 }
 
-VkResult extension_list::add(const char *const *extensions, uint32_t count, const char *const *extensions_subset,
-                             uint32_t subset_count)
+VkResult extension_list::add(const char *const *extensions, size_t count, const char *const *extensions_subset,
+                             size_t subset_count)
 {
    util::vector<const char *> extensions_to_add(m_alloc);
-   for (uint32_t ext_index = 0; ext_index < count; ++ext_index)
+   for (size_t ext_index = 0; ext_index < count; ++ext_index)
    {
-      for (uint32_t subset_index = 0; subset_index < subset_count; ++subset_index)
+      for (size_t subset_index = 0; subset_index < subset_count; ++subset_index)
       {
          if (!strcmp(extensions[ext_index], extensions_subset[subset_index]))
          {
@@ -98,14 +98,14 @@ VkResult extension_list::add(VkExtensionProperties ext_prop)
    return VK_SUCCESS;
 }
 
-VkResult extension_list::add(const VkExtensionProperties *props, uint32_t count)
+VkResult extension_list::add(const VkExtensionProperties *props, size_t count)
 {
    auto initial_size = m_ext_props.size();
    if (!m_ext_props.try_resize(initial_size + count))
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
-   for (uint32_t i = 0; i < count; i++)
+   for (size_t i = 0; i < count; i++)
    {
       m_ext_props[initial_size + i] = props[i];
    }
@@ -114,7 +114,7 @@ VkResult extension_list::add(const VkExtensionProperties *props, uint32_t count)
 
 VkResult extension_list::add(const extension_list &ext_list)
 {
-   util::vector<const char *> ext_vect{m_alloc};
+   util::vector<const char *> ext_vect{ m_alloc };
    VkResult result = ext_list.get_extension_strings(ext_vect);
    if (result != VK_SUCCESS)
    {
@@ -123,7 +123,7 @@ VkResult extension_list::add(const extension_list &ext_list)
    return add(ext_vect.data(), ext_vect.size());
 }
 
-VkResult extension_list::get_extension_strings(util::vector<const char*> &out) const
+VkResult extension_list::get_extension_strings(util::vector<const char *> &out) const
 {
    size_t old_size = out.size();
    size_t new_size = old_size + m_ext_props.size();

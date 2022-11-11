@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -37,7 +37,7 @@ namespace util
 
 /**
  * @brief check if a log level is enabled, and print it
-*/
+ */
 static int check_and_print_log_level(int level)
 {
    struct log_state
@@ -48,9 +48,10 @@ static int check_and_print_log_level(int level)
          char *env = std::getenv("VULKAN_WSI_DEBUG_LEVEL");
          if (env != nullptr)
          {
+            std::string env_dup = std::string(env);
             try
             {
-               level = std::stoi(env);
+               level = std::stoi(env_dup);
             }
             catch (const std::exception &e)
             {

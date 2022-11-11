@@ -156,7 +156,10 @@ VkResult swapchain_base::init_page_flip_thread()
    {
       return VK_ERROR_INITIALIZATION_FAILED;
    }
-
+   catch (const std::bad_alloc &)
+   {
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
    return VK_SUCCESS;
 }
 
@@ -186,7 +189,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_device(VK_NULL_HANDLE)
    , m_queue(VK_NULL_HANDLE)
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   , m_image_compression_control_params({VK_IMAGE_COMPRESSION_DEFAULT_EXT, 0})
+   , m_image_compression_control_params({ VK_IMAGE_COMPRESSION_DEFAULT_EXT, 0 })
 #endif
    , m_image_create_info()
    , m_image_acquire_lock()
@@ -249,7 +252,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    image_create_info.pNext = nullptr;
    image_create_info.imageType = VK_IMAGE_TYPE_2D;
    image_create_info.format = swapchain_create_info->imageFormat;
-   image_create_info.extent = { swapchain_create_info->imageExtent.width, swapchain_create_info->imageExtent.height, 1 };
+   image_create_info.extent = { swapchain_create_info->imageExtent.width, swapchain_create_info->imageExtent.height,
+                                1 };
    image_create_info.mipLevels = 1;
    image_create_info.arrayLayers = swapchain_create_info->imageArrayLayers;
    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -268,7 +272,7 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return result;
    }
 
-   for (auto& img : m_swapchain_images)
+   for (auto &img : m_swapchain_images)
    {
       result = create_and_bind_swapchain_image(image_create_info, img);
       if (result != VK_SUCCESS)
@@ -383,7 +387,7 @@ void swapchain_base::teardown()
       sc->clear_descendant();
    }
    /* Release the images array. */
-   for (auto& img : m_swapchain_images)
+   for (auto &img : m_swapchain_images)
    {
       /* Call implementation specific release */
       destroy_image(img);
@@ -392,7 +396,8 @@ void swapchain_base::teardown()
    }
 }
 
-VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t *image_index)
+VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaphore, VkFence fence,
+                                            uint32_t *image_index)
 {
    std::unique_lock<std::mutex> acquire_lock(m_image_acquire_lock);
 
@@ -425,8 +430,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    image_status_lock.unlock();
 
    /* Try to signal fences/semaphores with a sync FD for optimal performance. */
-   if (m_device_data.disp.ImportFenceFdKHR != nullptr &&
-       m_device_data.disp.ImportSemaphoreFdKHR != nullptr)
+   if (m_device_data.disp.ImportFenceFdKHR != nullptr && m_device_data.disp.ImportSemaphoreFdKHR != nullptr)
    {
       if (fence != VK_NULL_HANDLE)
       {
@@ -605,7 +609,7 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
 
 void swapchain_base::deprecate(VkSwapchainKHR descendant)
 {
-   for (auto& img : m_swapchain_images)
+   for (auto &img : m_swapchain_images)
    {
       if (img.status == swapchain_image::FREE)
       {
@@ -624,7 +628,7 @@ void swapchain_base::wait_for_pending_buffers()
    int acquired_images = 0;
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
 
-   for (auto& img : m_swapchain_images)
+   for (auto &img : m_swapchain_images)
    {
       if (img.status == swapchain_image::ACQUIRED)
       {

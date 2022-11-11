@@ -44,8 +44,8 @@ static util::unordered_map<void *, instance_private_data *> g_instance_data{ uti
 static util::unordered_map<void *, device_private_data *> g_device_data{ util::allocator::get_generic() };
 
 template <typename object_type, typename get_proc_type>
-static PFN_vkVoidFunction get_proc_helper(object_type obj, get_proc_type get_proc,
-                                          const char* proc_name, bool required, bool &ok)
+static PFN_vkVoidFunction get_proc_helper(object_type obj, get_proc_type get_proc, const char *proc_name, bool required,
+                                          bool &ok)
 {
    PFN_vkVoidFunction ret = get_proc(obj, proc_name);
    if (nullptr == ret && required)
@@ -93,6 +93,8 @@ instance_private_data::instance_private_data(const instance_dispatch_table &tabl
 /**
  * @brief Obtain the loader's dispatch table for the given dispatchable object.
  * @note Dispatchable objects are structures that have a VkLayerDispatchTable as their first member.
+         We treat the dispatchable object as a void** and then dereference to use the VkLayerDispatchTable
+         as the key.
  */
 template <typename dispatchable_type>
 static inline void *get_key(dispatchable_type dispatchable_object)
@@ -102,7 +104,8 @@ static inline void *get_key(dispatchable_type dispatchable_object)
 
 VkResult instance_private_data::associate(VkInstance instance, instance_dispatch_table &table,
                                           PFN_vkSetInstanceLoaderData set_loader_data,
-                                          util::wsi_platform_set enabled_layer_platforms, const util::allocator &allocator)
+                                          util::wsi_platform_set enabled_layer_platforms,
+                                          const util::allocator &allocator)
 {
    auto instance_data =
       allocator.make_unique<instance_private_data>(table, set_loader_data, enabled_layer_platforms, allocator);
@@ -299,11 +302,12 @@ device_private_data::device_private_data(instance_private_data &inst_data, VkPhy
    , physical_device{ phys_dev }
    , device{ dev }
    , allocator{ alloc }
-   , swapchains{ allocator }
+   , swapchains{ allocator } /* clang-format off */
    , enabled_extensions{ allocator }
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    , compression_control_enabled{ false }
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+/* clang-format on */
 {
 }
 

@@ -140,7 +140,7 @@ VkResult external_memory::import_plane_memories()
 
 VkResult external_memory::import_plane_memory(uint32_t index)
 {
-   uint32_t mem_index = -1;
+   uint32_t mem_index = 0;
    TRY(get_fd_mem_type_index(index, &mem_index));
 
    const off_t fd_size = lseek(m_buffer_fds[index], 0, SEEK_END);

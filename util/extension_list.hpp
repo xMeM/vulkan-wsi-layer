@@ -42,7 +42,7 @@ namespace util
 class extension_list : private noncopyable
 {
 public:
-   extension_list(const util::allocator& allocator);
+   extension_list(const util::allocator &allocator);
 
    /**
     * @brief Get the allocator used to manage the memory of this object.
@@ -63,7 +63,7 @@ public:
     * @return Indicates whether the operation was successful. If this is @c VK_ERROR_OUT_OF_HOST_MEMORY,
     * then @p out is unmodified.
     */
-   VkResult get_extension_strings(util::vector<const char*> &out) const;
+   VkResult get_extension_strings(util::vector<const char *> &out) const;
 
    /**
     * @brief Check if this extension list contains all the extensions listed in req.
@@ -81,13 +81,13 @@ public:
    void remove(const char *ext);
 
    VkResult add(VkExtensionProperties ext_prop);
-   VkResult add(const VkExtensionProperties *props, uint32_t count);
+   VkResult add(const VkExtensionProperties *props, size_t count);
    VkResult add(const extension_list &ext_list);
-   VkResult add(const char *const *extensions, uint32_t count);
+   VkResult add(const char *const *extensions, size_t count);
 
    VkResult add(const char *extension)
    {
-       return add(&extension, 1);
+      return add(&extension, 1);
    }
 
    /**
@@ -102,8 +102,7 @@ public:
     *
     * @return VK_SUCCESS on success, otherwise an error.
     */
-   VkResult add(const char *const *extensions, uint32_t count, const char *const *extensions_subset,
-                uint32_t subset_count);
+   VkResult add(const char *const *extensions, size_t count, const char *const *extensions_subset, size_t subset_count);
 
 private:
    util::allocator m_alloc;

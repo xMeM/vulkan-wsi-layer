@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,6 +22,7 @@
  * SOFTWARE.
  */
 
+#include <cstdint>
 #include <new>
 #include <vector>
 #include <string>
@@ -61,7 +62,7 @@ public:
    /**
     * @brief Get an allocator that can be used if VkAllocationCallbacks are not provided.
     */
-   static const allocator& get_generic();
+   static const allocator &get_generic();
 
    /**
     * @brief Construct a new wrapper for the given VK callbacks and scope.
@@ -108,7 +109,7 @@ public:
    void destroy(size_t num_objects, T *obj) const noexcept;
 
    template <typename T, typename... Args>
-   util::unique_ptr<T> make_unique(Args &&...args) const noexcept;
+   util::unique_ptr<T> make_unique(Args &&... args) const noexcept;
 
    VkAllocationCallbacks m_callbacks{};
    VkSystemAllocationScope m_scope;
@@ -143,6 +144,11 @@ public:
    pointer allocate(size_t n) const
    {
       size_t size = n * sizeof(T);
+      /* Check for overflow */
+      if (sizeof(T) != 0 && n > SIZE_MAX / sizeof(T))
+      {
+         throw std::bad_alloc();
+      }
       auto &cb = m_alloc.m_callbacks;
       void *ret = cb.pfnAllocation(cb.pUserData, size, alignof(T), m_alloc.m_scope);
       if (ret == nullptr)
@@ -153,6 +159,11 @@ public:
    pointer allocate(size_t n, void *ptr) const
    {
       size_t size = n * sizeof(T);
+      /* Check for overflow */
+      if (sizeof(T) != 0 && n > SIZE_MAX / sizeof(T))
+      {
+         throw std::bad_alloc();
+      }
       auto &cb = m_alloc.m_callbacks;
       void *ret = cb.pfnReallocation(cb.pUserData, ptr, size, alignof(T), m_alloc.m_scope);
       if (ret == nullptr)
@@ -253,11 +264,13 @@ class deleter : public allocator
 public:
    deleter()
       : deleter(allocator::get_generic())
-   {}
+   {
+   }
 
    deleter(allocator alloc)
       : allocator(std::move(alloc))
-   {}
+   {
+   }
 
    void operator()(T *object)
    {
@@ -269,7 +282,7 @@ public:
  * @brief Creates a util::unique_ptr object using the allocator for the deleter.
  */
 template <typename T, typename... Args>
-util::unique_ptr<T> allocator::make_unique(Args &&...args) const noexcept
+util::unique_ptr<T> allocator::make_unique(Args &&... args) const noexcept
 {
    T *object = create<T>(1, std::forward<Args>(args)...);
    return util::unique_ptr<T>(object, *this);
