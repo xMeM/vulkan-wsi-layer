@@ -109,7 +109,7 @@ util::wsi_platform_set find_enabled_layer_platforms(const VkInstanceCreateInfo *
    {
       for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++)
       {
-         const char* ext_requested_by_user = pCreateInfo->ppEnabledExtensionNames[i];
+         const char *ext_requested_by_user = pCreateInfo->ppEnabledExtensionNames[i];
          if (strcmp(ext_requested_by_user, ext_provided_by_layer.extension.extensionName) == 0)
          {
             ret.add(ext_provided_by_layer.platform);
@@ -123,17 +123,19 @@ static VkResult get_available_device_extensions(VkPhysicalDevice physical_device
                                                 util::extension_list &available_extensions)
 {
    auto &instance_data = layer::instance_private_data::get(physical_device);
-   util::vector<VkExtensionProperties> properties{available_extensions.get_allocator()};
+   util::vector<VkExtensionProperties> properties{ available_extensions.get_allocator() };
    uint32_t count = 0;
-   TRY(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, nullptr));
+   TRY_LOG(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, nullptr),
+           "Failed to enumurate properties of available physical device extensions");
 
    if (!properties.try_resize(count))
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
-   TRY(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, properties.data()));
-   TRY(available_extensions.add(properties.data(), count));
+   TRY_LOG(instance_data.disp.EnumerateDeviceExtensionProperties(physical_device, nullptr, &count, properties.data()),
+           "Failed to enumurate properties of available physical device extensions");
+   TRY_LOG_CALL(available_extensions.add(properties.data(), count));
 
    return VK_SUCCESS;
 }
@@ -141,15 +143,15 @@ static VkResult get_available_device_extensions(VkPhysicalDevice physical_device
 VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util::wsi_platform_set enabled_platforms,
                                           util::extension_list &extensions_to_enable)
 {
-   util::allocator allocator{extensions_to_enable.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND};
+   util::allocator allocator{ extensions_to_enable.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND };
 
-   util::extension_list available_device_extensions{allocator};
-   TRY(get_available_device_extensions(phys_dev, available_device_extensions));
+   util::extension_list available_device_extensions{ allocator };
+   TRY_LOG(get_available_device_extensions(phys_dev, available_device_extensions),
+           "Failed to acquire available device extensions");
 
    /* Add optional extensions independent of winsys. */
    {
-      const char *optional_extensions[] =
-      {
+      const char *optional_extensions[] = {
          VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
          VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
 
@@ -161,7 +163,7 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
       {
          if (available_device_extensions.contains(extension))
          {
-            TRY(extensions_to_enable.add(extension));
+            TRY_LOG_CALL(extensions_to_enable.add(extension));
          }
       }
    }
@@ -174,14 +176,16 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
          continue;
       }
 
-      util::extension_list extensions_required_by_layer{allocator};
+      util::extension_list extensions_required_by_layer{ allocator };
       surface_properties *props = get_surface_properties(wsi_ext.platform);
       if (props == nullptr)
       {
          return VK_ERROR_INITIALIZATION_FAILED;
       }
 
-      TRY(props->get_required_device_extensions(extensions_required_by_layer));
+      TRY_LOG(props->get_required_device_extensions(extensions_required_by_layer),
+              "Failed to acquire required device extensions");
+
       bool supported = available_device_extensions.contains(extensions_required_by_layer);
       if (!supported)
       {
@@ -193,7 +197,7 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
          return VK_ERROR_INITIALIZATION_FAILED;
       }
 
-      TRY(extensions_to_enable.add(extensions_required_by_layer));
+      TRY_LOG_CALL(extensions_to_enable.add(extensions_required_by_layer));
    }
 
    return VK_SUCCESS;

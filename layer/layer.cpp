@@ -116,16 +116,16 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     * This object and the extension_list object need to be in the global scope so they can be alive by the time
     * vkCreateInstance is called.
     */
-   util::allocator allocator{VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator};
-   util::vector<const char *> modified_enabled_extensions{allocator};
-   util::extension_list extensions{allocator};
+   util::allocator allocator{ VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator };
+   util::vector<const char *> modified_enabled_extensions{ allocator };
+   util::extension_list extensions{ allocator };
 
    /* Find all the platforms that the layer can handle based on pCreateInfo->ppEnabledExtensionNames. */
    auto layer_platforms_to_enable = wsi::find_enabled_layer_platforms(pCreateInfo);
    if (!layer_platforms_to_enable.empty())
    {
       /* Create a list of extensions to enable, including the provided extensions and those required by the layer. */
-      TRY(extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
+      TRY_LOG_CALL(extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
 
       if (!extensions.contains(VK_KHR_SURFACE_EXTENSION_NAME))
       {
@@ -135,15 +135,15 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       /* The extensions listed below are those strictly required by the layer. Other extensions may be used by the
        * layer (such as calling their entrypoints), when they are enabled by the application.
        */
-      std::array<const char*, 4> extra_extensions = {
+      std::array<const char *, 4> extra_extensions = {
          VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
          VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
          VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
          /* The extension below is only needed for Wayland. For now, enable it also for headless. */
          VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
       };
-      TRY(extensions.add(extra_extensions.data(), extra_extensions.size()));
-      TRY(extensions.get_extension_strings(modified_enabled_extensions));
+      TRY_LOG_CALL(extensions.add(extra_extensions.data(), extra_extensions.size()));
+      TRY_LOG_CALL(extensions.get_extension_strings(modified_enabled_extensions));
 
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
       modified_info.enabledExtensionCount = modified_enabled_extensions.size();
@@ -157,7 +157,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     * Layers have to abide the rule that vkCreateInstance must not generate an error for unrecognized extension names.
     * Also, the loader filters the extension list to ensure that ICDs do not see extensions that they do not support.
     */
-   TRY(fpCreateInstance(&modified_info, pAllocator, pInstance));
+   TRY_LOG(fpCreateInstance(&modified_info, pAllocator, pInstance), "Failed to create the instance");
 
    instance_dispatch_table table{};
    VkResult result;
@@ -241,23 +241,23 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    VkDeviceCreateInfo modified_info = *pCreateInfo;
 
    auto &inst_data = instance_private_data::get(physicalDevice);
-   util::allocator allocator{inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator};
-   util::vector<const char *> modified_enabled_extensions{allocator};
-   util::extension_list enabled_extensions{allocator};
+   util::allocator allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator };
+   util::vector<const char *> modified_enabled_extensions{ allocator };
+   util::extension_list enabled_extensions{ allocator };
 
-   const util::wsi_platform_set& enabled_platforms = inst_data.get_enabled_platforms();
+   const util::wsi_platform_set &enabled_platforms = inst_data.get_enabled_platforms();
    if (!enabled_platforms.empty())
    {
-      TRY(enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
-      TRY(wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
-      TRY(enabled_extensions.get_extension_strings(modified_enabled_extensions));
+      TRY_LOG_CALL(enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
+      TRY_LOG_CALL(wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
+      TRY_LOG_CALL(enabled_extensions.get_extension_strings(modified_enabled_extensions));
 
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
       modified_info.enabledExtensionCount = modified_enabled_extensions.size();
    }
 
    /* Now call create device on the chain further down the list. */
-   TRY(fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice));
+   TRY_LOG(fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice), "Failed to create the device");
 
    device_dispatch_table table{};
    VkResult result = table.populate(*pDevice, fpGetDeviceProcAddr);
@@ -273,7 +273,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    /* Following the spec: use the callbacks provided to vkCreateDevice() if not nullptr, otherwise use the callbacks
     * provided to the instance (if no allocator callbacks was provided to the instance, it will use default ones).
     */
-   util::allocator device_allocator{inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator};
+   util::allocator device_allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator };
    result =
       device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator);
    if (result != VK_SUCCESS)
@@ -303,7 +303,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    const auto *swapchain_compression_feature =
-   util::find_extension<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT>(
+      util::find_extension<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT>(
          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT, pCreateInfo->pNext);
    if (swapchain_compression_feature != nullptr)
    {

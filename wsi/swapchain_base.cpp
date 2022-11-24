@@ -138,12 +138,7 @@ bool swapchain_base::has_descendant_started_presenting()
 VkResult swapchain_base::init_page_flip_thread()
 {
    /* Setup semaphore for signaling pageflip thread */
-   VkResult result = m_page_flip_semaphore.init(0);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
+   TRY_LOG_CALL(m_page_flip_semaphore.init(0));
    m_thread_sem_defined = true;
 
    /* Launch page flipping thread */
@@ -232,19 +227,11 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
 
    /* We have allocated images, we can call the platform init function if something needs to be done. */
    bool use_presentation_thread = true;
-   VkResult result = init_platform(device, swapchain_create_info, use_presentation_thread);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
+   TRY_LOG_CALL(init_platform(device, swapchain_create_info, use_presentation_thread));
 
    if (use_presentation_thread)
    {
-      result = init_page_flip_thread();
-      if (result != VK_SUCCESS)
-      {
-         return result;
-      }
+      TRY_LOG_CALL(init_page_flip_thread());
    }
 
    VkImageCreateInfo image_create_info = {};
@@ -265,7 +252,7 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    image_create_info.pQueueFamilyIndices = swapchain_create_info->pQueueFamilyIndices;
    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-   result = m_free_image_semaphore.init(m_swapchain_images.size());
+   VkResult result = m_free_image_semaphore.init(m_swapchain_images.size());
    if (result != VK_SUCCESS)
    {
       assert(result == VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -274,28 +261,17 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
 
    for (auto &img : m_swapchain_images)
    {
-      result = create_and_bind_swapchain_image(image_create_info, img);
-      if (result != VK_SUCCESS)
-      {
-         return result;
-      }
+      TRY_LOG_CALL(create_and_bind_swapchain_image(image_create_info, img));
 
       VkSemaphoreCreateInfo semaphore_info = {};
       semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-      result = m_device_data.disp.CreateSemaphore(m_device, &semaphore_info, get_allocation_callbacks(),
-                                                  &img.present_semaphore);
-      if (result != VK_SUCCESS)
-      {
-         return result;
-      }
+
+      TRY_LOG_CALL(m_device_data.disp.CreateSemaphore(m_device, &semaphore_info, get_allocation_callbacks(),
+                                                      &img.present_semaphore));
    }
 
    m_device_data.disp.GetDeviceQueue(m_device, 0, 0, &m_queue);
-   result = m_device_data.SetDeviceLoaderData(m_device, m_queue);
-   if (VK_SUCCESS != result)
-   {
-      return result;
-   }
+   TRY_LOG_CALL(m_device_data.SetDeviceLoaderData(m_device, m_queue));
 
    int res = sem_init(&m_start_present_semaphore, 0, 0);
    /* Only programming error can cause this to fail. */
@@ -401,12 +377,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
 {
    std::unique_lock<std::mutex> acquire_lock(m_image_acquire_lock);
 
-   VkResult retval = wait_for_free_buffer(timeout);
-   if (retval != VK_SUCCESS)
-   {
-      return retval;
-   }
-
+   TRY(wait_for_free_buffer(timeout));
    if (error_has_occured())
    {
       return get_error_state();
@@ -484,6 +455,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    }
 
    /* Fallback for when importing fence/semaphore sync FDs is unsupported by the ICD. */
+   VkResult retval = VK_SUCCESS;
    if (VK_NULL_HANDLE != semaphore || VK_NULL_HANDLE != fence)
    {
       VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -496,6 +468,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
 
       submit.commandBufferCount = 0;
       submit.pCommandBuffers = nullptr;
+
       retval = m_device_data.disp.QueueSubmit(m_queue, 1, &submit, fence);
       assert(retval == VK_SUCCESS);
    }
@@ -592,17 +565,8 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
       sem_count = present_info->waitSemaphoreCount;
    }
 
-   VkResult result = image_set_present_payload(m_swapchain_images[image_index], queue, wait_semaphores, sem_count);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
-   result = notify_presentation_engine(image_index);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
+   TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, wait_semaphores, sem_count));
+   TRY(notify_presentation_engine(image_index));
 
    return VK_SUCCESS;
 }

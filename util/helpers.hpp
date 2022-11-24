@@ -31,6 +31,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include "log.hpp"
 
 /*
  * Conditional return statement. This allows functions to return early for
@@ -56,15 +57,23 @@
  *    return VK_SUCCESS;
  * }
  */
-#define TRY(expression)                 \
-   do                                   \
-   {                                    \
-      VkResult try_result = expression; \
-      if (try_result != VK_SUCCESS)     \
-      {                                 \
-         return try_result;             \
-      }                                 \
+#define TRY_HANDLER(expression, do_log, ...) \
+   do                                        \
+   {                                         \
+      VkResult try_result = expression;      \
+      if (try_result != VK_SUCCESS)          \
+      {                                      \
+         if (do_log)                         \
+         {                                   \
+            WSI_LOG_ERROR(__VA_ARGS__);      \
+         }                                   \
+         return try_result;                  \
+      }                                      \
    } while (0)
+
+#define TRY(expression) TRY_HANDLER(expression, false, "PLACEHOLDER")
+#define TRY_LOG_CALL(expression) TRY_HANDLER(expression, true, #expression)
+#define TRY_LOG(expression, ...) TRY_HANDLER(expression, true, __VA_ARGS__)
 
 namespace util
 {

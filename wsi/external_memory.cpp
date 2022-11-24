@@ -100,13 +100,8 @@ VkResult external_memory::get_fd_mem_type_index(uint32_t index, uint32_t *mem_id
    VkMemoryFdPropertiesKHR mem_props = {};
    mem_props.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
 
-   VkResult result =
-      device_data.disp.GetMemoryFdPropertiesKHR(m_device, m_handle_type, m_buffer_fds[index], &mem_props);
-   if (result != VK_SUCCESS)
-   {
-      WSI_LOG_ERROR("Error querying Fd properties.");
-      return result;
-   }
+   TRY_LOG(device_data.disp.GetMemoryFdPropertiesKHR(m_device, m_handle_type, m_buffer_fds[index], &mem_props),
+           "Error querying file descriptor properties");
 
    for (*mem_idx = 0; *mem_idx < VK_MAX_MEMORY_TYPES; (*mem_idx)++)
    {
@@ -130,7 +125,7 @@ VkResult external_memory::import_plane_memories()
          auto it = std::find(std::begin(m_buffer_fds), std::end(m_buffer_fds), m_buffer_fds[plane]);
          if (std::distance(std::begin(m_buffer_fds), it) == plane)
          {
-            TRY(import_plane_memory(plane));
+            TRY_LOG_CALL(import_plane_memory(plane));
          }
       }
       return VK_SUCCESS;
@@ -141,7 +136,7 @@ VkResult external_memory::import_plane_memories()
 VkResult external_memory::import_plane_memory(uint32_t index)
 {
    uint32_t mem_index = 0;
-   TRY(get_fd_mem_type_index(index, &mem_index));
+   TRY_LOG_CALL(get_fd_mem_type_index(index, &mem_index));
 
    const off_t fd_size = lseek(m_buffer_fds[index], 0, SEEK_END);
    if (fd_size < 0)
@@ -162,14 +157,9 @@ VkResult external_memory::import_plane_memory(uint32_t index)
    alloc_info.memoryTypeIndex = mem_index;
 
    auto &device_data = layer::device_private_data::get(m_device);
-   VkResult result =
-      device_data.disp.AllocateMemory(m_device, &alloc_info, m_allocator.get_original_callbacks(), &m_memories[index]);
-
-   if (result != VK_SUCCESS)
-   {
-      WSI_LOG_ERROR("Failed to import memory.");
-      return result;
-   }
+   TRY_LOG(
+      device_data.disp.AllocateMemory(m_device, &alloc_info, m_allocator.get_original_callbacks(), &m_memories[index]),
+      "Failed to import device memory");
 
    return VK_SUCCESS;
 }
@@ -213,8 +203,8 @@ VkResult external_memory::bind_swapchain_image_memory(const VkImage &image)
 
 VkResult external_memory::import_memory_and_bind_swapchain_image(const VkImage &image)
 {
-   TRY(import_plane_memories());
-   TRY(bind_swapchain_image_memory(image));
+   TRY_LOG_CALL(import_plane_memories());
+   TRY_LOG_CALL(bind_swapchain_image_memory(image));
    return VK_SUCCESS;
 }
 

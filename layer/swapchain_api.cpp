@@ -61,20 +61,13 @@ wsi_layer_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
-   VkResult result = sc->init(device, pSwapchainCreateInfo);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
+   TRY_LOG(sc->init(device, pSwapchainCreateInfo), "Failed to initialise swapchain");
 
-   result = device_data.add_layer_swapchain(reinterpret_cast<VkSwapchainKHR>(sc.get()));
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
+   TRY_LOG(device_data.add_layer_swapchain(reinterpret_cast<VkSwapchainKHR>(sc.get())),
+           "Failed to associate swapchain with the layer");
 
    *pSwapchain = reinterpret_cast<VkSwapchainKHR>(sc.release());
-   return result;
+   return VK_SUCCESS;
 }
 
 VWL_VKAPI_CALL(void)
@@ -170,12 +163,7 @@ static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &prese
       swapchain_semaphores.data(),
    };
 
-   VkResult result = device_data.disp.QueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
-   if (result != VK_SUCCESS)
-   {
-      return result;
-   }
-
+   TRY(device_data.disp.QueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE));
    return VK_SUCCESS;
 }
 
@@ -193,16 +181,10 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
    }
 
    /* Avoid allocating on the heap when there is only one swapchain. */
-   VkResult res = VK_SUCCESS;
    const VkPresentInfoKHR *present_info = pPresentInfo;
    if (pPresentInfo->swapchainCount > 1)
    {
-      res = submit_wait_request(queue, *pPresentInfo, device_data);
-      if (res != VK_SUCCESS)
-      {
-         return res;
-      }
-
+      TRY_LOG_CALL(submit_wait_request(queue, *pPresentInfo, device_data));
       present_info = nullptr;
    }
 
@@ -214,8 +196,7 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
       auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
       assert(sc != nullptr);
 
-      res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i]);
-
+      VkResult res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i]);
       if (pPresentInfo->pResults != nullptr)
       {
          pPresentInfo->pResults[i] = res;
@@ -365,20 +346,13 @@ wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
       if (bind_sc_info == nullptr || bind_sc_info->swapchain == VK_NULL_HANDLE ||
           !device_data.layer_owns_swapchain(bind_sc_info->swapchain))
       {
-         VkResult result = device_data.disp.BindImageMemory2KHR(device, 1, &pBindInfos[i]);
-         if (result != VK_SUCCESS)
-         {
-            return result;
-         }
+         TRY_LOG_CALL(device_data.disp.BindImageMemory2KHR(device, 1, &pBindInfos[i]));
       }
       else
       {
          auto sc = reinterpret_cast<wsi::swapchain_base *>(bind_sc_info->swapchain);
-         VkResult result = sc->bind_swapchain_image(device, &pBindInfos[i], bind_sc_info);
-         if (result != VK_SUCCESS)
-         {
-            return result;
-         }
+         TRY_LOG(sc->bind_swapchain_image(device, &pBindInfos[i], bind_sc_info),
+                 "Failed to bind an image to the swapchain");
       }
    }
    return VK_SUCCESS;

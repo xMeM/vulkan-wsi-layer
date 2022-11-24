@@ -148,12 +148,12 @@ static VkResult surface_format_properties_map_init(VkPhysicalDevice phys_dev, su
       const VkFormat vk_format = util::drm::drm_to_vk_format(drm_format.fourcc);
       if (vk_format != VK_FORMAT_UNDEFINED && format_map.find(vk_format) == format_map.end())
       {
-         TRY(surface_format_properties_map_add(phys_dev, format_map, vk_format, drm_format));
+         TRY_LOG_CALL(surface_format_properties_map_add(phys_dev, format_map, vk_format, drm_format));
       }
       const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
       if (srgb_vk_format != VK_FORMAT_UNDEFINED && format_map.find(srgb_vk_format) == format_map.end())
       {
-         TRY(surface_format_properties_map_add(phys_dev, format_map, srgb_vk_format, drm_format));
+         TRY_LOG_CALL(surface_format_properties_map_add(phys_dev, format_map, srgb_vk_format, drm_format));
       }
    }
 
@@ -173,7 +173,7 @@ static VkResult surface_format_properties_map_add_compression(VkPhysicalDevice p
          auto entry = format_map.find(vk_format);
          if (entry != format_map.end())
          {
-            TRY(surface_format_properties_add_modifier_support(phys_dev, entry->second, drm_format, true));
+            TRY_LOG_CALL(surface_format_properties_add_modifier_support(phys_dev, entry->second, drm_format, true));
          }
       }
       const VkFormat srgb_vk_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
@@ -182,7 +182,7 @@ static VkResult surface_format_properties_map_add_compression(VkPhysicalDevice p
          auto entry = format_map.find(srgb_vk_format);
          if (entry != format_map.end())
          {
-            TRY(surface_format_properties_add_modifier_support(phys_dev, entry->second, drm_format, true));
+            TRY_LOG_CALL(surface_format_properties_add_modifier_support(phys_dev, entry->second, drm_format, true));
          }
       }
    }
@@ -197,12 +197,13 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
    assert(specific_surface);
    if (!supported_formats.size())
    {
-      TRY(surface_format_properties_map_init(physical_device, supported_formats, specific_surface->get_formats()));
+      TRY_LOG_CALL(
+         surface_format_properties_map_init(physical_device, supported_formats, specific_surface->get_formats()));
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
       if (layer::instance_private_data::get(physical_device).has_image_compression_support(physical_device))
       {
-         TRY(surface_format_properties_map_add_compression(physical_device, supported_formats,
-                                                           specific_surface->get_formats()));
+         TRY_LOG_CALL(surface_format_properties_map_add_compression(physical_device, supported_formats,
+                                                                    specific_surface->get_formats()));
       }
 #endif
    }
