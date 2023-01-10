@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Arm Limited.
+ * Copyright (c) 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,6 +30,8 @@
 
 #include "synchronization.hpp"
 #include "layer/private_data.hpp"
+
+#include <algorithm>
 
 namespace wsi
 {
@@ -103,10 +105,25 @@ VkResult fence_sync::set_payload(VkQueue queue, const VkSemaphore *sem_payload, 
     * want to block any future Vulkan queue work on it. So, we pass in BOTTOM_OF_PIPE bit as the
     * wait flag.
     */
-   VkPipelineStageFlags pipeline_stage_flags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+   VkPipelineStageFlags pipeline_stage_flag = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+   VkPipelineStageFlags *pipeline_stage_flag_data = &pipeline_stage_flag;
+
+   util::vector<VkPipelineStageFlags> pipeline_stage_flags_vector{ util::allocator(
+      dev->get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
+   /* Try to avoid memory allocation for single semaphore */
+   if (sem_count > 1)
+   {
+      if (!pipeline_stage_flags_vector.try_resize(sem_count))
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+      std::fill(pipeline_stage_flags_vector.begin(), pipeline_stage_flags_vector.end(),
+                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+      pipeline_stage_flag_data = pipeline_stage_flags_vector.data();
+   }
 
    VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, sem_count, sem_payload, &pipeline_stage_flags, 0, nullptr, 0, nullptr
+      VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, sem_count, sem_payload, pipeline_stage_flag_data, 0, nullptr, 0, nullptr
    };
 
    result = dev->disp.QueueSubmit(queue, 1, &submit_info, fence);
