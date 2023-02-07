@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -45,7 +45,7 @@ namespace util
  * @param[in] format    A C-style formatting string.
  */
 
-void wsi_log_message(int level, const char *file, int line, const char *format, ...)
+void wsi_log_message(long level, const char *file, int line, const char *format, ...)
 #ifdef __GNUC__
    __attribute__((format(printf, 4, 5)))
 #endif
@@ -57,8 +57,12 @@ static constexpr bool wsi_log_enable = false;
 static constexpr bool wsi_log_enable = true;
 #endif
 
-#define WSI_LOG(level, ...) \
-   do { if (::util::wsi_log_enable) ::util::wsi_log_message(level, __FILE__, __LINE__, __VA_ARGS__); } while (0)
+#define WSI_LOG(level, ...)                                               \
+   do                                                                     \
+   {                                                                      \
+      if (::util::wsi_log_enable)                                         \
+         ::util::wsi_log_message(level, __FILE__, __LINE__, __VA_ARGS__); \
+   } while (0)
 
 #define WSI_LOG_ERROR(...) WSI_LOG(1, __VA_ARGS__)
 #define WSI_LOG_WARNING(...) WSI_LOG(2, __VA_ARGS__)
