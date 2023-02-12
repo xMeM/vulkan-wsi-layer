@@ -19,11 +19,11 @@ error codes, e.g. VK_ERROR_OUT_OF_HOST_MEMORY.
 
 A good idea is to introduce a wrapper around the STL container to ensure all exceptions are caught and converted to
 error codes that are propagated back to the caller. It is highly recommended to use the
-[utility classes](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/tree/master/util) provided by the WSI layer
+[utility classes](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/tree/main/util) provided by the WSI layer
 if you need an exception-safe wrapper for STL containers:
- * [util::vector](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/master/util/custom_allocator.hpp)
- * [util::unordered_map](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/master/util/unordered_map.hpp)
- * [util::unordered_set](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/master/util/unordered_set.hpp)
+ * [util::vector](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/main/util/custom_allocator.hpp)
+ * [util::unordered_map](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/main/util/unordered_map.hpp)
+ * [util::unordered_set](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/main/util/unordered_set.hpp)
 
 For other helper components provided by the WSI layer please see
-[WSI integration document](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/master/wsi/README.md#helpers).
+[WSI integration document](https://gitlab.freedesktop.org/mesa/vulkan-wsi-layer/-/blob/main/wsi/README.md#helpers).

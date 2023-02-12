@@ -119,7 +119,7 @@ option, as shown above.
 
 Copy the shared library `libVkLayer_window_system_integration.so` and JSON
 configuration `VkLayer_window_system_integration.json` into a Vulkan®
-[implicit layer directory](https://github.com/KhronosGroup/Vulkan-Loader/blob/master/docs/LoaderLayerInterface.md#linux-layer-discovery).
+[implicit layer directory](https://github.com/KhronosGroup/Vulkan-Loader/blob/main/docs/LoaderLayerInterface.md#linux-layer-discovery).
 
 ## Contributing
 
@@ -134,7 +134,7 @@ We are open for contributions.
    line. By adding this line the contributor certifies the contribution is made
    under the terms of the [Developer Certificate of Origin (DCO)](DCO.txt).
  * Questions, bug reports, et cetera are raised and discussed on the issues page.
- * Please make merge requests into the master branch.
+ * Please make merge requests into the main branch.
  * Code should be formatted with clang-format using the project's .clang-format
    configuration.
 
