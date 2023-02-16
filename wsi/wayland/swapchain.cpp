@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -291,6 +291,7 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
    external_memory.set_strides(strides);
    external_memory.set_buffer_fds(buffer_fds);
    external_memory.set_offsets(offsets);
+   external_memory.set_memory_handle_type(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
    return VK_SUCCESS;
 }
 
@@ -402,8 +403,6 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    image_status_lock.unlock();
 
    TRY_LOG(create_wl_buffer(image_create_info, image, image_data), "Failed to create wl_buffer");
-
-   image_data->external_mem.set_memory_handle_type(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
 
    TRY_LOG(image_data->external_mem.import_memory_and_bind_swapchain_image(image.image),
            "Failed to import memory and bind swapchain image");
