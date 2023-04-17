@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021, 2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -39,7 +39,16 @@
  *                          are used by C code.
  *  VWL_API_POST          - Placed at the end of the function signature. These will typically be
  *                          functions that need to be callable from C.
+ *  VWL_VKAPI_EXPORT      - Marks that the symbol should use the "default" visibility
  */
 #define VWL_VKAPI_CALL(ret_type) extern "C" VKAPI_ATTR ret_type VKAPI_CALL
 #define VWL_CAPI_CALL(ret_type) extern "C" ret_type
 #define VWL_API_POST noexcept
+
+#if defined(__GNUC__) && __GNUC__ >= 4
+#define VWL_VKAPI_EXPORT __attribute__((visibility("default")))
+#elif defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590)
+#define VWL_VKAPI_EXPORT __attribute__((visibility("default")))
+#else
+#define VWL_VKAPI_EXPORT
+#endif
