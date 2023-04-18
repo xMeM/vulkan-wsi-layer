@@ -545,7 +545,7 @@ VkResult swapchain::get_free_buffer(uint64_t *timeout)
    }
    else
    {
-      return VK_ERROR_DEVICE_LOST;
+      return VK_ERROR_SURFACE_LOST_KHR;
    }
 }
 

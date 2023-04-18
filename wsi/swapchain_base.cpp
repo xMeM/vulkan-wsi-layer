@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -78,18 +78,12 @@ void swapchain_base::page_flip_thread()
       image_status_lock.unlock();
 
       /* We may need to wait for the payload of the present sync of the oldest pending image to be finished. */
-      vk_res = image_wait_present(sc_images[*pending_index], timeout);
+      while ((vk_res = image_wait_present(sc_images[*pending_index], timeout)) == VK_TIMEOUT)
+      {
+         WSI_LOG_WARNING("Timeout waiting for image's present fences, retrying..");
+      }
       if (vk_res != VK_SUCCESS)
       {
-         /*
-          * Setting the error state to VK_TIMEOUT would communicate the wrong error
-          * state to the application through acquire_next_image. For this reason we
-          * convert it to VK_ERROR_DEVICE_LOST.
-          */
-         if (vk_res == VK_TIMEOUT)
-         {
-            vk_res = VK_ERROR_DEVICE_LOST;
-         }
          set_error_state(vk_res);
          m_free_image_semaphore.post();
          continue;
