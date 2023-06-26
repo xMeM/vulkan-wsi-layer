@@ -34,6 +34,8 @@
 #include <vulkan/vk_layer.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan_wayland.h>
+#include <xcb/xcb.h>
+#include <vulkan/vulkan_xcb.h>
 
 #include <memory>
 #include <unordered_set>
@@ -56,36 +58,38 @@ namespace layer
  * guarantee than we can safely call them. We still mark the entrypoints with REQUIRED() and OPTIONAL(). The layer
  * fails if vkGetInstanceProcAddr returns null for entrypoints that are REQUIRED().
  */
-#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL)    \
-   /* Vulkan 1.0 */                                      \
-   REQUIRED(GetInstanceProcAddr)                         \
-   REQUIRED(DestroyInstance)                             \
-   REQUIRED(GetPhysicalDeviceProperties)                 \
-   REQUIRED(GetPhysicalDeviceImageFormatProperties)      \
-   REQUIRED(EnumerateDeviceExtensionProperties)          \
-   /* VK_KHR_surface */                                  \
-   OPTIONAL(DestroySurfaceKHR)                           \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)     \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)          \
-   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)     \
-   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)          \
-   /* VK_EXT_headless_surface */                         \
-   OPTIONAL(CreateHeadlessSurfaceEXT)                    \
-   /* VK_KHR_wayland_surface */                          \
-   OPTIONAL(CreateWaylandSurfaceKHR)                     \
-   /* VK_KHR_get_surface_capabilities2 */                \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)    \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)         \
-   /* VK_KHR_get_physical_device_properties2 or */       \
-   /* 1.1 (without KHR suffix) */                        \
-   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR)  \
-   OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)       \
-   OPTIONAL(GetPhysicalDeviceFeatures2KHR)               \
-   /* VK_KHR_device_group + VK_KHR_surface or */         \
-   /* 1.1 with VK_KHR_swapchain */                       \
-   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)       \
-   /* VK_KHR_external_fence_capabilities or */           \
-   /* 1.1 (without KHR suffix) */                        \
+#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL)   \
+   /* Vulkan 1.0 */                                     \
+   REQUIRED(GetInstanceProcAddr)                        \
+   REQUIRED(DestroyInstance)                            \
+   REQUIRED(GetPhysicalDeviceProperties)                \
+   REQUIRED(GetPhysicalDeviceImageFormatProperties)     \
+   REQUIRED(EnumerateDeviceExtensionProperties)         \
+   /* VK_KHR_surface */                                 \
+   OPTIONAL(DestroySurfaceKHR)                          \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)    \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)         \
+   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)    \
+   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)         \
+   /* VK_EXT_headless_surface */                        \
+   OPTIONAL(CreateHeadlessSurfaceEXT)                   \
+   /* VK_KHR_wayland_surface */                         \
+   OPTIONAL(CreateWaylandSurfaceKHR)                    \
+   /* VK_KHR_xcb_surface */                             \
+   OPTIONAL(CreateXcbSurfaceKHR)                        \
+   /* VK_KHR_get_surface_capabilities2 */               \
+   OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)   \
+   OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)        \
+   /* VK_KHR_get_physical_device_properties2 or */      \
+   /* 1.1 (without KHR suffix) */                       \
+   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR) \
+   OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)      \
+   OPTIONAL(GetPhysicalDeviceFeatures2KHR)              \
+   /* VK_KHR_device_group + VK_KHR_surface or */        \
+   /* 1.1 with VK_KHR_swapchain */                      \
+   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)      \
+   /* VK_KHR_external_fence_capabilities or */          \
+   /* 1.1 (without KHR suffix) */                       \
    OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)
 
 struct instance_dispatch_table
@@ -131,6 +135,7 @@ struct instance_dispatch_table
    REQUIRED(CreateImage)                            \
    REQUIRED(DestroyImage)                           \
    REQUIRED(GetImageMemoryRequirements)             \
+   REQUIRED(GetImageSubresourceLayout)              \
    REQUIRED(BindImageMemory)                        \
    REQUIRED(AllocateMemory)                         \
    REQUIRED(FreeMemory)                             \
@@ -358,7 +363,7 @@ private:
     *
     * @param instance_data A valid pointer to instance_private_data
     */
-   static void destroy(instance_private_data* instance_data);
+   static void destroy(instance_private_data *instance_data);
 
    /**
     * @brief Check whether the given surface is already supported for presentation without the layer.
@@ -386,7 +391,6 @@ private:
     * @brief List with the names of the enabled instance extensions.
     */
    util::extension_list enabled_extensions;
-
 };
 
 /**
@@ -447,7 +451,8 @@ public:
    /**
     * @brief Check whether the given swapchain is owned by us (the WSI Layer).
     */
-   bool layer_owns_swapchain(VkSwapchainKHR swapchain) const {
+   bool layer_owns_swapchain(VkSwapchainKHR swapchain) const
+   {
       return layer_owns_all_swapchains(&swapchain, 1);
    }
 
@@ -536,7 +541,7 @@ private:
     *
     * @param device_data A valid pointer to device_private_data
     */
-   static void destroy(device_private_data* device_data);
+   static void destroy(device_private_data *device_data);
 
    const util::allocator allocator;
    util::unordered_set<VkSwapchainKHR> swapchains;

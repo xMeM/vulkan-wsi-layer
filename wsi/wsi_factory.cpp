@@ -46,6 +46,11 @@
 #include "wayland/surface_properties.hpp"
 #endif
 
+#if BUILD_WSI_X11
+#include <vulkan/vulkan_xcb.h>
+#include "x11/surface_properties.hpp"
+#endif
+
 namespace wsi
 {
 
@@ -60,6 +65,9 @@ static struct wsi_extension
 #if BUILD_WSI_WAYLAND
    { { VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_WAYLAND },
 #endif
+#if BUILD_WSI_X11
+   { { VK_KHR_XCB_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_XCB },
+#endif
 };
 
 static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
@@ -73,6 +81,10 @@ static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
 #if BUILD_WSI_WAYLAND
    case VK_ICD_WSI_PLATFORM_WAYLAND:
       return &wayland::surface_properties::get_instance();
+#endif
+#if BUILD_WSI_X11
+   case VK_ICD_WSI_PLATFORM_XCB:
+      return &x11::surface_properties::get_instance();
 #endif
    default:
       return nullptr;
