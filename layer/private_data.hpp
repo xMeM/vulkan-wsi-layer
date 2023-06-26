@@ -34,6 +34,9 @@
 #include <vulkan/vk_layer.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan_wayland.h>
+#include <vulkan/vulkan_android.h>
+#include <xcb/xcb.h>
+#include <vulkan/vulkan_xcb.h>
 
 #include <memory>
 #include <unordered_set>
@@ -228,6 +231,8 @@ static constexpr uint32_t API_VERSION_MAX = UINT32_MAX;
    EP(CreateWaylandSurfaceKHR, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                        \
    /* VK_KHR_display */                                                                                              \
    EP(CreateDisplayPlaneSurfaceKHR, VK_KHR_DISPLAY_EXTENSION_NAME, API_VERSION_MAX, false)                           \
+   /* VK_KHR_xcb_surface */                                                                                          \
+   EP(CreateXcbSurfaceKHR, VK_KHR_XCB_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                                \
    /* VK_KHR_get_surface_capabilities2 */                                                                            \
    EP(GetPhysicalDeviceSurfaceCapabilities2KHR, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, API_VERSION_MAX,   \
       false)                                                                                                         \
@@ -355,6 +360,7 @@ private:
    EP(CreateImage, "", VK_API_VERSION_1_0, true)                                                                       \
    EP(DestroyImage, "", VK_API_VERSION_1_0, true)                                                                      \
    EP(GetImageMemoryRequirements, "", VK_API_VERSION_1_0, true)                                                        \
+   EP(GetImageSubresourceLayout, "", VK_API_VERSION_1_0, true)                                                         \
    EP(BindImageMemory, "", VK_API_VERSION_1_0, true)                                                                   \
    EP(AllocateMemory, "", VK_API_VERSION_1_0, true)                                                                    \
    EP(FreeMemory, "", VK_API_VERSION_1_0, true)                                                                        \
@@ -405,7 +411,8 @@ private:
    EP(GetBufferMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)     \
    EP(GetImageSparseMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1,       \
       false)                                                                                                           \
-   EP(ReleaseSwapchainImagesEXT, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, VK_API_VERSION_1_1, false)
+   EP(ReleaseSwapchainImagesEXT, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, VK_API_VERSION_1_1, false)             \
+   EP(GetMemoryAndroidHardwareBufferANDROID, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME, API_VERSION_MAX, false)
 
 /**
  * @brief Struct representing the device dispatch table.

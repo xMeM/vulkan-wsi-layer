@@ -57,6 +57,7 @@ endif()
 
 # Backend support
 option(BUILD_WSI_HEADLESS "Build with support for VK_EXT_headless_surface" ON)
+option(BUILD_WSI_X11 "Build with support for VK_KHR_xcb_surface" ON)
 option(BUILD_WSI_WAYLAND "Build with support for VK_KHR_wayland_surface" OFF)
 option(BUILD_WSI_DISPLAY "Build with support for VK_KHR_display" OFF)
 
@@ -238,6 +239,27 @@ else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_display/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
 
+# X11 WSI
+if(BUILD_WSI_X11)
+   set(CMAKE_BUILD_TYPE "Debug")
+
+   add_library(wsi_x11 STATIC
+      wsi/x11/surface_properties.cpp
+      wsi/x11/surface.cpp
+      wsi/x11/swapchain.cpp)
+
+   target_include_directories(wsi_x11 PRIVATE
+      ${PROJECT_SOURCE_DIR}
+      ${VULKAN_CXX_INCLUDE}
+      ${CMAKE_CURRENT_BINARY_DIR})
+
+   target_compile_options(wsi_x11 INTERFACE "-DBUILD_WSI_X11=1")
+   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3 X11-xcb android)
+else()
+   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_xcb_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_xlib_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+endif()
+
 # Layer
 add_library(${PROJECT_NAME} SHARED
    layer/layer.cpp
@@ -293,3 +315,6 @@ target_link_libraries(${PROJECT_NAME} ${LINK_WSI_LIBS})
 add_custom_target(manifest_json ALL COMMAND
    cp ${PROJECT_SOURCE_DIR}/layer/VkLayer_window_system_integration.json ${CMAKE_CURRENT_BINARY_DIR}
    ${JSON_COMMANDS})
+
+install(TARGETS ${PROJECT_NAME} DESTINATION share/vulkan/implicit_layer.d/)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json DESTINATION share/vulkan/implicit_layer.d/)
