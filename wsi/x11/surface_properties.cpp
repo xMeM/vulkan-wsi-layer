@@ -96,12 +96,7 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    return VK_SUCCESS;
 }
 
-std::vector<VkFormat> support_formats{
-   VK_FORMAT_R8G8B8A8_UNORM,    VK_FORMAT_R8G8B8_UNORM, VK_FORMAT_R5G6B5_UNORM_PACK16,
-   VK_FORMAT_B8G8R8A8_UNORM,    VK_FORMAT_D16_UNORM,    VK_FORMAT_X8_D24_UNORM_PACK32,
-   VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT,   VK_FORMAT_D32_SFLOAT_S8_UINT,
-   VK_FORMAT_S8_UINT,           VK_FORMAT_R8_UNORM
-};
+std::vector<VkFormat> support_formats{ VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM };
 
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_format_count,
                                                  VkSurfaceFormatKHR *surface_formats,

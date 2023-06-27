@@ -50,6 +50,7 @@
 
 #include "swapchain.hpp"
 #include "wsi/surface.hpp"
+#include "wsi/swapchain_base.hpp"
 
 namespace wsi
 {
@@ -66,6 +67,7 @@ struct image_data
    AHardwareBuffer *ahb = nullptr;
    xcb_shm_seg_t shmseg;
    xcb_pixmap_t pixmap;
+   uint64_t serial = 0;
    int dma_buf_fd = -1;
    fence_sync present_fence;
 };
@@ -360,25 +362,91 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    return res;
 }
 
+bool swapchain::free_image_found()
+{
+   for (auto &img : m_swapchain_images)
+   {
+      if (img.status == swapchain_image::FREE)
+      {
+         return true;
+      }
+   }
+   return false;
+}
+
+VkResult swapchain::get_free_buffer(uint64_t *timeout)
+{
+   if (has_shm == false)
+      return VK_SUCCESS;
+   xcb_generic_event_t *event;
+   while ((event = xcb_wait_for_special_event(connection, special_event)) != nullptr)
+   {
+      auto pe = reinterpret_cast<xcb_present_generic_event_t *>(event);
+      switch (pe->evtype)
+      {
+      case XCB_PRESENT_CONFIGURE_NOTIFY:
+      {
+         auto config = reinterpret_cast<xcb_present_configure_notify_event_t *>(event);
+         if (config->pixmap_flags & (1 << 0))
+            return VK_ERROR_SURFACE_LOST_KHR;
+         if (config->width != windowExtent.width || config->height != windowExtent.height)
+            return VK_SUBOPTIMAL_KHR;
+         break;
+      }
+      case XCB_PRESENT_EVENT_IDLE_NOTIFY:
+      {
+         auto idle = reinterpret_cast<xcb_present_idle_notify_event_t *>(event);
+         for (auto i = 0; i < m_swapchain_images.size(); i++)
+         {
+            auto data = reinterpret_cast<image_data *>(m_swapchain_images[i].data);
+            if (idle->pixmap == data->pixmap)
+            {
+               if (m_swapchain_images[i].status != swapchain_image::FREE)
+               {
+                  unpresent_image(i);
+                  return VK_SUCCESS;
+               }
+            }
+         }
+      }
+      case XCB_PRESENT_EVENT_COMPLETE_NOTIFY:
+      {
+         auto c = reinterpret_cast<xcb_present_complete_notify_event_t *>(event);
+         switch (c->kind)
+         {
+         case XCB_PRESENT_COMPLETE_KIND_PIXMAP:
+            ++last_complete;
+            if (last_complete > c->serial)
+            {
+               // std::cout << "complete " << c->serial << "last" << last_complete << std::endl;
+               --last_complete;
+            }
+            else
+            {
+               present_complete.post();
+            }
+         }
+      }
+      }
+   }
+   std::cout << "error" << std::endl;
+   return VK_NOT_READY;
+}
+
 void swapchain::present_image(uint32_t pending_index)
 {
    image_data *image = reinterpret_cast<image_data *>(m_swapchain_images[pending_index].data);
 
    if (has_shm && has_present)
    {
-      auto serial = ++m_send_sbc;
+      image->serial = ++m_send_sbc;
+      // std::cout << "present " << image->serial << std::endl;
       uint32_t options = XCB_PRESENT_OPTION_NONE;
       if (m_present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR || m_present_mode == VK_PRESENT_MODE_MAILBOX_KHR ||
           m_present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)
          options |= XCB_PRESENT_OPTION_ASYNC;
-      auto cookie = xcb_present_pixmap_checked(connection, window, image->pixmap, serial, 0, 0, 0, 0, 0, 0, 0, options,
-                                               0, 0, 0, 0, nullptr);
-      auto err = xcb_request_check(connection, cookie);
-      if (err != nullptr)
-      {
-         free(err);
-         set_error_state(VK_ERROR_SURFACE_LOST_KHR);
-      }
+      xcb_present_pixmap(connection, window, image->pixmap, image->serial, 0, 0, 0, 0, 0, 0, 0, options, 0, 0, 0, 0,
+                         nullptr);
    }
    else
    {
@@ -401,9 +469,9 @@ void swapchain::present_image(uint32_t pending_index)
       }
       int32_t fence = -1;
       AHardwareBuffer_unlock(image->ahb, &fence);
+      unpresent_image(pending_index);
    }
    xcb_flush(connection);
-   unpresent_image(pending_index);
 }
 
 void swapchain::destroy_image(wsi::swapchain_image &image)
@@ -453,6 +521,8 @@ VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue qu
 
 VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)
 {
+   if (has_shm && has_present)
+      present_complete.wait(250 * 1000);
    auto data = reinterpret_cast<image_data *>(image.data);
    return data->present_fence.wait_payload(timeout);
 }
@@ -513,33 +583,34 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
       }
    }
 
-   // if (has_present)
-   // {
-   //    auto eid = xcb_generate_id(connection);
-   //    special_event = xcb_register_for_special_xge(connection, &xcb_present_id, eid, nullptr);
-   //    xcb_present_select_input(connection, eid, window,
-   //                             XCB_PRESENT_EVENT_MASK_IDLE_NOTIFY | XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY |
-   //                                XCB_PRESENT_EVENT_MASK_CONFIGURE_NOTIFY);
-   // }
+   if (has_present)
+   {
+      auto eid = xcb_generate_id(connection);
+      special_event = xcb_register_for_special_xge(connection, &xcb_present_id, eid, nullptr);
+      xcb_present_select_input(connection, eid, window,
+                               XCB_PRESENT_EVENT_MASK_IDLE_NOTIFY | XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY |
+                                  XCB_PRESENT_EVENT_MASK_CONFIGURE_NOTIFY);
+   }
 
-   // switch (m_present_mode)
-   // {
-   // case VK_PRESENT_MODE_IMMEDIATE_KHR:
-   //    std::cout << "present mode immediate." << std::endl;
-   //    use_presentation_thread = false;
-   //    break;
-   // case VK_PRESENT_MODE_MAILBOX_KHR:
-   //    std::cout << "present mode mailbox." << std::endl;
-   //    use_presentation_thread = false;
-   //    break;
-   // default:
-   //    std::cout << "present mode fifo." << std::endl;
-   //    use_presentation_thread = true;
-   //    break;
-   // }
+   switch (m_present_mode)
+   {
+   case VK_PRESENT_MODE_IMMEDIATE_KHR:
+      std::cout << "present mode immediate." << std::endl;
+      use_presentation_thread = false;
+      break;
+   case VK_PRESENT_MODE_MAILBOX_KHR:
+      std::cout << "present mode mailbox." << std::endl;
+      use_presentation_thread = false;
+      break;
+   default:
+      std::cout << "present mode fifo." << std::endl;
+      use_presentation_thread = true;
+      break;
+   }
 
-   use_presentation_thread = true;
-   m_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+   // use_presentation_thread = true;
+   // m_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+   present_complete.init(1);
 
    std::cout << "create swapchain." << std::endl;
    return VK_SUCCESS;

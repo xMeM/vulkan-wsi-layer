@@ -31,6 +31,7 @@
 #pragma once
 
 #include "surface.hpp"
+#include "util/timed_semaphore.hpp"
 #include <cstdint>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan.h>
@@ -114,10 +115,10 @@ protected:
     */
    VkResult bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
                                  const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
-   // bool free_image_found();
-   //
-   // VkResult get_free_buffer(uint64_t *timeout) override;
-   //
+   bool free_image_found();
+
+   VkResult get_free_buffer(uint64_t *timeout) override;
+
    // VkResult poll_special_event(xcb_connection_t *c, xcb_special_event_t *se, uint64_t timeout);
 
 private:
@@ -133,7 +134,9 @@ private:
    bool has_shm = false;
    bool has_present = false;
 
-   // xcb_special_event_t *special_event;
+   xcb_special_event_t *special_event;
+   util::timed_semaphore present_complete;
+   uint64_t last_complete = 0;
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    VkImageCompressionControlEXT m_image_compression_control;
 #endif
