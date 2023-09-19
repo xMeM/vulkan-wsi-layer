@@ -132,17 +132,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
          return VK_ERROR_EXTENSION_NOT_PRESENT;
       }
 
-      /* The extensions listed below are those strictly required by the layer. Other extensions may be used by the
-       * layer (such as calling their entrypoints), when they are enabled by the application.
-       */
-      std::array<const char *, 4> extra_extensions = {
-         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-         VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
-         VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
-         /* The extension below is only needed for Wayland. For now, enable it also for headless. */
-         VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
-      };
-      TRY_LOG_CALL(extensions.add(extra_extensions.data(), extra_extensions.size()));
+      TRY_LOG_CALL(wsi::add_instance_extensions_required_by_layer(layer_platforms_to_enable, extensions));
       TRY_LOG_CALL(extensions.get_extension_strings(modified_enabled_extensions));
 
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
@@ -249,7 +239,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    if (!enabled_platforms.empty())
    {
       TRY_LOG_CALL(enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
-      TRY_LOG_CALL(wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
+      TRY_LOG_CALL(wsi::add_device_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
       TRY_LOG_CALL(enabled_extensions.get_extension_strings(modified_enabled_extensions));
 
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();

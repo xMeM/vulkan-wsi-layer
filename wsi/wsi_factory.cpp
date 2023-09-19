@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Arm Limited.
+ * Copyright (c) 2019-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -140,8 +140,9 @@ static VkResult get_available_device_extensions(VkPhysicalDevice physical_device
    return VK_SUCCESS;
 }
 
-VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util::wsi_platform_set enabled_platforms,
-                                          util::extension_list &extensions_to_enable)
+VkResult add_device_extensions_required_by_layer(VkPhysicalDevice phys_dev,
+                                                 const util::wsi_platform_set enabled_platforms,
+                                                 util::extension_list &extensions_to_enable)
 {
    util::allocator allocator{ extensions_to_enable.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND };
 
@@ -196,6 +197,38 @@ VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util:
           */
          return VK_ERROR_INITIALIZATION_FAILED;
       }
+
+      TRY_LOG_CALL(extensions_to_enable.add(extensions_required_by_layer));
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult add_instance_extensions_required_by_layer(const util::wsi_platform_set enabled_platforms,
+                                                   util::extension_list &extensions_to_enable)
+{
+   util::allocator allocator{ extensions_to_enable.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND };
+   /* Requesting available instance extensions (as it happens with the device)
+    * before adding additional ones isn't supported during the instance creation.
+    * The reason for that is that the vulkan loader doesn't support layers to call vkEnumerateInstanceExtensionProperties.
+    */
+   for (const auto &wsi_ext : supported_wsi_extensions)
+   {
+      /* Skip iterating over platforms not enabled in the instance. */
+      if (!enabled_platforms.contains(wsi_ext.platform))
+      {
+         continue;
+      }
+
+      util::extension_list extensions_required_by_layer{ allocator };
+      auto *props = get_surface_properties(wsi_ext.platform);
+      if (props == nullptr)
+      {
+         return VK_ERROR_INITIALIZATION_FAILED;
+      }
+
+      TRY_LOG(props->get_required_instance_extensions(extensions_required_by_layer),
+              "Failed to acquire required instance extensions");
 
       TRY_LOG_CALL(extensions_to_enable.add(extensions_required_by_layer));
    }

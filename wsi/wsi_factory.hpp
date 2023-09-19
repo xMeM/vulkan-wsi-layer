@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021 Arm Limited.
+ * Copyright (c) 2019, 2021, 2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -67,7 +67,8 @@ util::unique_ptr<swapchain_base> allocate_surface_swapchain(VkSurfaceKHR surface
  * @param dev_data   The device specific data.
  * @param pAllocator The allocator to use for freeing memory.
  */
-void destroy_surface_swapchain(swapchain_base *swapchain, layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator);
+void destroy_surface_swapchain(swapchain_base *swapchain, layer::device_private_data &dev_data,
+                               const VkAllocationCallbacks *pAllocator);
 
 /**
  * @brief Return which platforms the layer can handle for an instance constructed in the specified way.
@@ -94,8 +95,20 @@ util::wsi_platform_set find_enabled_layer_platforms(const VkInstanceCreateInfo *
  *
  * @retval @c VK_SUCCESS if the operation was successful.
  */
-VkResult add_extensions_required_by_layer(VkPhysicalDevice phys_dev, const util::wsi_platform_set enabled_platforms,
-                                          util::extension_list &extensions_to_enable);
+VkResult add_device_extensions_required_by_layer(VkPhysicalDevice phys_dev,
+                                                 const util::wsi_platform_set enabled_platforms,
+                                                 util::extension_list &extensions_to_enable);
+
+/**
+ * @brief Add required instance extensions by the layer.
+ *
+ * @param[in] enabled_platforms All the enabled platforms for the current instance.
+ * @param[in,out] extensions_to_enable All the extensions required by the layer are added to this list.
+ *
+ * @retval @c VK_SUCCESS if the operation was successful.
+ */
+VkResult add_instance_extensions_required_by_layer(const util::wsi_platform_set enabled_platforms,
+                                                   util::extension_list &extensions_to_enable);
 
 /**
  * @brief Return a function pointer for surface specific functions.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -76,6 +76,11 @@ public:
    }
 
    /**
+    * @brief Return the instance extensions that this surface_properties implementation needs.
+    */
+   virtual VkResult get_required_instance_extensions(util::extension_list &extension_list) = 0;
+
+   /**
     * @brief Implements vkGetProcAddr for entrypoints specific to the surface type.
     *
     * At least the specific VkSurface creation entrypoint must be intercepted.
@@ -89,17 +94,22 @@ public:
 
    /* There is no maximum theoretically speaking however we choose 6 for practicality */
    static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 6;
-
 };
 
 class surface_format_properties
 {
 public:
    surface_format_properties(VkFormat format)
-      : m_surface_format{ format, VK_COLORSPACE_SRGB_NONLINEAR_KHR }
+      : m_surface_format
+   {
+      format, VK_COLORSPACE_SRGB_NONLINEAR_KHR
+   }
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-      , m_compression{ VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT, nullptr, VK_IMAGE_COMPRESSION_DEFAULT_EXT,
-                       VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT }
+   , m_compression
+   {
+      VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT, nullptr, VK_IMAGE_COMPRESSION_DEFAULT_EXT,
+         VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT
+   }
 #endif
    {
    }
@@ -119,11 +129,11 @@ public:
    void fill_format_properties(VkSurfaceFormat2KHR &surf_format) const;
 
    template <typename K>
-   static surface_format_properties& from_iterator(std::pair<const K, surface_format_properties> &iter)
+   static surface_format_properties &from_iterator(std::pair<const K, surface_format_properties> &iter)
    {
       return iter.second;
    }
-   static surface_format_properties& from_iterator(surface_format_properties &iter)
+   static surface_format_properties &from_iterator(surface_format_properties &iter)
    {
       return iter;
    }

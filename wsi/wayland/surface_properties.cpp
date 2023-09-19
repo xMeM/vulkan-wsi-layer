@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,8 +41,6 @@
 #include "util/log.hpp"
 #include "util/macros.hpp"
 #include "util/helpers.hpp"
-
-#define NELEMS(x) (sizeof(x) / sizeof(x[0]))
 
 namespace wsi
 {
@@ -224,23 +222,33 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    return get_surface_present_modes_common(pPresentModeCount, pPresentModes, modes);
 }
 
-static const char *required_device_extensions[] = {
-   VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-   VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
-   VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
-   VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
-   VK_KHR_MAINTENANCE1_EXTENSION_NAME,
-   VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-   VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-   VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-   VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-   VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
-   VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
-};
-
 VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
 {
-   return extension_list.add(required_device_extensions, NELEMS(required_device_extensions));
+   const std::array required_device_extensions{
+      VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+      VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+      VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+      VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
+      VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+      VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+      VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
+   };
+   return extension_list.add(required_device_extensions.data(), required_device_extensions.size());
+}
+
+VkResult surface_properties::get_required_instance_extensions(util::extension_list &extension_list)
+{
+   const std::array required_instance_extensions{
+      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
+   };
+   return extension_list.add(required_instance_extensions.data(), required_instance_extensions.size());
 }
 
 struct required_properties

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -48,7 +48,7 @@ namespace headless
 
 constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
 
-surface_properties& surface_properties::get_instance()
+surface_properties &surface_properties::get_instance()
 {
    static surface_properties instance;
    return instance;
@@ -148,6 +148,16 @@ PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
       return reinterpret_cast<PFN_vkVoidFunction>(CreateHeadlessSurfaceEXT);
    }
    return nullptr;
+}
+
+VkResult surface_properties::get_required_instance_extensions(util::extension_list &extension_list)
+{
+   const std::array required_instance_extensions{
+      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,
+      VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+   };
+   return extension_list.add(required_instance_extensions.data(), required_instance_extensions.size());
 }
 
 bool surface_properties::is_surface_extension_enabled(const layer::instance_private_data &instance_data)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -40,7 +40,8 @@ struct surface_format_properties_hasher
    }
 };
 
-using surface_format_properties_map = util::unordered_map<VkFormat, surface_format_properties, surface_format_properties_hasher>;
+using surface_format_properties_map =
+   util::unordered_map<VkFormat, surface_format_properties, surface_format_properties_hasher>;
 
 class surface;
 
@@ -60,6 +61,8 @@ public:
                                       uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;
 
    VkResult get_required_device_extensions(util::extension_list &extension_list) override;
+
+   VkResult get_required_instance_extensions(util::extension_list &extension_list) override;
 
    PFN_vkVoidFunction get_proc_addr(const char *name) override;
 

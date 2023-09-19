@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2022-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -47,6 +47,8 @@ public:
                                       uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes) override;
 
    PFN_vkVoidFunction get_proc_addr(const char *name) override;
+
+   VkResult get_required_instance_extensions(util::extension_list &extension_list) override;
 
    bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) override;
 
