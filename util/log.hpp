@@ -45,7 +45,7 @@ namespace util
  * @param[in] format    A C-style formatting string.
  */
 
-void wsi_log_message(long level, const char *file, int line, const char *format, ...)
+void wsi_log_message(int level, const char *file, int line, const char *format, ...)
 #ifdef __GNUC__
    __attribute__((format(printf, 4, 5)))
 #endif

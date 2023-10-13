@@ -24,6 +24,7 @@
 
 #include "log.hpp"
 #include <iostream>
+#include <charconv>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -38,16 +39,16 @@ namespace util
 /**
  * @brief check if a log level is enabled, and print it
  */
-static bool check_and_print_log_level(long level)
+static bool check_and_print_log_level(int level)
 {
    struct log_state
    {
-      long level = WSI_DEFAULT_LOG_LEVEL;
+      int level = WSI_DEFAULT_LOG_LEVEL;
       log_state()
       {
          if (const char *env = std::getenv("VULKAN_WSI_DEBUG_LEVEL"))
          {
-            level = strtol(env, nullptr, 0);
+            std::from_chars(env, env + std::strlen(env), level);
          }
       }
    };
@@ -78,7 +79,7 @@ static bool check_and_print_log_level(long level)
    return result;
 }
 
-void wsi_log_message(long level, const char *file, int line, const char *format, ...)
+void wsi_log_message(int level, const char *file, int line, const char *format, ...)
 {
    if (check_and_print_log_level(level))
    {
