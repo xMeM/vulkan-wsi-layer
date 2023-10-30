@@ -36,6 +36,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <system_error>
 
 #include <unistd.h>
 #include <vulkan/vulkan.h>
