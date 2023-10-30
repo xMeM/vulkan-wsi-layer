@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -82,10 +82,10 @@ wsi_layer_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapc,
    }
 
    assert(swapc != VK_NULL_HANDLE);
+   device_data.remove_layer_swapchain(swapc);
+
    auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
    wsi::destroy_surface_swapchain(sc, device_data, pAllocator);
-
-   device_data.remove_layer_swapchain(swapc);
 }
 
 VWL_VKAPI_CALL(VkResult)
