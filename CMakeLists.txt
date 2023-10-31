@@ -115,8 +115,7 @@ if(BUILD_WSI_WAYLAND)
    message(STATUS "Using Wayland client cflags: ${WAYLAND_CLIENT_CFLAGS}")
    message(STATUS "Using Wayland client ldflags: ${WAYLAND_CLIENT_LDFLAGS}")
 
-   pkg_check_modules(WAYLAND_SCANNER REQUIRED wayland-scanner)
-   pkg_get_variable(WAYLAND_SCANNER_EXEC wayland-scanner wayland_scanner)
+   find_program(WAYLAND_SCANNER_EXEC wayland-scanner REQUIRED)
    message(STATUS "Using wayland-scanner : ${WAYLAND_SCANNER_EXEC}")
 
    pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
