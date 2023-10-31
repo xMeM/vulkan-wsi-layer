@@ -126,13 +126,13 @@ if(BUILD_WSI_WAYLAND)
       COMMAND ${WAYLAND_SCANNER_EXEC} client-header
       ${WAYLAND_PROTOCOLS_DIR}/unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml
       ${CMAKE_CURRENT_BINARY_DIR}/linux-dmabuf-unstable-v1-client-protocol.h
-      COMMAND ${WAYLAND_SCANNER_EXEC} code
+      COMMAND ${WAYLAND_SCANNER_EXEC} public-code
       ${WAYLAND_PROTOCOLS_DIR}/unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml
       ${CMAKE_CURRENT_BINARY_DIR}/linux-dmabuf-unstable-v1-protocol.c
       COMMAND ${WAYLAND_SCANNER_EXEC} client-header
       ${WAYLAND_PROTOCOLS_DIR}/unstable/linux-explicit-synchronization/linux-explicit-synchronization-unstable-v1.xml
       ${CMAKE_CURRENT_BINARY_DIR}/linux-explicit-synchronization-unstable-v1-protocol.h
-      COMMAND ${WAYLAND_SCANNER_EXEC} code
+      COMMAND ${WAYLAND_SCANNER_EXEC} public-code
       ${WAYLAND_PROTOCOLS_DIR}/unstable/linux-explicit-synchronization/linux-explicit-synchronization-unstable-v1.xml
       ${CMAKE_CURRENT_BINARY_DIR}/linux-explicit-synchronization-unstable-v1-protocol.c
       BYPRODUCTS linux-dmabuf-unstable-v1-protocol.c linux-dmabuf-unstable-v1-client-protocol.h
