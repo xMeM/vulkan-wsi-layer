@@ -431,6 +431,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
             info.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
             info.semaphore = semaphore;
             info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+            info.flags = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT;
             info.fd = already_signalled_sentinel_fd;
          }
 
