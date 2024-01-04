@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -45,16 +45,26 @@ VkResult extension_list::add(const char *const *extensions, size_t count)
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+
    for (size_t i = 0; i < count; i++)
    {
       auto &dst = m_ext_props[initial_size + i];
 
       const size_t len = strlen(extensions[i]);
-      if (len >= sizeof(dst.extensionName))
+      bool success = false;
+      if (len < sizeof(dst.extensionName))
+      {
+         int chars_printed = snprintf(dst.extensionName, len + 1, "%s", extensions[i]);
+         if (chars_printed == len)
+         {
+            success = true;
+         }
+      }
+
+      if (!success)
       {
          abort();
       }
-      snprintf(dst.extensionName, len + 1, "%s", extensions[i]);
    }
    return VK_SUCCESS;
 }
