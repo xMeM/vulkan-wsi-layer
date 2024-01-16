@@ -311,6 +311,15 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    }
 #endif
 
+   auto *physical_device_swapchain_maintenance1_features =
+      util::find_extension<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT>(
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT, pCreateInfo->pNext);
+   if (physical_device_swapchain_maintenance1_features != nullptr)
+   {
+      layer::device_private_data::get(*pDevice).set_swapchain_maintenance1_enabled(
+         physical_device_swapchain_maintenance1_features->swapchainMaintenance1);
+   }
+
    return VK_SUCCESS;
 }
 
@@ -415,6 +424,14 @@ wsi_layer_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
          instance.has_image_compression_support(physicalDevice);
    }
 #endif
+
+   auto *physical_device_swapchain_maintenance1_features =
+      util::find_extension<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT>(
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT, pFeatures->pNext);
+   if (physical_device_swapchain_maintenance1_features != nullptr)
+   {
+      physical_device_swapchain_maintenance1_features->swapchainMaintenance1 = true;
+   }
 }
 
 #define GET_PROC_ADDR(func)      \

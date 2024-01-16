@@ -15,7 +15,8 @@
             {"name" : "VK_KHR_wayland_surface", "spec_version" : "6"},
             {"name" : "VK_KHR_surface", "spec_version" : "25"},
             {"name" : "VK_KHR_display", "spec_version" : "23"},
-            {"name" : "VK_KHR_get_surface_capabilities2", "spec_version" : "1"}
+            {"name" : "VK_KHR_get_surface_capabilities2", "spec_version" : "1"},
+            {"name" : "VK_EXT_surface_maintenance1", "spec_version" : "1"}
         ],
         "device_extensions": [
             {"name": "VK_KHR_shared_presentable_image", "spec_version": "1", "entrypoints": ["vkGetSwapchainStatusKHR"]},
@@ -34,7 +35,8 @@
                     "vkGetDeviceGroupSurfacePresentModesKHR",
                     "vkGetPhysicalDevicePresentRectanglesKHR"
                 ]
-            }
+            },
+            {"name": "VK_EXT_swapchain_maintenance1", "spec_version": "1"}
         ],
         "disable_environment": {
             "DISABLE_WSI_LAYER": "1"

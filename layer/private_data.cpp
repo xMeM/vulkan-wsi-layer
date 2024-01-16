@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2022, 2024 Arm Limited.
+ * Copyright (c) 2018-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -395,6 +395,7 @@ device_private_data::device_private_data(instance_private_data &inst_data, VkPhy
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    , compression_control_enabled{ false }
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+   , swapchain_maintenance1_enabled{ false }
 /* clang-format on */
 {
 }
@@ -546,4 +547,15 @@ bool device_private_data::is_swapchain_compression_control_enabled() const
    return compression_control_enabled;
 }
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
+void device_private_data::set_swapchain_maintenance1_enabled(bool enable)
+{
+   swapchain_maintenance1_enabled = enable;
+}
+
+bool device_private_data::is_swapchain_maintenance1_enabled() const
+{
+   return swapchain_maintenance1_enabled;
+}
+
 } /* namespace layer */

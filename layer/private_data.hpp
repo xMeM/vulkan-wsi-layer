@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2022, 2024 Arm Limited.
+ * Copyright (c) 2018-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -803,6 +803,20 @@ public:
    bool is_swapchain_compression_control_enabled() const;
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 
+   /**
+    * @brief Selectively enable/disable the swapchain maintenance1 features for this device.
+    *
+    * @param enable Value to set swapchain_maintenance1_enabled member variable.
+    */
+   void set_swapchain_maintenance1_enabled(bool enable);
+
+   /**
+    * @brief Check whether the swapchain maintenance1 features are enabled for this device.
+    *
+    * @return true if enabled, false otherwise.
+    */
+   bool is_swapchain_maintenance1_enabled() const;
+
 private:
    /* Allow util::allocator to access the private constructor */
    friend util::allocator;
@@ -845,6 +859,11 @@ private:
     */
    bool compression_control_enabled;
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
+   /**
+    * @brief Stores whether the device has enabled support for the swapchain maintenance1 features.
+    */
+   bool swapchain_maintenance1_enabled;
 };
 
 } /* namespace layer */
