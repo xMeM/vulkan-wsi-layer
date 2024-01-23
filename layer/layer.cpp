@@ -33,6 +33,7 @@
 #include "private_data.hpp"
 #include "surface_api.hpp"
 #include "swapchain_api.hpp"
+#include "swapchain_maintenance_api.hpp"
 #include "util/extension_list.hpp"
 #include "util/custom_allocator.hpp"
 #include "wsi/wsi_factory.hpp"
@@ -461,6 +462,13 @@ wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POS
 
    GET_PROC_ADDR(vkCreateImage);
    GET_PROC_ADDR(vkBindImageMemory2);
+
+   /* VK_EXT_swapchain_maintenance1 */
+   if (layer::device_private_data::get(device).is_device_extension_enabled(
+          VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME))
+   {
+      GET_PROC_ADDR(vkReleaseSwapchainImagesEXT);
+   }
 
    return layer::device_private_data::get(device).disp.get_user_enabled_entrypoint(
       device, layer::device_private_data::get(device).instance_data.api_version, funcName);

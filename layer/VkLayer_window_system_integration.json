@@ -36,7 +36,13 @@
                     "vkGetPhysicalDevicePresentRectanglesKHR"
                 ]
             },
-            {"name": "VK_EXT_swapchain_maintenance1", "spec_version": "1"}
+            {
+                "name": "VK_EXT_swapchain_maintenance1",
+                "spec_version": "1",
+                "entrypoints": [
+                    "vkReleaseSwapchainImagesEXT"
+                ]
+            }
         ],
         "disable_environment": {
             "DISABLE_WSI_LAYER": "1"

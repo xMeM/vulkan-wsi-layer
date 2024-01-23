@@ -693,4 +693,16 @@ VkResult swapchain_base::wait_for_free_buffer(uint64_t timeout)
    return retval;
 }
 
+void swapchain_base::release_images(uint32_t image_count, const uint32_t *indices)
+{
+   for (uint32_t i = 0; i < image_count; i++)
+   {
+      uint32_t index = indices[i];
+      assert(index < m_swapchain_images.size());
+      /* Applications can only pass acquired images that the device doesn't own */
+      assert(m_swapchain_images[index].status == swapchain_image::ACQUIRED);
+      unpresent_image(index);
+   }
+}
+
 } /* namespace wsi */

@@ -117,7 +117,6 @@ wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t 
    }
 
    assert(swapc != VK_NULL_HANDLE);
-   assert(semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE);
    assert(pImageIndex != nullptr);
    auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
    return sc->acquire_next_image(timeout, semaphore, fence, pImageIndex);

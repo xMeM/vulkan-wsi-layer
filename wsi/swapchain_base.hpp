@@ -214,6 +214,15 @@ public:
     */
    VkResult get_swapchain_status();
 
+   /**
+    * @brief Release all images not belonging to the device
+    * by making them available to be acquired again
+    *
+    * @param image_count Amount of images in the indices array
+    * @param indices Array of image indices
+    */
+   void release_images(uint32_t image_count, const uint32_t *indices);
+
 protected:
    layer::device_private_data &m_device_data;
 

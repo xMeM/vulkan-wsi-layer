@@ -224,6 +224,7 @@ add_library(${PROJECT_NAME} SHARED
    layer/private_data.cpp
    layer/surface_api.cpp
    layer/swapchain_api.cpp
+   layer/swapchain_maintenance_api.cpp
    util/timed_semaphore.cpp
    util/custom_allocator.cpp
    util/extension_list.cpp

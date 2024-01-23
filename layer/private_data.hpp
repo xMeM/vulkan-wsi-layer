@@ -403,7 +403,9 @@ private:
    /* VK_KHR_get_memory_requirements2 */                                                                               \
    EP(GetImageMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)      \
    EP(GetBufferMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)     \
-   EP(GetImageSparseMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)
+   EP(GetImageSparseMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1,       \
+      false)                                                                                                           \
+   EP(ReleaseSwapchainImagesEXT, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, VK_API_VERSION_1_1, false)
 
 /**
  * @brief Struct representing the device dispatch table.
