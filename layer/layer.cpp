@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2023 Arm Limited.
+ * Copyright (c) 2016-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -149,30 +149,27 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     */
    TRY_LOG(fpCreateInstance(&modified_info, pAllocator, pInstance), "Failed to create the instance");
 
-   instance_dispatch_table table{};
-   VkResult result;
-   result = table.populate(*pInstance, fpGetInstanceProcAddr);
-   if (result != VK_SUCCESS)
-   {
-      if (table.DestroyInstance != nullptr)
-      {
-         table.DestroyInstance(*pInstance, pAllocator);
-      }
-      return result;
-   }
-
    /* Following the spec: use the callbacks provided to vkCreateInstance() if not nullptr,
     * otherwise use the default callbacks.
     */
    util::allocator instance_allocator{ VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
-   result = instance_private_data::associate(*pInstance, table, loader_callback, layer_platforms_to_enable,
+   instance_dispatch_table table{ instance_allocator };
+   VkResult result = table.populate(*pInstance, fpGetInstanceProcAddr);
+   if (result != VK_SUCCESS)
+   {
+      table.DestroyInstance(*pInstance, pAllocator);
+      return result;
+   }
+   table.set_user_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+
+   uint32_t api_version =
+      pCreateInfo->pApplicationInfo != nullptr ? pCreateInfo->pApplicationInfo->apiVersion : VK_API_VERSION_1_3;
+
+   result = instance_private_data::associate(*pInstance, table, loader_callback, layer_platforms_to_enable, api_version,
                                              instance_allocator);
    if (result != VK_SUCCESS)
    {
-      if (table.DestroyInstance != nullptr)
-      {
-         table.DestroyInstance(*pInstance, pAllocator);
-      }
+      table.DestroyInstance(*pInstance, pAllocator);
       return result;
    }
 
@@ -186,10 +183,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
    if (result != VK_SUCCESS)
    {
       instance_private_data::disassociate(*pInstance);
-      if (table.DestroyInstance != nullptr)
-      {
-         table.DestroyInstance(*pInstance, pAllocator);
-      }
+      table.DestroyInstance(*pInstance, pAllocator);
       return result;
    }
 
@@ -249,29 +243,27 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    /* Now call create device on the chain further down the list. */
    TRY_LOG(fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice), "Failed to create the device");
 
-   device_dispatch_table table{};
-   VkResult result = table.populate(*pDevice, fpGetDeviceProcAddr);
-   if (result != VK_SUCCESS)
-   {
-      if (table.DestroyDevice != nullptr)
-      {
-         table.DestroyDevice(*pDevice, pAllocator);
-      }
-      return result;
-   }
-
    /* Following the spec: use the callbacks provided to vkCreateDevice() if not nullptr, otherwise use the callbacks
     * provided to the instance (if no allocator callbacks was provided to the instance, it will use default ones).
     */
    util::allocator device_allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator };
+   device_dispatch_table table{ device_allocator };
+   VkResult result = table.populate(*pDevice, fpGetDeviceProcAddr);
+   if (result != VK_SUCCESS)
+   {
+      table.DestroyDevice(*pDevice, pAllocator);
+
+      return result;
+   }
+
+   table.set_user_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+
    result =
       device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator);
    if (result != VK_SUCCESS)
    {
-      if (table.DestroyDevice != nullptr)
-      {
-         table.DestroyDevice(*pDevice, pAllocator);
-      }
+      table.DestroyDevice(*pDevice, pAllocator);
+
       return result;
    }
 
@@ -284,10 +276,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    if (result != VK_SUCCESS)
    {
       layer::device_private_data::disassociate(*pDevice);
-      if (table.DestroyDevice != nullptr)
-      {
-         table.DestroyDevice(*pDevice, pAllocator);
-      }
+      table.DestroyDevice(*pDevice, pAllocator);
       return result;
    }
 
@@ -322,15 +311,16 @@ wsi_layer_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pA
       return;
    }
 
-   auto fn_destroy_instance = layer::instance_private_data::get(instance).disp.DestroyInstance;
+   auto fn_destroy_instance =
+      layer::instance_private_data::get(instance).disp.get_fn<PFN_vkDestroyInstance>("vkDestroyInstance");
 
    /* Call disassociate() before doing vkDestroyInstance as an instance may be created by a different thread
     * just after we call vkDestroyInstance() and it could get the same address if we are unlucky.
     */
    layer::instance_private_data::disassociate(instance);
 
-   assert(fn_destroy_instance);
-   fn_destroy_instance(instance, pAllocator);
+   assert(fn_destroy_instance.has_value());
+   (*fn_destroy_instance)(instance, pAllocator);
 }
 
 VWL_VKAPI_CALL(void)
@@ -341,15 +331,15 @@ wsi_layer_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocat
       return;
    }
 
-   auto fn_destroy_device = layer::device_private_data::get(device).disp.DestroyDevice;
+   auto fn_destroy_device = layer::device_private_data::get(device).disp.get_fn<PFN_vkDestroyDevice>("vkDestroyDevice");
 
    /* Call disassociate() before doing vkDestroyDevice as a device may be created by a different thread
     * just after we call vkDestroyDevice().
     */
    layer::device_private_data::disassociate(device);
 
-   assert(fn_destroy_device);
-   fn_destroy_device(device, pAllocator);
+   assert(fn_destroy_device.has_value());
+   (*fn_destroy_device)(device, pAllocator);
 }
 
 VWL_VKAPI_CALL(VkResult)
@@ -430,7 +420,8 @@ wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POS
    GET_PROC_ADDR(vkCreateImage);
    GET_PROC_ADDR(vkBindImageMemory2);
 
-   return layer::device_private_data::get(device).disp.GetDeviceProcAddr(device, funcName);
+   return layer::device_private_data::get(device).disp.get_user_enabled_entrypoint(
+      device, layer::device_private_data::get(device).instance_data.api_version, funcName);
 }
 
 VWL_VKAPI_CALL(PFN_vkVoidFunction)
@@ -476,5 +467,5 @@ wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_A
       }
    }
 
-   return instance_data.disp.GetInstanceProcAddr(instance, funcName);
+   return instance_data.disp.get_user_enabled_entrypoint(instance, instance_data.api_version, funcName);
 }

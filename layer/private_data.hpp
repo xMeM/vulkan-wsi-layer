@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2022 Arm Limited.
+ * Copyright (c) 2018-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -39,6 +39,8 @@
 #include <unordered_set>
 #include <cassert>
 #include <mutex>
+#include <limits>
+#include <cstring>
 
 using scoped_mutex = std::lock_guard<std::mutex>;
 
@@ -51,45 +53,211 @@ class surface;
 namespace layer
 {
 
-/* List of device entrypoints in the layer's instance dispatch table.
- * Note that the Vulkan loader implements some of these entrypoints so the fact that these are non-null doesn't
- * guarantee than we can safely call them. We still mark the entrypoints with REQUIRED() and OPTIONAL(). The layer
- * fails if vkGetInstanceProcAddr returns null for entrypoints that are REQUIRED().
+/**
+ * @brief Definition of an entrypoint.
  */
-#define INSTANCE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL)    \
-   /* Vulkan 1.0 */                                      \
-   REQUIRED(GetInstanceProcAddr)                         \
-   REQUIRED(DestroyInstance)                             \
-   REQUIRED(GetPhysicalDeviceProperties)                 \
-   REQUIRED(GetPhysicalDeviceImageFormatProperties)      \
-   REQUIRED(EnumerateDeviceExtensionProperties)          \
-   /* VK_KHR_surface */                                  \
-   OPTIONAL(DestroySurfaceKHR)                           \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)     \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormatsKHR)          \
-   OPTIONAL(GetPhysicalDeviceSurfacePresentModesKHR)     \
-   OPTIONAL(GetPhysicalDeviceSurfaceSupportKHR)          \
-   /* VK_EXT_headless_surface */                         \
-   OPTIONAL(CreateHeadlessSurfaceEXT)                    \
-   /* VK_KHR_wayland_surface */                          \
-   OPTIONAL(CreateWaylandSurfaceKHR)                     \
-   /* VK_KHR_get_surface_capabilities2 */                \
-   OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)    \
-   OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)         \
-   /* VK_KHR_get_physical_device_properties2 or */       \
-   /* 1.1 (without KHR suffix) */                        \
-   OPTIONAL(GetPhysicalDeviceImageFormatProperties2KHR)  \
-   OPTIONAL(GetPhysicalDeviceFormatProperties2KHR)       \
-   OPTIONAL(GetPhysicalDeviceFeatures2KHR)               \
-   /* VK_KHR_device_group + VK_KHR_surface or */         \
-   /* 1.1 with VK_KHR_swapchain */                       \
-   OPTIONAL(GetPhysicalDevicePresentRectanglesKHR)       \
-   /* VK_KHR_external_fence_capabilities or */           \
-   /* 1.1 (without KHR suffix) */                        \
-   OPTIONAL(GetPhysicalDeviceExternalFencePropertiesKHR)
-
-struct instance_dispatch_table
+struct entrypoint
 {
+   const char *name;
+   const char *ext_name;
+   PFN_vkVoidFunction fn;
+   uint32_t api_version;
+   bool user_visible;
+   bool required;
+};
+
+/**
+ * @brief Dispatch table base.
+ *
+ * This struct defines generic get and call function templates for a dispatch table.
+ */
+class dispatch_table
+{
+public:
+   /**
+    * @brief Construct a new dispatch table object
+    *
+    * @param allocator Allocator for entrypoints vector
+    */
+   dispatch_table(const util::allocator &allocator)
+   {
+      entrypoints = allocator.make_unique<util::unordered_map<std::string, entrypoint>>(allocator);
+   }
+
+   /**
+    * @brief Get the function object from the entrypoints.
+    *
+    * @tparam FunctionType The signature of the requested function.
+    * @param fn_name The name of the function.
+    * @return the requested function pointer, or std::nullopt.
+    */
+   template <typename FunctionType>
+   std::optional<FunctionType> get_fn(const char *fn_name) const
+   {
+      auto fn = entrypoints->find(fn_name);
+      if (fn != entrypoints->end())
+      {
+         return reinterpret_cast<FunctionType>(fn->second.fn);
+      }
+
+      return std::nullopt;
+   }
+
+   /**
+    * @brief Set the user enabled extensions.
+    *
+    * @param extension_names Names of the extensions enabled by user.
+    * @param extension_count Number of extensions enabled by the user.
+    */
+   void set_user_enabled_extensions(const char *const *extension_names, size_t extension_count);
+
+protected:
+   /**
+    * @brief Call function from the dispatch table entrypoints.
+    *
+    * @tparam FunctionType The signature of the function to call.
+    * @tparam Args Argument types of the function to call.
+    *
+    * @param fn_name Name of the function to call.
+    * @param args Arguments to the function to call.
+    * @return function return value or std::nullopt if function is not present in entrypoints
+    */
+   template <
+      typename FunctionType, class... Args, typename ReturnType = std::invoke_result_t<FunctionType, Args...>,
+      std::enable_if_t<!std::is_void<ReturnType>::value && !std::is_same<ReturnType, VkResult>::value, bool> = true>
+   std::optional<ReturnType> call_fn(const char *fn_name, Args &&... args) const
+   {
+      auto fn = get_fn<FunctionType>(fn_name);
+      if (fn.has_value())
+      {
+         return (*fn)(std::forward<Args>(args)...);
+      }
+
+      WSI_LOG_WARNING("Call to %s failed, dispatch table does not contain the function.", fn_name);
+
+      return std::nullopt;
+   }
+
+   /**
+    * @brief Call function from the dispatch table entrypoints.
+    * @note This overload matches for functions with void return type.
+    *
+    * @tparam FunctionType The signature of the function to call.
+    * @tparam Args Argument types of the function to call.
+    *
+    * @param fn_name Name of the function to call.
+    * @param args Arguments to the function to call.
+    */
+   template <typename FunctionType, class... Args, typename ReturnType = std::invoke_result_t<FunctionType, Args...>,
+             std::enable_if_t<std::is_void<ReturnType>::value, bool> = true>
+   void call_fn(const char *fn_name, Args &&... args) const
+   {
+      auto fn = get_fn<FunctionType>(fn_name);
+      if (fn.has_value())
+      {
+         return (*fn)(std::forward<Args>(args)...);
+      }
+
+      WSI_LOG_WARNING("Call to %s failed, dispatch table does not contain the function.", fn_name);
+   }
+
+   /**
+    * @brief Call function from the dispatch table entrypoints.
+    * @note This overload matches for functions with VkResult return type.
+    *
+    * @tparam FunctionType The signature of the function to call.
+    * @tparam Args Argument types of the function to call.
+    *
+    * @param fn_name Name of the function to call.
+    * @param args Arguments to the function to call.
+    * @return function return value or VK_ERROR_EXTENSION_NOT_PRESENT if function is not present in entrypoints
+    */
+   template <typename FunctionType, class... Args, typename ReturnType = std::invoke_result_t<FunctionType, Args...>,
+             std::enable_if_t<std::is_same<ReturnType, VkResult>::value, bool> = true>
+   VkResult call_fn(const char *fn_name, Args &&... args) const
+   {
+      auto fn = get_fn<FunctionType>(fn_name);
+      if (fn.has_value())
+      {
+         return (*fn)(std::forward<Args>(args)...);
+      }
+
+      WSI_LOG_WARNING("Call to %s failed, dispatch table does not contain the function.", fn_name);
+
+      return VK_ERROR_EXTENSION_NOT_PRESENT;
+   }
+
+   /** @brief Vector that holds the entrypoints of the dispatch table */
+   util::unique_ptr<util::unordered_map<std::string, entrypoint>> entrypoints;
+};
+
+/* Represents the maximum possible Vulkan API version. */
+static constexpr uint32_t API_VERSION_MAX = UINT32_MAX;
+
+/* List of instance entrypoints in the layer's instance dispatch table.
+ * Note that the Vulkan loader implements some of these entrypoints so the fact that these are non-null doesn't
+ * guarantee than we can safely call them. We still mark the entrypoints required == true / false. The layer
+ * fails if vkGetInstanceProcAddr returns null for entrypoints that are required.
+ *
+ * Format of an entry is: EP(entrypoint_name, extension_name, api_version, required)
+ * entrypoint_name: Name of the entrypoint.
+ * extension_name: Name of the extension that provides the entrypoint.
+ * api_version: Vulkan API version where the entrypoint is part of the core specification, or API_VERSION_MAX.
+ * required: Boolean to indicate whether the entrypoint is required by the WSI layer or optional.
+ */
+#define INSTANCE_ENTRYPOINTS_LIST(EP)                                                                                \
+   /* Vulkan 1.0 */                                                                                                  \
+   EP(GetInstanceProcAddr, "", VK_API_VERSION_1_0, true)                                                             \
+   EP(DestroyInstance, "", VK_API_VERSION_1_0, true)                                                                 \
+   EP(GetPhysicalDeviceProperties, "", VK_API_VERSION_1_0, true)                                                     \
+   EP(GetPhysicalDeviceImageFormatProperties, "", VK_API_VERSION_1_0, true)                                          \
+   EP(EnumerateDeviceExtensionProperties, "", VK_API_VERSION_1_0, true)                                              \
+   /* VK_KHR_surface */                                                                                              \
+   EP(DestroySurfaceKHR, VK_KHR_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                                      \
+   EP(GetPhysicalDeviceSurfaceCapabilitiesKHR, VK_KHR_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                \
+   EP(GetPhysicalDeviceSurfaceFormatsKHR, VK_KHR_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                     \
+   EP(GetPhysicalDeviceSurfacePresentModesKHR, VK_KHR_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                \
+   EP(GetPhysicalDeviceSurfaceSupportKHR, VK_KHR_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                     \
+   /* VK_EXT_headless_surface */                                                                                     \
+   EP(CreateHeadlessSurfaceEXT, VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                      \
+   /* VK_KHR_wayland_surface */                                                                                      \
+   EP(CreateWaylandSurfaceKHR, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                        \
+   /* VK_KHR_get_surface_capabilities2 */                                                                            \
+   EP(GetPhysicalDeviceSurfaceCapabilities2KHR, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, API_VERSION_MAX,   \
+      false)                                                                                                         \
+   EP(GetPhysicalDeviceSurfaceFormats2KHR, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, API_VERSION_MAX, false) \
+   /* VK_KHR_get_physical_device_properties2 or */                                                                   \
+   /* 1.1 (without KHR suffix) */                                                                                    \
+   EP(GetPhysicalDeviceImageFormatProperties2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,            \
+      VK_API_VERSION_1_1, false)                                                                                     \
+   EP(GetPhysicalDeviceFormatProperties2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,                 \
+      VK_API_VERSION_1_1, false)                                                                                     \
+   EP(GetPhysicalDeviceFeatures2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, VK_API_VERSION_1_1,     \
+      false)                                                                                                         \
+   EP(GetPhysicalDeviceProperties2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, VK_API_VERSION_1_1,   \
+      false)                                                                                                         \
+   EP(GetPhysicalDeviceQueueFamilyProperties2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,            \
+      VK_API_VERSION_1_1, false)                                                                                     \
+   EP(GetPhysicalDeviceMemoryProperties2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,                 \
+      VK_API_VERSION_1_1, false)                                                                                     \
+   EP(GetPhysicalDeviceSparseImageFormatProperties2KHR, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,      \
+      VK_API_VERSION_1_1, false)                                                                                     \
+   /* VK_KHR_device_group + VK_KHR_surface or */                                                                     \
+   /* 1.1 with VK_KHR_swapchain */                                                                                   \
+   EP(GetPhysicalDevicePresentRectanglesKHR, VK_KHR_DEVICE_GROUP_EXTENSION_NAME, VK_API_VERSION_1_1, false)          \
+   /* VK_KHR_external_fence_capabilities or */                                                                       \
+   /* 1.1 (without KHR suffix) */                                                                                    \
+   EP(GetPhysicalDeviceExternalFencePropertiesKHR, VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME,                \
+      VK_API_VERSION_1_1, false)                                                                                     \
+   EP(GetPhysicalDeviceExternalBufferPropertiesKHR, VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,              \
+      VK_API_VERSION_1_1, false)
+
+/**
+ * @brief Struct representing the instance dispatch table.
+ */
+class instance_dispatch_table : public dispatch_table
+{
+public:
    /**
     * @brief Populate the instance dispatch table with functions that it requires.
     * @note  The function greedy fetches all the functions it needs so even in the
@@ -101,9 +269,31 @@ struct instance_dispatch_table
     */
    VkResult populate(VkInstance instance, PFN_vkGetInstanceProcAddr get_proc);
 
-#define DISPATCH_TABLE_ENTRY(x) PFN_vk##x x{};
-   INSTANCE_ENTRYPOINTS_LIST(DISPATCH_TABLE_ENTRY, DISPATCH_TABLE_ENTRY)
-#undef DISPATCH_TABLE_ENTRY
+   /**
+    * @brief Get the user enabled instance extension entrypoint by name
+    *
+    * @param instance The Vulkan instance that the extension was enabled on.
+    * @param api_version The API version of the Vulkan instance.
+    * @param fn_name The name of the function.
+    * @return pointer to the function if it is enabled by the user, otherwise nullptr.
+    */
+   PFN_vkVoidFunction get_user_enabled_entrypoint(VkInstance instance, uint32_t api_version, const char *fn_name) const;
+
+   /* Generate alias functions for internal use of the dispatch table entrypoints.
+    * These will be named as the entrypoint, but without the "vk" prefix.
+    * Assuming disp is an instance of instance_dispatch_table, the following syntax is supported:
+    *    disp.GetInstanceProcAddr(instance, fn_name);
+    * The result type will be matching the function signature, so there is no need for casting.
+    */
+#define DISPATCH_TABLE_SHORTCUT(name, unused1, unused2, unused3)             \
+   template <class... Args>                                                  \
+   auto name(Args &&... args) const                                          \
+   {                                                                         \
+      return call_fn<PFN_vk##name>("vk" #name, std::forward<Args>(args)...); \
+   };
+
+   INSTANCE_ENTRYPOINTS_LIST(DISPATCH_TABLE_SHORTCUT)
+#undef DISPATCH_TABLE_SHORTCUT
 };
 
 /* List of device entrypoints in the layer's device dispatch table.
@@ -114,59 +304,83 @@ struct instance_dispatch_table
  * Note that we cannot rely on checking whether the physical device supports a particular extension as the Vulkan
  * loader currently aggregates all extensions advertised by all implicit layers (in their JSON manifests) and adds
  * them automatically to the output of vkEnumeratePhysicalDeviceProperties.
+ *
+ * Format of an entry is: EP(entrypoint_name, extension_name, api_version, required)
+ * entrypoint_name: Name of the entrypoint.
+ * extension_name: Name of the extension that provides the entrypoint.
+ * api_version: Vulkan API version where the entrypoint is part of the core specification, or API_VERSION_MAX.
+ * required: Boolean to indicate whether the entrypoint is required by the WSI layer or optional.
  */
-#define DEVICE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL) \
-   /* Vulkan 1.0 */                                 \
-   REQUIRED(GetDeviceProcAddr)                      \
-   REQUIRED(GetDeviceQueue)                         \
-   REQUIRED(QueueSubmit)                            \
-   REQUIRED(QueueWaitIdle)                          \
-   REQUIRED(CreateCommandPool)                      \
-   REQUIRED(DestroyCommandPool)                     \
-   REQUIRED(AllocateCommandBuffers)                 \
-   REQUIRED(FreeCommandBuffers)                     \
-   REQUIRED(ResetCommandBuffer)                     \
-   REQUIRED(BeginCommandBuffer)                     \
-   REQUIRED(EndCommandBuffer)                       \
-   REQUIRED(CreateImage)                            \
-   REQUIRED(DestroyImage)                           \
-   REQUIRED(GetImageMemoryRequirements)             \
-   REQUIRED(BindImageMemory)                        \
-   REQUIRED(AllocateMemory)                         \
-   REQUIRED(FreeMemory)                             \
-   REQUIRED(CreateFence)                            \
-   REQUIRED(DestroyFence)                           \
-   REQUIRED(CreateSemaphore)                        \
-   REQUIRED(DestroySemaphore)                       \
-   REQUIRED(ResetFences)                            \
-   REQUIRED(WaitForFences)                          \
-   REQUIRED(DestroyDevice)                          \
-   /* VK_KHR_swapchain */                           \
-   OPTIONAL(CreateSwapchainKHR)                     \
-   OPTIONAL(DestroySwapchainKHR)                    \
-   OPTIONAL(GetSwapchainImagesKHR)                  \
-   OPTIONAL(AcquireNextImageKHR)                    \
-   OPTIONAL(QueuePresentKHR)                        \
-   /* VK_KHR_device_group + VK_KHR_swapchain or */  \
-   /* 1.1 with VK_KHR_swapchain */                  \
-   OPTIONAL(AcquireNextImage2KHR)                   \
-   /* VK_KHR_device_group + VK_KHR_surface or */    \
-   /* 1.1 with VK_KHR_swapchain */                  \
-   OPTIONAL(GetDeviceGroupSurfacePresentModesKHR)   \
-   OPTIONAL(GetDeviceGroupPresentCapabilitiesKHR)   \
-   /* VK_KHR_external_memory_fd */                  \
-   OPTIONAL(GetMemoryFdPropertiesKHR)               \
-   /* VK_KHR_bind_memory2 or */                     \
-   /* 1.1 (without KHR suffix) */                   \
-   OPTIONAL(BindImageMemory2KHR)                    \
-   /* VK_KHR_external_fence_fd */                   \
-   OPTIONAL(GetFenceFdKHR)                          \
-   OPTIONAL(ImportFenceFdKHR)                       \
-   /* VK_KHR_external_semaphore_fd */               \
-   OPTIONAL(ImportSemaphoreFdKHR)
+#define DEVICE_ENTRYPOINTS_LIST(EP)                                                                                    \
+   /* Vulkan 1.0 */                                                                                                    \
+   EP(GetDeviceProcAddr, "", VK_API_VERSION_1_0, true)                                                                 \
+   EP(GetDeviceQueue, "", VK_API_VERSION_1_0, true)                                                                    \
+   EP(QueueSubmit, "", VK_API_VERSION_1_0, true)                                                                       \
+   EP(QueueWaitIdle, "", VK_API_VERSION_1_0, true)                                                                     \
+   EP(CreateCommandPool, "", VK_API_VERSION_1_0, true)                                                                 \
+   EP(DestroyCommandPool, "", VK_API_VERSION_1_0, true)                                                                \
+   EP(AllocateCommandBuffers, "", VK_API_VERSION_1_0, true)                                                            \
+   EP(FreeCommandBuffers, "", VK_API_VERSION_1_0, true)                                                                \
+   EP(ResetCommandBuffer, "", VK_API_VERSION_1_0, true)                                                                \
+   EP(BeginCommandBuffer, "", VK_API_VERSION_1_0, true)                                                                \
+   EP(EndCommandBuffer, "", VK_API_VERSION_1_0, true)                                                                  \
+   EP(CreateImage, "", VK_API_VERSION_1_0, true)                                                                       \
+   EP(DestroyImage, "", VK_API_VERSION_1_0, true)                                                                      \
+   EP(GetImageMemoryRequirements, "", VK_API_VERSION_1_0, true)                                                        \
+   EP(BindImageMemory, "", VK_API_VERSION_1_0, true)                                                                   \
+   EP(AllocateMemory, "", VK_API_VERSION_1_0, true)                                                                    \
+   EP(FreeMemory, "", VK_API_VERSION_1_0, true)                                                                        \
+   EP(CreateFence, "", VK_API_VERSION_1_0, true)                                                                       \
+   EP(DestroyFence, "", VK_API_VERSION_1_0, true)                                                                      \
+   EP(CreateSemaphore, "", VK_API_VERSION_1_0, true)                                                                   \
+   EP(DestroySemaphore, "", VK_API_VERSION_1_0, true)                                                                  \
+   EP(ResetFences, "", VK_API_VERSION_1_0, true)                                                                       \
+   EP(WaitForFences, "", VK_API_VERSION_1_0, true)                                                                     \
+   EP(DestroyDevice, "", VK_API_VERSION_1_0, true)                                                                     \
+   /* VK_KHR_swapchain */                                                                                              \
+   EP(CreateSwapchainKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                     \
+   EP(DestroySwapchainKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                    \
+   EP(GetSwapchainImagesKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                  \
+   EP(AcquireNextImageKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                    \
+   EP(QueuePresentKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                        \
+   /* VK_KHR_device_group + VK_KHR_swapchain or */                                                                     \
+   /* 1.1 with VK_KHR_swapchain */                                                                                     \
+   EP(AcquireNextImage2KHR, VK_KHR_DEVICE_GROUP_EXTENSION_NAME, VK_API_VERSION_1_1, false)                             \
+   /* VK_KHR_device_group + VK_KHR_surface or */                                                                       \
+   /* 1.1 with VK_KHR_swapchain */                                                                                     \
+   EP(GetDeviceGroupSurfacePresentModesKHR, VK_KHR_DEVICE_GROUP_EXTENSION_NAME, VK_API_VERSION_1_1, false)             \
+   EP(GetDeviceGroupPresentCapabilitiesKHR, VK_KHR_DEVICE_GROUP_EXTENSION_NAME, VK_API_VERSION_1_1, false)             \
+   /* VK_KHR_external_memory_fd */                                                                                     \
+   EP(GetMemoryFdKHR, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, API_VERSION_MAX, false)                                \
+   EP(GetMemoryFdPropertiesKHR, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, API_VERSION_MAX, false)                      \
+   /* VK_KHR_bind_memory2 or */                                                                                        \
+   /* 1.1 (without KHR suffix) */                                                                                      \
+   EP(BindImageMemory2KHR, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)                             \
+   EP(BindBufferMemory2KHR, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)                            \
+   /* VK_KHR_external_fence_fd */                                                                                      \
+   EP(GetFenceFdKHR, VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME, API_VERSION_MAX, false)                                  \
+   EP(ImportFenceFdKHR, VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME, API_VERSION_MAX, false)                               \
+   /* VK_KHR_external_semaphore_fd */                                                                                  \
+   EP(ImportSemaphoreFdKHR, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, API_VERSION_MAX, false)                       \
+   EP(GetSemaphoreFdKHR, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, API_VERSION_MAX, false)                          \
+   /* VK_KHR_image_drm_format_modifier */                                                                              \
+   EP(GetImageDrmFormatModifierPropertiesEXT, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, API_VERSION_MAX, false) \
+   /* VK_KHR_sampler_ycbcr_conversion */                                                                               \
+   EP(CreateSamplerYcbcrConversionKHR, VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME, VK_API_VERSION_1_1, false)      \
+   EP(DestroySamplerYcbcrConversionKHR, VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME, VK_API_VERSION_1_1, false)     \
+   /* VK_KHR_maintenance1 */                                                                                           \
+   EP(TrimCommandPoolKHR, VK_KHR_MAINTENANCE1_EXTENSION_NAME, VK_API_VERSION_1_1, false)                               \
+   /* VK_KHR_get_memory_requirements2 */                                                                               \
+   EP(GetImageMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)      \
+   EP(GetBufferMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)     \
+   EP(GetImageSparseMemoryRequirements2KHR, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_API_VERSION_1_1, false)
 
-struct device_dispatch_table
+/**
+ * @brief Struct representing the device dispatch table.
+ */
+class device_dispatch_table : public dispatch_table
 {
+public:
    /**
     * @brief Populate the device dispatch table with functions that it requires.
     * @note  The function greedy fetches all the functions it needs so even in the
@@ -178,9 +392,31 @@ struct device_dispatch_table
     */
    VkResult populate(VkDevice dev, PFN_vkGetDeviceProcAddr get_proc);
 
-#define DISPATCH_TABLE_ENTRY(x) PFN_vk##x x{};
-   DEVICE_ENTRYPOINTS_LIST(DISPATCH_TABLE_ENTRY, DISPATCH_TABLE_ENTRY)
-#undef DISPATCH_TABLE_ENTRY
+   /**
+    * @brief Get the user enabled device extension entrypoint by name
+    *
+    * @param device The Vulkan device that the extension was enabled on.
+    * @param api_version The API version of the Vulkan instance.
+    * @param fn_name The name of the function.
+    * @return pointer to the function if it is enabled by the user, otherwise nullptr.
+    */
+   PFN_vkVoidFunction get_user_enabled_entrypoint(VkDevice device, uint32_t api_version, const char *fn_name) const;
+
+   /* Generate alias functions for internal use of the dispatch table entrypoints.
+    * These will be named as the entrypoint, but without the "vk" prefix.
+    * Assuming disp is an instance of device_dispatch_table, the following syntax is supported:
+    *    disp.GetDeviceProcAddr(instance, fn_name);
+    * The result type will be matching the function signature, so there is no need for casting.
+    */
+#define DISPATCH_TABLE_SHORTCUT(name, unused1, unused2, unused3)             \
+   template <class... Args>                                                  \
+   auto name(Args &&... args) const                                          \
+   {                                                                         \
+      return call_fn<PFN_vk##name>("vk" #name, std::forward<Args>(args)...); \
+   };
+
+   DEVICE_ENTRYPOINTS_LIST(DISPATCH_TABLE_SHORTCUT)
+#undef DISPATCH_TABLE_SHORTCUT
 };
 
 /**
@@ -214,7 +450,8 @@ public:
     */
    static VkResult associate(VkInstance instance, instance_dispatch_table &table,
                              PFN_vkSetInstanceLoaderData set_loader_data,
-                             util::wsi_platform_set enabled_layer_platforms, const util::allocator &allocator);
+                             util::wsi_platform_set enabled_layer_platforms, const uint32_t api_version,
+                             const util::allocator &allocator);
 
    /**
     * @brief Disassociate and destroy the #instance_private_data associated to the given VkInstance.
@@ -336,6 +573,7 @@ public:
    bool is_instance_extension_enabled(const char *extension_name) const;
 
    const instance_dispatch_table disp;
+   const uint32_t api_version;
 
 private:
    /* Allow util::allocator to access the private constructor */
@@ -350,15 +588,16 @@ private:
     * @param enabled_layer_platforms The platforms that are enabled by the layer.
     * @param alloc The allocator that the instance_private_data will use.
     */
-   instance_private_data(const instance_dispatch_table &table, PFN_vkSetInstanceLoaderData set_loader_data,
-                         util::wsi_platform_set enabled_layer_platforms, const util::allocator &alloc);
+   instance_private_data(instance_dispatch_table &table, PFN_vkSetInstanceLoaderData set_loader_data,
+                         util::wsi_platform_set enabled_layer_platforms, const uint32_t api_version,
+                         const util::allocator &alloc);
 
    /**
     * @brief Destroy the instance_private_data properly with its allocator
     *
     * @param instance_data A valid pointer to instance_private_data
     */
-   static void destroy(instance_private_data* instance_data);
+   static void destroy(instance_private_data *instance_data);
 
    /**
     * @brief Check whether the given surface is already supported for presentation without the layer.
@@ -386,7 +625,6 @@ private:
     * @brief List with the names of the enabled instance extensions.
     */
    util::extension_list enabled_extensions;
-
 };
 
 /**
@@ -414,7 +652,7 @@ public:
     * @return VkResult VK_SUCCESS if successful, otherwise an error
     */
    static VkResult associate(VkDevice dev, instance_private_data &inst_data, VkPhysicalDevice phys_dev,
-                             const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                             device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
                              const util::allocator &allocator);
 
    static void disassociate(VkDevice dev);
@@ -447,7 +685,8 @@ public:
    /**
     * @brief Check whether the given swapchain is owned by us (the WSI Layer).
     */
-   bool layer_owns_swapchain(VkSwapchainKHR swapchain) const {
+   bool layer_owns_swapchain(VkSwapchainKHR swapchain) const
+   {
       return layer_owns_all_swapchains(&swapchain, 1);
    }
 
@@ -528,7 +767,7 @@ private:
     * @param alloc The allocator that the device_private_data will use.
     */
    device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
-                       const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                       device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
                        const util::allocator &alloc);
 
    /**
@@ -536,7 +775,7 @@ private:
     *
     * @param device_data A valid pointer to device_private_data
     */
-   static void destroy(device_private_data* device_data);
+   static void destroy(device_private_data *device_data);
 
    const util::allocator allocator;
    util::unordered_set<VkSwapchainKHR> swapchains;
