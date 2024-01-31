@@ -69,12 +69,12 @@ public:
       }
    }
 
-   int get()
+   int get() const
    {
       return fd_handle;
    }
 
-   bool is_valid()
+   bool is_valid() const
    {
       return fd_handle >= 0;
    }

@@ -39,8 +39,6 @@
 #include "surface.hpp"
 #include "util/macros.hpp"
 
-#define UNUSED(x) ((void)(x))
-
 namespace wsi
 {
 namespace headless

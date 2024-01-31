@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2022 Arm Limited.
+# Copyright (c) 2019-2024 Arm Limited.
 #
 # SPDX-License-Identifier: MIT
 #
@@ -56,6 +56,7 @@ endif()
 # Build Configuration options
 option(BUILD_WSI_HEADLESS "Build with support for VK_EXT_headless_surface" ON)
 option(BUILD_WSI_WAYLAND "Build with support for VK_KHR_wayland_surface" OFF)
+option(BUILD_WSI_DISPLAY "Build with support for VK_KHR_display" OFF)
 option(BUILD_WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN "Build with support for VK_EXT_image_compression_control_swapchain" OFF)
 set(SELECT_EXTERNAL_ALLOCATOR "none" CACHE STRING "Select an external system allocator (none, ion)")
 set(EXTERNAL_WSIALLOC_LIBRARY "" CACHE STRING "External implementation of the wsialloc interface to use")
@@ -65,6 +66,10 @@ if(BUILD_WSI_WAYLAND)
    if(SELECT_EXTERNAL_ALLOCATOR STREQUAL "none")
       message(FATAL_ERROR "Wayland only supported with an external allocator.")
    endif()
+endif()
+
+if(BUILD_WSI_DISPLAY)
+   set(BUILD_DRM_UTILS true)
 endif()
 
 if(BUILD_DRM_UTILS)
@@ -181,6 +186,32 @@ if(BUILD_WSI_HEADLESS)
 else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_EXT_headless_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_shared_presentable_image/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+endif()
+
+# Display
+if (BUILD_WSI_DISPLAY)
+   add_library(wsi_display STATIC
+      wsi/display/drm_display.cpp
+      wsi/display/surface_properties.cpp)
+
+   pkg_check_modules(LIBDRM REQUIRED libdrm)
+   message(STATUS "Using libdrm include directories: ${LIBDRM_INCLUDE_DIRS}")
+   message(STATUS "Using libdrm ldflags: ${LIBDRM_LDFLAGS}")
+
+   target_include_directories(wsi_display PRIVATE
+      ${PROJECT_SOURCE_DIR}
+      ${VULKAN_CXX_INCLUDE}
+      ${CMAKE_CURRENT_BINARY_DIR})
+
+   target_include_directories(wsi_display PUBLIC
+      ${LIBDRM_INCLUDE_DIRS})
+
+   target_compile_options(wsi_display INTERFACE "-DBUILD_WSI_DISPLAY=1")
+   target_link_libraries(wsi_display ${LIBDRM_LDFLAGS} drm)
+   target_link_libraries(wsi_display drm_utils)
+   list(APPEND LINK_WSI_LIBS wsi_display)
+else()
+   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_display/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
 
 # Layer

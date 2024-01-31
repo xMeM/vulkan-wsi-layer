@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2023 Arm Limited.
+ * Copyright (c) 2021, 2023-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -52,3 +52,6 @@
 #else
 #define VWL_VKAPI_EXPORT
 #endif
+
+/* Unused parameter macro */
+#define UNUSED(x) ((void)(x))

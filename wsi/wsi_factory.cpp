@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023 Arm Limited.
+ * Copyright (c) 2019-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -46,6 +46,10 @@
 #include "wayland/surface_properties.hpp"
 #endif
 
+#if BUILD_WSI_DISPLAY
+#include "display/surface_properties.hpp"
+#endif
+
 namespace wsi
 {
 
@@ -60,6 +64,9 @@ static struct wsi_extension
 #if BUILD_WSI_WAYLAND
    { { VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, VK_KHR_WAYLAND_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_WAYLAND },
 #endif
+#if BUILD_WSI_DISPLAY
+   { { VK_KHR_DISPLAY_EXTENSION_NAME, VK_KHR_DISPLAY_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_DISPLAY },
+#endif
 };
 
 static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
@@ -73,6 +80,10 @@ static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
 #if BUILD_WSI_WAYLAND
    case VK_ICD_WSI_PLATFORM_WAYLAND:
       return &wayland::surface_properties::get_instance();
+#endif
+#if BUILD_WSI_DISPLAY
+   case VK_ICD_WSI_PLATFORM_DISPLAY:
+      return &display::surface_properties::get_instance();
 #endif
    default:
       return nullptr;
