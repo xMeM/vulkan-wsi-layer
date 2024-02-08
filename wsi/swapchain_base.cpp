@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2023 Arm Limited.
+ * Copyright (c) 2017-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -407,6 +407,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
             info.fence = fence;
             info.handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
             info.fd = already_signalled_sentinel_fd;
+            info.flags = VK_FENCE_IMPORT_TEMPORARY_BIT;
          }
 
          auto result = m_device_data.disp.ImportFenceFdKHR(m_device, &info);
