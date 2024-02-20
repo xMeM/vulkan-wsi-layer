@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021-2023 Arm Limited.
+ * Copyright (c) 2017, 2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -338,22 +338,47 @@ wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
 {
    auto &device_data = layer::device_private_data::get(device);
 
+   VkResult endpoint_result = VK_SUCCESS;
+   bool maintenance_6 = device_data.is_device_extension_enabled(VK_KHR_MAINTENANCE_6_EXTENSION_NAME);
    for (uint32_t i = 0; i < bindInfoCount; i++)
    {
+      VkResult result = VK_SUCCESS;
+      std::string_view error_message{};
+
       const auto *bind_sc_info = util::find_extension<VkBindImageMemorySwapchainInfoKHR>(
          VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR, pBindInfos[i].pNext);
 
       if (bind_sc_info == nullptr || bind_sc_info->swapchain == VK_NULL_HANDLE ||
           !device_data.layer_owns_swapchain(bind_sc_info->swapchain))
       {
-         TRY_LOG_CALL(device_data.disp.BindImageMemory2KHR(device, 1, &pBindInfos[i]));
+         result = device_data.disp.BindImageMemory2KHR(device, 1, &pBindInfos[i]);
+         error_message = "Failed to bind image memory";
       }
       else
       {
          auto sc = reinterpret_cast<wsi::swapchain_base *>(bind_sc_info->swapchain);
-         TRY_LOG(sc->bind_swapchain_image(device, &pBindInfos[i], bind_sc_info),
-                 "Failed to bind an image to the swapchain");
+         result = sc->bind_swapchain_image(device, &pBindInfos[i], bind_sc_info);
+         error_message = "Failed to bind an image to the swapchain";
+      }
+
+      if (maintenance_6)
+      {
+         const auto *bind_status =
+            util::find_extension<VkBindMemoryStatusKHR>(VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR, pBindInfos[i].pNext);
+         if (nullptr != bind_status)
+         {
+            assert(bind_status->pResult != nullptr);
+            *bind_status->pResult = result;
+         }
+      }
+
+      if (VK_SUCCESS != result)
+      {
+         /* VK_KHR_maintenance6 requires that all memory binding operations must be attempted, so the results are stored
+         rather than returned early upon failure */
+         WSI_LOG_ERROR("%s", error_message.data());
+         endpoint_result = result;
       }
    }
-   return VK_SUCCESS;
+   return endpoint_result;
 }
