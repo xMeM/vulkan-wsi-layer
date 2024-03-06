@@ -35,9 +35,15 @@ namespace wsi
 namespace display
 {
 
+class surface;
+
 class surface_properties : public wsi::surface_properties
 {
 public:
+   surface_properties();
+
+   surface_properties(surface &wsi_surface);
+
    VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                      VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
 
@@ -52,12 +58,14 @@ public:
 
    VkResult get_required_instance_extensions(util::extension_list &extension_list) override;
 
+   VkResult get_required_device_extensions(util::extension_list &extension_list) override;
+
    bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) override;
 
    static surface_properties &get_instance();
 
 private:
-   std::shared_ptr<drm_display> display;
+   surface *const m_specific_surface;
 };
 
 } /* namespace display */

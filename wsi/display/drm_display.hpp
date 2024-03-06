@@ -61,6 +61,44 @@ using drm_plane_resources_owner = drm_owner<_drmModePlaneRes, drmModeFreePlaneRe
 using drm_object_properties_owner = drm_owner<_drmModeObjectProperties, drmModeFreeObjectProperties>;
 using drm_property_owner = drm_owner<_drmModeProperty, drmModeFreeProperty>;
 
+/**
+ * @brief Owner class for an array of DRM GEM buffer handles.
+ */
+template <size_t array_size>
+class drm_gem_handle_array : private util::noncopyable
+{
+public:
+   drm_gem_handle_array(int fd)
+      : m_fd(fd)
+   {
+   }
+
+   uint32_t &operator[](size_t size)
+   {
+      return m_handle[size];
+   }
+
+   uint32_t *data()
+   {
+      return m_handle.data();
+   }
+
+   ~drm_gem_handle_array()
+   {
+      for (auto handle : m_handle)
+      {
+         if (handle != UINT32_MAX && m_fd != -1)
+         {
+            drmCloseBufferHandle(m_fd, handle);
+         }
+      }
+   }
+
+private:
+   int m_fd{ -1 };
+   std::array<uint32_t, array_size> m_handle{ UINT32_MAX };
+};
+
 /* Forward declaration */
 class drm_display;
 

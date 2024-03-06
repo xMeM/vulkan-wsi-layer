@@ -129,7 +129,7 @@ protected:
    template <
       typename FunctionType, class... Args, typename ReturnType = std::invoke_result_t<FunctionType, Args...>,
       std::enable_if_t<!std::is_void<ReturnType>::value && !std::is_same<ReturnType, VkResult>::value, bool> = true>
-   std::optional<ReturnType> call_fn(const char *fn_name, Args &&... args) const
+   std::optional<ReturnType> call_fn(const char *fn_name, Args &&...args) const
    {
       auto fn = get_fn<FunctionType>(fn_name);
       if (fn.has_value())
@@ -154,7 +154,7 @@ protected:
     */
    template <typename FunctionType, class... Args, typename ReturnType = std::invoke_result_t<FunctionType, Args...>,
              std::enable_if_t<std::is_void<ReturnType>::value, bool> = true>
-   void call_fn(const char *fn_name, Args &&... args) const
+   void call_fn(const char *fn_name, Args &&...args) const
    {
       auto fn = get_fn<FunctionType>(fn_name);
       if (fn.has_value())
@@ -178,7 +178,7 @@ protected:
     */
    template <typename FunctionType, class... Args, typename ReturnType = std::invoke_result_t<FunctionType, Args...>,
              std::enable_if_t<std::is_same<ReturnType, VkResult>::value, bool> = true>
-   VkResult call_fn(const char *fn_name, Args &&... args) const
+   VkResult call_fn(const char *fn_name, Args &&...args) const
    {
       auto fn = get_fn<FunctionType>(fn_name);
       if (fn.has_value())
@@ -226,6 +226,8 @@ static constexpr uint32_t API_VERSION_MAX = UINT32_MAX;
    EP(CreateHeadlessSurfaceEXT, VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                      \
    /* VK_KHR_wayland_surface */                                                                                      \
    EP(CreateWaylandSurfaceKHR, VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, API_VERSION_MAX, false)                        \
+   /* VK_KHR_display */                                                                                              \
+   EP(CreateDisplayPlaneSurfaceKHR, VK_KHR_DISPLAY_EXTENSION_NAME, API_VERSION_MAX, false)                           \
    /* VK_KHR_get_surface_capabilities2 */                                                                            \
    EP(GetPhysicalDeviceSurfaceCapabilities2KHR, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, API_VERSION_MAX,   \
       false)                                                                                                         \
@@ -302,7 +304,7 @@ public:
     */
 #define DISPATCH_TABLE_SHORTCUT(name, unused1, unused2, unused3)             \
    template <class... Args>                                                  \
-   auto name(Args &&... args) const                                          \
+   auto name(Args &&...args) const                                           \
    {                                                                         \
       return call_fn<PFN_vk##name>("vk" #name, std::forward<Args>(args)...); \
    };
@@ -449,7 +451,7 @@ public:
     */
 #define DISPATCH_TABLE_SHORTCUT(name, unused1, unused2, unused3)             \
    template <class... Args>                                                  \
-   auto name(Args &&... args) const                                          \
+   auto name(Args &&...args) const                                           \
    {                                                                         \
       return call_fn<PFN_vk##name>("vk" #name, std::forward<Args>(args)...); \
    };

@@ -61,15 +61,11 @@ option(BUILD_WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN "Build with support for VK_
 set(SELECT_EXTERNAL_ALLOCATOR "none" CACHE STRING "Select an external system allocator (none, ion)")
 set(EXTERNAL_WSIALLOC_LIBRARY "" CACHE STRING "External implementation of the wsialloc interface to use")
 
-if(BUILD_WSI_WAYLAND)
+if(BUILD_WSI_WAYLAND OR BUILD_WSI_DISPLAY)
    set(BUILD_DRM_UTILS true)
    if(SELECT_EXTERNAL_ALLOCATOR STREQUAL "none")
-      message(FATAL_ERROR "Wayland only supported with an external allocator.")
+      message(FATAL_ERROR "WSI only supported with an external allocator.")
    endif()
-endif()
-
-if(BUILD_WSI_DISPLAY)
-   set(BUILD_DRM_UTILS true)
 endif()
 
 if(BUILD_DRM_UTILS)
@@ -192,7 +188,9 @@ endif()
 if (BUILD_WSI_DISPLAY)
    add_library(wsi_display STATIC
       wsi/display/drm_display.cpp
-      wsi/display/surface_properties.cpp)
+      wsi/display/surface_properties.cpp
+      wsi/display/swapchain.cpp
+      wsi/display/surface.cpp)
 
    pkg_check_modules(LIBDRM REQUIRED libdrm)
    message(STATUS "Using libdrm include directories: ${LIBDRM_INCLUDE_DIRS}")
@@ -209,6 +207,11 @@ if (BUILD_WSI_DISPLAY)
    target_compile_options(wsi_display INTERFACE "-DBUILD_WSI_DISPLAY=1")
    target_link_libraries(wsi_display ${LIBDRM_LDFLAGS} drm)
    target_link_libraries(wsi_display drm_utils)
+   if(NOT EXTERNAL_WSIALLOC_LIBRARY STREQUAL "")
+      target_link_libraries(wsi_display ${EXTERNAL_WSIALLOC_LIBRARY})
+   else()
+      target_link_libraries(wsi_display wsialloc)
+   endif()
    list(APPEND LINK_WSI_LIBS wsi_display)
 else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_display/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)

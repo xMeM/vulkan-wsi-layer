@@ -26,6 +26,7 @@
 #include <algorithm>
 
 #include "surface_properties.hpp"
+#include "surface.hpp"
 #include "util/macros.hpp"
 
 namespace wsi
@@ -36,10 +37,27 @@ namespace display
 
 constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
 
+surface_properties::surface_properties()
+   : m_specific_surface(nullptr)
+{
+}
+
+surface_properties::surface_properties(surface &wsi_surface)
+   : m_specific_surface(&wsi_surface)
+{
+}
+
 VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
                                                       VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
 {
    get_surface_capabilities_common(physical_device, pSurfaceCapabilities);
+
+   if (m_specific_surface != nullptr)
+   {
+      pSurfaceCapabilities->currentExtent = m_specific_surface->get_current_extent();
+      pSurfaceCapabilities->minImageExtent = m_specific_surface->get_current_extent();
+      pSurfaceCapabilities->maxImageExtent = m_specific_surface->get_current_extent();
+   }
 
    /* Image count limits */
    pSurfaceCapabilities->minImageCount = 2;
@@ -240,13 +258,30 @@ VWL_VKAPI_CALL(VkResult)
 CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR *pCreateInfo,
                              const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
 {
-   UNUSED(instance);
-   UNUSED(pCreateInfo);
-   UNUSED(pAllocator);
-   UNUSED(pSurface);
-   // TODO: Create the surface object here, which in turn creates the surface_properties object
+   auto &instance_data = layer::instance_private_data::get(instance);
+   util::allocator allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator };
 
-   return VK_ERROR_EXTENSION_NOT_PRESENT;
+   drm_display_mode *display_mode = reinterpret_cast<drm_display_mode *>(pCreateInfo->displayMode);
+
+   auto wsi_surface = allocator.make_unique<surface>(display_mode);
+   if (wsi_surface == nullptr)
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   VkResult res = instance_data.disp.CreateDisplayPlaneSurfaceKHR(instance, pCreateInfo, pAllocator, pSurface);
+   if (res == VK_SUCCESS)
+   {
+
+      wsi_surface->set_current_extent(pCreateInfo->imageExtent);
+      auto surface_base = util::unique_ptr<wsi::surface>(std::move(wsi_surface));
+      res = instance_data.add_surface(*pSurface, surface_base);
+      if (res != VK_SUCCESS)
+      {
+         instance_data.disp.DestroySurfaceKHR(instance, *pSurface, pAllocator);
+      }
+   }
+   return res;
 }
 
 VWL_VKAPI_CALL(VkResult)
@@ -502,6 +537,16 @@ VkResult surface_properties::get_required_instance_extensions(util::extension_li
    };
 
    return extension_list.add(required_instance_extensions.data(), required_instance_extensions.size());
+}
+
+VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
+{
+   const std::array required_device_extensions{
+      VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+      VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+   };
+
+   return extension_list.add(required_device_extensions.data(), required_device_extensions.size());
 }
 
 bool surface_properties::is_surface_extension_enabled(const layer::instance_private_data &instance_data)
