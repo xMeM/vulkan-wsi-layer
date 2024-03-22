@@ -56,8 +56,6 @@ public:
 
    static surface_properties &get_instance();
 
-   std::shared_ptr<drm_display> get_display();
-
 private:
    std::shared_ptr<drm_display> display;
 };

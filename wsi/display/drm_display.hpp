@@ -99,20 +99,6 @@ public:
    uint32_t get_refresh_rate() const;
 
    /**
-    * @brief get function for display instance.
-    *
-    * @return The display instance.
-    */
-   const drm_display *get_display();
-
-   /**
-    * @brief Sets the display instance.
-    *
-    * @param disp The display instance.
-    */
-   void set_display(const drm_display *disp);
-
-   /**
     * @brief Get function for the drm mode.
     */
    drmModeModeInfo get_drm_mode() const;
@@ -140,11 +126,6 @@ public:
 
 private:
    /**
-    * @brief the display instance.
-    */
-   const drm_display *m_display;
-
-   /**
     * @brief Cached native drm mode.
     */
    drmModeModeInfo m_drm_mode_info;
@@ -168,8 +149,13 @@ public:
     * @param allocator The allocator object that the display will use.
     * @return std::optional<drm_display> containing a display if initialization went well, otherwise std::nullopt.
     */
-   static std::optional<util::unique_ptr<drm_display>> make_display(const util::allocator &allocator,
-                                                                    const char *drm_device);
+   static std::optional<drm_display> make_display(const util::allocator &allocator, const char *drm_device);
+
+   static std::optional<drm_display> &get_display();
+
+   drm_display(drm_display &&other) = default;
+
+   drm_display &operator=(drm_display &&other) = default;
 
    /**
     * @brief display destructor.
@@ -243,9 +229,6 @@ public:
    uint32_t get_max_height() const;
 
 private:
-   /* Allow util::allocator to access the private constructor */
-   friend class util::allocator;
-
    /**
     * @brief display constructor.
     *

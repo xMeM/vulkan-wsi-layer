@@ -56,6 +56,12 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
                                                  VkSurfaceFormatKHR *surfaceFormats,
                                                  VkSurfaceFormat2KHR *extended_surface_formats)
 {
+   auto &display = drm_display::get_display();
+   if (!display.has_value())
+   {
+      return VK_ERROR_SURFACE_LOST_KHR;
+   }
+
    int drm_fd = display->get_drm_fd();
    if (drm_fd == -1)
    {
@@ -298,20 +304,25 @@ GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR
 
    drm_display_mode *display_mode = reinterpret_cast<drm_display_mode *>(mode);
    assert(display_mode != nullptr);
-   auto dpy = display_mode->get_display();
-   assert(dpy != nullptr);
+
+   auto &display = drm_display::get_display();
+   if (!display.has_value())
+   {
+      WSI_LOG_ERROR("DRM display not available.");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
 
    /* Implementation supports only one plane for presenting
     * images. Therefore plane index must be 0. */
    assert(planeIndex == 0);
 
    auto valid_mode =
-      std::find_if(dpy->get_display_modes_begin(), dpy->get_display_modes_end(), [&display_mode](auto &mode) {
+      std::find_if(display->get_display_modes_begin(), display->get_display_modes_end(), [&display_mode](auto &mode) {
          return (display_mode->get_width() == mode.get_width()) && (display_mode->get_height() == mode.get_height()) &&
                 (display_mode->get_refresh_rate() == mode.get_refresh_rate());
       });
 
-   assert(valid_mode != dpy->get_display_modes_end());
+   assert(valid_mode != display->get_display_modes_end());
 
    VkDisplayPlaneCapabilitiesKHR planeCapabilities{};
    planeCapabilities.supportedAlpha = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR;
@@ -337,9 +348,12 @@ GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t pl
    assert(physicalDevice != VK_NULL_HANDLE);
    assert(pDisplayCount != nullptr);
 
-   std::shared_ptr<drm_display> dpy = surface_properties::get_instance().get_display();
-
-   assert(dpy != nullptr);
+   auto &display = drm_display::get_display();
+   if (!display.has_value())
+   {
+      WSI_LOG_ERROR("DRM display not available.");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
 
    /* Implementation supports only one plane for presenting
     * images. Therefore plane index must be 0. */
@@ -358,7 +372,7 @@ GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t pl
       return VK_INCOMPLETE;
    }
 
-   *pDisplays = reinterpret_cast<VkDisplayKHR>(dpy.get());
+   *pDisplays = reinterpret_cast<VkDisplayKHR>(&display.value());
    *pDisplayCount = 1;
 
    return VK_SUCCESS;
@@ -371,9 +385,12 @@ GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint
    assert(physicalDevice != VK_NULL_HANDLE);
    assert(pPropertyCount != nullptr);
 
-   std::shared_ptr<drm_display> dpy = surface_properties::get_instance().get_display();
-
-   assert(dpy != nullptr);
+   auto &display = drm_display::get_display();
+   if (!display.has_value())
+   {
+      WSI_LOG_ERROR("DRM display not available.");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
 
    if (pProperties == nullptr)
    {
@@ -389,7 +406,7 @@ GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint
    }
 
    VkDisplayPlanePropertiesKHR planeProperties{};
-   planeProperties.currentDisplay = reinterpret_cast<VkDisplayKHR>(dpy.get());
+   planeProperties.currentDisplay = reinterpret_cast<VkDisplayKHR>(&display.value());
 
    /* Since the implementation is exposing just one plane the value for
     * the current stack index must be 0.*/
@@ -408,9 +425,9 @@ GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t 
    assert(physicalDevice != VK_NULL_HANDLE);
    assert(pPropertyCount != nullptr);
 
-   std::shared_ptr<drm_display> dpy = surface_properties::get_instance().get_display();
+   auto &display = drm_display::get_display();
 
-   if (dpy == nullptr)
+   if (!display.has_value())
    {
       *pPropertyCount = 0;
       return VK_SUCCESS;
@@ -430,10 +447,10 @@ GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t 
    *pPropertyCount = 1;
 
    VkDisplayPropertiesKHR display_properties = {};
-   display_properties.display = reinterpret_cast<VkDisplayKHR>(dpy.get());
+   display_properties.display = reinterpret_cast<VkDisplayKHR>(&display.value());
    display_properties.displayName = "DRM display";
-   display_properties.physicalDimensions = { dpy->get_connector()->mmWidth, dpy->get_connector()->mmHeight };
-   display_properties.physicalResolution = { dpy->get_max_width(), dpy->get_max_height() };
+   display_properties.physicalDimensions = { display->get_connector()->mmWidth, display->get_connector()->mmHeight };
+   display_properties.physicalResolution = { display->get_max_width(), display->get_max_height() };
    display_properties.supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
    display_properties.planeReorderPossible = VK_FALSE;
    display_properties.persistentContent = VK_FALSE;
@@ -497,11 +514,6 @@ surface_properties &surface_properties::get_instance()
    static surface_properties instance;
 
    return instance;
-}
-
-std::shared_ptr<drm_display> surface_properties::get_display()
-{
-   return display;
 }
 
 } /* namespace display */
