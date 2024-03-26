@@ -96,7 +96,7 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    return VK_SUCCESS;
 }
 
-std::vector<VkFormat> support_formats{ VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM };
+std::vector<VkFormat> support_formats{ VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM };
 
 VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surface_format_count,
                                                  VkSurfaceFormatKHR *surface_formats,
@@ -120,14 +120,24 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    UNUSED(physical_device);
    UNUSED(surface);
 
-   static const std::array<VkPresentModeKHR, 4> modes = { VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_KHR,
-                                                          VK_PRESENT_MODE_FIFO_RELAXED_KHR,
-                                                          VK_PRESENT_MODE_MAILBOX_KHR };
+   static const std::array<VkPresentModeKHR, 4> modes = {
+      VK_PRESENT_MODE_FIFO_KHR,
+      VK_PRESENT_MODE_MAILBOX_KHR,
+   };
 
    return get_surface_present_modes_common(present_mode_count, present_modes, modes);
 }
 
-static const char *required_device_extensions[] = { VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME };
+static const char *required_device_extensions[] = {
+   VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+   VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
+   VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME,
+   VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+};
 
 VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
 {

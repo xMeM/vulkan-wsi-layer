@@ -29,11 +29,6 @@
 #include "surface.hpp"
 #include "swapchain.hpp"
 #include "surface_properties.hpp"
-#include <iostream>
-#include <xcb/shm.h>
-#include <xcb/xcb.h>
-#include <xcb/xproto.h>
-#include <xcb/present.h>
 
 namespace wsi
 {
@@ -49,8 +44,8 @@ struct surface::init_parameters
 
 surface::surface(const init_parameters &params)
    : wsi::surface()
-   , connection(params.connection)
-   , window(params.window)
+   , m_connection(params.connection)
+   , m_window(params.window)
    , properties(*this, params.allocator)
 {
 }
@@ -61,8 +56,8 @@ surface::~surface()
 
 bool surface::getWindowSizeAndDepth(VkExtent2D *windowExtent, int *depth)
 {
-   auto cookie = xcb_get_geometry(connection, window);
-   if (auto *geom = xcb_get_geometry_reply(connection, cookie, nullptr))
+   auto cookie = xcb_get_geometry(m_connection, m_window);
+   if (auto *geom = xcb_get_geometry_reply(m_connection, cookie, nullptr))
    {
       windowExtent->width = static_cast<uint32_t>(geom->width);
       windowExtent->height = static_cast<uint32_t>(geom->height);

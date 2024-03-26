@@ -34,6 +34,7 @@
 #include <vulkan/vk_layer.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan_wayland.h>
+#include <vulkan/vulkan_android.h>
 #include <xcb/xcb.h>
 #include <vulkan/vulkan_xcb.h>
 
@@ -65,6 +66,7 @@ namespace layer
    REQUIRED(GetPhysicalDeviceProperties)                \
    REQUIRED(GetPhysicalDeviceImageFormatProperties)     \
    REQUIRED(EnumerateDeviceExtensionProperties)         \
+   REQUIRED(GetPhysicalDeviceMemoryProperties)        \
    /* VK_KHR_surface */                                 \
    OPTIONAL(DestroySurfaceKHR)                          \
    OPTIONAL(GetPhysicalDeviceSurfaceCapabilitiesKHR)    \
@@ -168,7 +170,10 @@ struct instance_dispatch_table
    OPTIONAL(GetFenceFdKHR)                          \
    OPTIONAL(ImportFenceFdKHR)                       \
    /* VK_KHR_external_semaphore_fd */               \
-   OPTIONAL(ImportSemaphoreFdKHR)
+   OPTIONAL(ImportSemaphoreFdKHR)                   \
+   OPTIONAL(GetMemoryAndroidHardwareBufferANDROID)  \
+   OPTIONAL(MapMemory)                              \
+   OPTIONAL(UnmapMemory)
 
 struct device_dispatch_table
 {

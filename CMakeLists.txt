@@ -198,7 +198,7 @@ if(BUILD_WSI_X11)
 
    target_compile_options(wsi_x11 INTERFACE "-DBUILD_WSI_X11=1")
    target_compile_options(wsi_x11 PUBLIC "--target=linux-aarch64-android33")
-   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-shm android)
+   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3 android)
 else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_xcb_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
