@@ -153,6 +153,18 @@ Contributors are expected to abide by the
 Instructions on how to implement a WSI backend can be found in the
 [README](wsi/README.md) in the wsi folder.
 
+## Trace
+
+When using other layers to trace content with the WSI Layer, special attention
+should be paid to the order of the layers by the Vulkan® loader. The Vulkan WSI
+Layer should be placed after the trace layer as it implements entrypoints that
+may not be implemented by the ICD.
+
+One way to avoid these kinds of issues is by using an implicit
+[meta-layer](https://github.com/KhronosGroup/Vulkan-Loader/blob/main/docs/LoaderLayerInterface.md#meta-layers)
+which will define the order of the layers and the WSI Layer should be placed at
+the bottom of the list.
+
 ## Khronos® Conformance
 
 This software is based on a published Khronos® Specification and is expected to
