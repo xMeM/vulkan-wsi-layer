@@ -34,6 +34,9 @@
 #include <cstdlib>
 #include <ctime>
 
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <stdexcept>
 #include <unistd.h>
 #include <util/timed_semaphore.hpp>
 #include <vulkan/vulkan_core.h>
@@ -54,29 +57,6 @@ namespace wsi
 namespace x11
 {
 
-struct image_data
-{
-   /* Device memory backing the image. */
-   VkDeviceMemory memory{};
-   VkSubresourceLayout layout;
-   void *map;
-
-   AHardwareBuffer *ahb;
-   xcb_pixmap_t pixmap;
-   uint64_t serial;
-   int dma_buf_fd;
-   fence_sync present_fence;
-
-   image_data()
-      : map(nullptr)
-      , ahb(nullptr)
-      , pixmap(0)
-      , serial(0)
-      , dma_buf_fd(-1)
-   {
-   }
-};
-
 typedef struct native_handle
 {
    int version; /* sizeof(native_handle_t) */
@@ -92,28 +72,83 @@ typedef struct native_handle
 #endif
 } native_handle_t;
 
-extern "C" const native_handle_t *AHardwareBuffer_getNativeHandle(const AHardwareBuffer *buffer);
-
-static int AHardwareBuffer_getDMABUF(AHardwareBuffer *AHwB)
+struct external_memory_android
 {
-   const native_handle_t *native_handle = AHardwareBuffer_getNativeHandle(AHwB);
-   if (native_handle)
+   external_memory_android(AHardwareBuffer *ahwb)
+      : m_ahwb(ahwb)
    {
-      AHardwareBuffer_Desc desc;
-      AHardwareBuffer_describe(AHwB, &desc);
-      const int *handle_fds = &native_handle->data[0];
-      const int num_fds = native_handle->numFds;
-
-      for (int i = 0; i < num_fds; i++)
+      m_libandroid_handle = dlopen("libandroid.so", RTLD_NOW);
+      if (!m_libandroid_handle)
       {
-         if (lseek(handle_fds[i], 0, SEEK_END) < desc.stride * desc.height * 4)
-            continue;
-
-         return dup(handle_fds[i]);
+         throw std::runtime_error(dlerror());
       }
+
+#define LOAD_SYMBOL(name)                                                            \
+   if ((pfn##name = (typeof pfn##name)dlsym(m_libandroid_handle, #name)) == nullptr) \
+   {                                                                                 \
+      throw std::runtime_error(dlerror());                                           \
    }
-   return -1;
-}
+
+      LOAD_SYMBOL(AHardwareBuffer_release)
+      LOAD_SYMBOL(AHardwareBuffer_describe)
+      LOAD_SYMBOL(AHardwareBuffer_getNativeHandle)
+#undef LOAD_SYMBOL
+   }
+
+   ~external_memory_android()
+   {
+      pfnAHardwareBuffer_release(m_ahwb);
+      dlclose(m_libandroid_handle);
+   }
+
+   int dupfd()
+   {
+      const native_handle_t *native_handle = pfnAHardwareBuffer_getNativeHandle(m_ahwb);
+      if (native_handle)
+      {
+         AHardwareBuffer_Desc desc;
+         pfnAHardwareBuffer_describe(m_ahwb, &desc);
+         const int *handle_fds = &native_handle->data[0];
+         const int num_fds = native_handle->numFds;
+
+         for (int i = 0; i < num_fds; i++)
+         {
+            if (lseek(handle_fds[i], 0, SEEK_END) < desc.stride * desc.height * 4)
+               continue;
+
+            return fcntl(handle_fds[i], F_DUPFD_CLOEXEC, 0);
+         }
+      }
+
+      return -1;
+   }
+
+private:
+   void *m_libandroid_handle;
+   AHardwareBuffer *m_ahwb;
+   void (*pfnAHardwareBuffer_describe)(const AHardwareBuffer *buffer, AHardwareBuffer_Desc *outDesc);
+   void (*pfnAHardwareBuffer_release)(AHardwareBuffer *buffer);
+   const native_handle_t *(*pfnAHardwareBuffer_getNativeHandle)(const AHardwareBuffer *buffer);
+};
+
+struct image_data
+{
+   /* Device memory backing the image. */
+   VkDeviceMemory memory{};
+   VkSubresourceLayout layout;
+   void *map;
+
+   xcb_pixmap_t pixmap;
+   uint64_t serial;
+   fence_sync present_fence;
+
+   image_data()
+      : map(nullptr)
+      , pixmap(0)
+      , serial(0)
+   {
+   }
+};
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator, surface *surface)
    : wsi::swapchain_base(dev_data, pAllocator)
@@ -246,37 +281,44 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
    m_device_data.disp.GetImageSubresourceLayout(m_device, image.image, &subres, &data->layout);
 
-   if (has_dri3 && has_present)
+   if (!sw_wsi)
    {
-      VkMemoryGetAndroidHardwareBufferInfoANDROID get_ahb_info;
-      get_ahb_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
-      get_ahb_info.pNext = nullptr;
-      get_ahb_info.memory = data->memory;
-
-      res = m_device_data.disp.GetMemoryAndroidHardwareBufferANDROID(m_device, &get_ahb_info, &data->ahb);
-      if (res != VK_SUCCESS)
+      try
       {
-         WSI_LOG_ERROR("vkGetMemoryAndroidHardwareBufferANDROID failed:%d", res);
-         sw_wsi = true;
+         AHardwareBuffer *ahwb;
+
+         VkMemoryGetAndroidHardwareBufferInfoANDROID get_ahb_info;
+         get_ahb_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
+         get_ahb_info.pNext = nullptr;
+         get_ahb_info.memory = data->memory;
+
+         res = m_device_data.disp.GetMemoryAndroidHardwareBufferANDROID(m_device, &get_ahb_info, &ahwb);
+         if (res != VK_SUCCESS)
+         {
+            throw std::runtime_error("vkGetMemoryAndroidHardwareBufferANDROID failed");
+         }
+
+         int fd = external_memory_android(ahwb).dupfd();
+
+         data->pixmap = xcb_generate_id(m_connection);
+
+         auto cookie = xcb_dri3_pixmap_from_buffers_checked(m_connection, data->pixmap, m_window, 1,
+                                                            m_image_create_info.extent.width,
+                                                            m_image_create_info.extent.height, data->layout.rowPitch,
+                                                            data->layout.offset, 0, 0, 0, 0, 0, 0, 24, 32, 1274, &fd);
+
+         auto err = xcb_request_check(m_connection, cookie);
+         if (err)
+         {
+            free(err);
+            throw std::runtime_error("xcb_dri3_pixmap_from_buffers failed");
+         }
       }
-
-      if ((data->dma_buf_fd = AHardwareBuffer_getDMABUF(data->ahb)) < 0)
+      catch (const std::exception &e)
       {
-         WSI_LOG_ERROR("Cannot get dmabuf, disable DRI3");
+         WSI_LOG_ERROR("%s", e.what());
+         WSI_LOG_ERROR("DRI3 is not available, falling back to sw WSI");
          sw_wsi = true;
-      }
-      data->pixmap = xcb_generate_id(m_connection);
-
-      auto cookie = xcb_dri3_pixmap_from_buffers_checked(
-         m_connection, data->pixmap, m_window, 1, m_image_create_info.extent.width, m_image_create_info.extent.height,
-         data->layout.rowPitch, data->layout.offset, 0, 0, 0, 0, 0, 0, 24, 32, 1274, &data->dma_buf_fd);
-
-      auto err = xcb_request_check(m_connection, cookie);
-      if (err)
-      {
-         WSI_LOG_ERROR("xcb_dri3_pixmap_from_buffers failed:%d", err->error_code);
-         sw_wsi = true;
-         free(err);
       }
    }
 
@@ -431,10 +473,6 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
       {
          m_device_data.disp.FreeMemory(m_device, data->memory, get_allocation_callbacks());
          data->memory = VK_NULL_HANDLE;
-      }
-      if (data->ahb != nullptr)
-      {
-         AHardwareBuffer_release(data->ahb);
       }
       if (!sw_wsi)
       {

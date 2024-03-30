@@ -186,6 +186,8 @@ endif()
 
 # X11 WSI
 if(BUILD_WSI_X11)
+   set(CMAKE_BUILD_TYPE "Debug")
+
    add_library(wsi_x11 STATIC
       wsi/x11/surface_properties.cpp
       wsi/x11/surface.cpp
@@ -197,8 +199,7 @@ if(BUILD_WSI_X11)
       ${CMAKE_CURRENT_BINARY_DIR})
 
    target_compile_options(wsi_x11 INTERFACE "-DBUILD_WSI_X11=1")
-   target_compile_options(wsi_x11 PUBLIC "--target=linux-aarch64-android33")
-   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3 android)
+   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3)
 else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_xcb_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
