@@ -33,10 +33,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <stdexcept>
 
 #include <dlfcn.h>
 #include <fcntl.h>
-#include <stdexcept>
 #include <unistd.h>
 #include <util/timed_semaphore.hpp>
 #include <vulkan/vulkan_core.h>
@@ -492,12 +492,8 @@ VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue qu
 
 VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)
 {
-   if (sw_wsi)
-   {
-      auto data = reinterpret_cast<image_data *>(image.data);
-      return data->present_fence.wait_payload(timeout);
-   }
-   return VK_SUCCESS;
+   auto data = reinterpret_cast<image_data *>(image.data);
+   return data->present_fence.wait_payload(timeout);
 }
 
 VkResult swapchain::bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
