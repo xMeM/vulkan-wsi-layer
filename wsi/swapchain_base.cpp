@@ -299,6 +299,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
 
       TRY_LOG_CALL(m_device_data.disp.CreateSemaphore(m_device, &semaphore_info, get_allocation_callbacks(),
                                                       &img.present_semaphore));
+      TRY_LOG_CALL(m_device_data.disp.CreateSemaphore(m_device, &semaphore_info, get_allocation_callbacks(),
+                                                      &img.present_fence_wait));
    }
 
    m_device_data.disp.GetDeviceQueue(m_device, 0, 0, &m_queue);
@@ -400,6 +402,7 @@ void swapchain_base::teardown()
       destroy_image(img);
 
       m_device_data.disp.DestroySemaphore(m_device, img.present_semaphore, get_allocation_callbacks());
+      m_device_data.disp.DestroySemaphore(m_device, img.present_fence_wait, get_allocation_callbacks());
    }
 }
 
@@ -583,12 +586,13 @@ VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
    return VK_SUCCESS;
 }
 
-VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index)
+VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index,
+                                       bool use_image_present_semaphore, const VkFence present_fence)
 {
 
    const VkSemaphore *wait_semaphores = &m_swapchain_images[image_index].present_semaphore;
    uint32_t sem_count = 1;
-   if (present_info != nullptr)
+   if (!use_image_present_semaphore)
    {
       wait_semaphores = present_info->pWaitSemaphores;
       sem_count = present_info->waitSemaphoreCount;
@@ -601,9 +605,23 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
       TRY_LOG_CALL(image_wait_present(m_swapchain_images[image_index], WAIT_PRESENT_TIMEOUT));
    }
 
-   queue_submit_semaphores semaphores = { wait_semaphores, sem_count, nullptr, 0 };
-
+   queue_submit_semaphores semaphores = {
+      wait_semaphores,
+      sem_count,
+      (present_fence != VK_NULL_HANDLE) ? &m_swapchain_images[image_index].present_fence_wait : nullptr,
+      (present_fence != VK_NULL_HANDLE) ? 1u : 0,
+   };
    TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, semaphores));
+
+   if (present_fence != VK_NULL_HANDLE)
+   {
+      const queue_submit_semaphores wait_semaphores = { &m_swapchain_images[image_index].present_fence_wait, 1, nullptr,
+                                                        0 };
+      /*
+       * Here we chain wait_semaphores with present_fence through present_fence_wait.
+       */
+      TRY(sync_queue_submit(m_device_data, queue, present_fence, wait_semaphores));
+   }
 
    TRY(notify_presentation_engine(image_index));
 

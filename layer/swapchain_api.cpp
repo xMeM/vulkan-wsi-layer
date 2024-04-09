@@ -162,13 +162,16 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 
    /* Avoid allocating on the heap when there is only one swapchain. */
    const VkPresentInfoKHR *present_info = pPresentInfo;
+   bool use_image_present_semaphore = false;
    if (pPresentInfo->swapchainCount > 1)
    {
       TRY_LOG_CALL(submit_wait_request(queue, *pPresentInfo, device_data));
-      present_info = nullptr;
+      use_image_present_semaphore = true;
    }
 
    VkResult ret = VK_SUCCESS;
+   const auto present_fence_info = util::find_extension<VkSwapchainPresentFenceInfoEXT>(
+      VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT, present_info->pNext);
    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; ++i)
    {
       VkSwapchainKHR swapc = pPresentInfo->pSwapchains[i];
@@ -176,7 +179,9 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
       auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
       assert(sc != nullptr);
 
-      VkResult res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i]);
+      const VkFence present_fence = (present_fence_info == nullptr) ? VK_NULL_HANDLE : present_fence_info->pFences[i];
+      VkResult res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i], use_image_present_semaphore,
+                                       present_fence);
       if (pPresentInfo->pResults != nullptr)
       {
          pPresentInfo->pResults[i] = res;

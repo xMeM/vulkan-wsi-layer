@@ -66,6 +66,7 @@ struct swapchain_image
    VkImage image{ VK_NULL_HANDLE };
    status status{ swapchain_image::INVALID };
    VkSemaphore present_semaphore{ VK_NULL_HANDLE };
+   VkSemaphore present_fence_wait{ VK_NULL_HANDLE };
 };
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
@@ -140,17 +141,22 @@ public:
     * @param queue The queue to which the submission will be made to.
     *
     * @param present_info Information about the swapchain and image to be presented.
-    * If it is nullptr it means that the presentation request will wait on the
-    * image's \p present_semaphore and not the semaphores that come with
-    * \p present_info.
     *
     * @param imageIndex The index of the image to be presented.
+    *
+    * @param use_image_present_semaphore Flag that indicates whether the presentation
+    *                                    request will wait on the image's \p present_semaphore
+    *                                    and not the semaphores that come with
+    *                                    \p present_info.
+    *
+    * @param present_fence Fence supplied by the application with VkSwapchainPresentFenceInfoEXT.
     *
     * @return If queue submission fails returns error of vkQueueSubmit, if the
     * swapchain has a descendant who started presenting returns VK_ERROR_OUT_OF_DATE_KHR,
     * otherwise returns VK_SUCCESS.
     */
-   VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index);
+   VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index,
+                          bool use_image_present_semaphore, const VkFence present_fence);
 
    /**
     * @brief Get the allocator
