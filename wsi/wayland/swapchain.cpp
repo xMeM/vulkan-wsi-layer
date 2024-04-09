@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2024 Arm Limited.
+ * Copyright (c) 2017-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -552,11 +552,11 @@ VkResult swapchain::get_free_buffer(uint64_t *timeout)
    }
 }
 
-VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count)
+VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue,
+                                              const queue_submit_semaphores &semaphores)
 {
    auto image_data = reinterpret_cast<wayland_image_data *>(image.data);
-   return image_data->present_fence.set_payload(queue, sem_payload, sem_count);
+   return image_data->present_fence.set_payload(queue, semaphores);
 }
 
 VkResult swapchain::image_wait_present(swapchain_image &, uint64_t)

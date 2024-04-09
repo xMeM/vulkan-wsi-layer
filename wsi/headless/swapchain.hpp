@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022, 2024 Arm Limited.
+ * Copyright (c) 2017-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -86,8 +86,8 @@ protected:
     */
    void destroy_image(wsi::swapchain_image &image);
 
-   VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                      uint32_t sem_count) override;
+   VkResult image_set_present_payload(swapchain_image &image, VkQueue queue,
+                                      const queue_submit_semaphores &semaphores) override;
 
    VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
 

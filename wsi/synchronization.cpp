@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023 Arm Limited.
+ * Copyright (c) 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,6 +30,7 @@
 
 #include "synchronization.hpp"
 #include "layer/private_data.hpp"
+#include "util/helpers.hpp"
 
 #include <algorithm>
 
@@ -93,7 +94,7 @@ VkResult fence_sync::wait_payload(uint64_t timeout)
    return res;
 }
 
-VkResult fence_sync::set_payload(VkQueue queue, const VkSemaphore *sem_payload, uint32_t sem_count)
+VkResult fence_sync::set_payload(VkQueue queue, const queue_submit_semaphores &semaphores)
 {
    VkResult result = dev->disp.ResetFences(dev->device, 1, &fence);
    if (result != VK_SUCCESS)
@@ -101,32 +102,8 @@ VkResult fence_sync::set_payload(VkQueue queue, const VkSemaphore *sem_payload, 
       return result;
    }
    has_payload = false;
-   /* When the semaphore that comes in is signalled, we know that all work is done. So, we do not
-    * want to block any future Vulkan queue work on it. So, we pass in BOTTOM_OF_PIPE bit as the
-    * wait flag.
-    */
-   VkPipelineStageFlags pipeline_stage_flag = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-   VkPipelineStageFlags *pipeline_stage_flag_data = &pipeline_stage_flag;
 
-   util::vector<VkPipelineStageFlags> pipeline_stage_flags_vector{ util::allocator(
-      dev->get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
-   /* Try to avoid memory allocation for single semaphore */
-   if (sem_count > 1)
-   {
-      if (!pipeline_stage_flags_vector.try_resize(sem_count))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      std::fill(pipeline_stage_flags_vector.begin(), pipeline_stage_flags_vector.end(),
-                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-      pipeline_stage_flag_data = pipeline_stage_flags_vector.data();
-   }
-
-   VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, sem_count, sem_payload, pipeline_stage_flag_data, 0, nullptr, 0, nullptr
-   };
-
-   result = dev->disp.QueueSubmit(queue, 1, &submit_info, fence);
+   result = sync_queue_submit(*dev, queue, fence, semaphores);
    if (result == VK_SUCCESS)
    {
       has_payload = true;
@@ -190,6 +167,44 @@ std::optional<util::fd_owner> sync_fd_fence_sync::export_sync_fd()
       return util::fd_owner(exported_fd);
    }
    return std::nullopt;
+}
+
+VkResult sync_queue_submit(const layer::device_private_data &device, VkQueue queue, VkFence fence,
+                           const queue_submit_semaphores &semaphores)
+{
+   /* When the semaphore that comes in is signalled, we know that all work is done. So, we do not
+    * want to block any future Vulkan queue work on it. So, we pass in BOTTOM_OF_PIPE bit as the
+    * wait flag.
+    */
+   VkPipelineStageFlags pipeline_stage_flag = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+   VkPipelineStageFlags *pipeline_stage_flag_data = &pipeline_stage_flag;
+
+   util::vector<VkPipelineStageFlags> pipeline_stage_flags_vector{ util::allocator(
+      device.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
+   /* Try to avoid memory allocation for single semaphore */
+   if (semaphores.wait_semaphores_count > 1)
+   {
+      if (!pipeline_stage_flags_vector.try_resize(semaphores.wait_semaphores_count))
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+      std::fill(pipeline_stage_flags_vector.begin(), pipeline_stage_flags_vector.end(),
+                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+      pipeline_stage_flag_data = pipeline_stage_flags_vector.data();
+   }
+
+   VkSubmitInfo submit_info = { VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                                nullptr,
+                                semaphores.wait_semaphores_count,
+                                semaphores.wait_semaphores,
+                                pipeline_stage_flag_data,
+                                0,
+                                nullptr,
+                                semaphores.signal_semaphores_count,
+                                semaphores.signal_semaphores };
+
+   TRY(device.disp.QueueSubmit(queue, 1, &submit_info, fence));
+   return VK_SUCCESS;
 }
 
 } /* namespace wsi */

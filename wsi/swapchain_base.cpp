@@ -489,25 +489,15 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    }
 
    /* Fallback for when importing fence/semaphore sync FDs is unsupported by the ICD. */
-   VkResult retval = VK_SUCCESS;
-   if (VK_NULL_HANDLE != semaphore || VK_NULL_HANDLE != fence)
-   {
-      VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+   queue_submit_semaphores semaphores = {
+      nullptr,
+      0,
+      (semaphore != VK_NULL_HANDLE) ? &semaphore : nullptr,
+      (semaphore != VK_NULL_HANDLE) ? 1u : 0,
+   };
+   TRY(sync_queue_submit(m_device_data, m_queue, fence, semaphores));
 
-      if (VK_NULL_HANDLE != semaphore)
-      {
-         submit.signalSemaphoreCount = 1;
-         submit.pSignalSemaphores = &semaphore;
-      }
-
-      submit.commandBufferCount = 0;
-      submit.pCommandBuffers = nullptr;
-
-      retval = m_device_data.disp.QueueSubmit(m_queue, 1, &submit, fence);
-      assert(retval == VK_SUCCESS);
-   }
-
-   return retval;
+   return VK_SUCCESS;
 }
 
 VkResult swapchain_base::get_swapchain_images(uint32_t *swapchain_image_count, VkImage *swapchain_images)
@@ -611,7 +601,10 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
       TRY_LOG_CALL(image_wait_present(m_swapchain_images[image_index], WAIT_PRESENT_TIMEOUT));
    }
 
-   TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, wait_semaphores, sem_count));
+   queue_submit_semaphores semaphores = { wait_semaphores, sem_count, nullptr, 0 };
+
+   TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, semaphores));
+
    TRY(notify_presentation_engine(image_index));
 
    return VK_SUCCESS;

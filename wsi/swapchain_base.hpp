@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022, 2024 Arm Limited.
+ * Copyright (c) 2017-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -460,13 +460,12 @@ protected:
     *
     * @param[in] image       The swapchain image for which to set a present payload.
     * @param     queue       A Vulkan queue that can be used for any Vulkan commands needed.
-    * @param[in] sem_payload Array of Vulkan semaphores that constitute the payload.
-    * @param     sem_count   Number of elements in @p sem_payload
+    * @param[in] semaphores  The wait and signal semaphores and their number of elements.
     *
     * @return VK_SUCCESS on success or an error code otherwise.
     */
-   virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count) = 0;
+   virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue,
+                                              const queue_submit_semaphores &semaphores) = 0;
 
    /**
     * @brief Waits for the present payload of an image if necessary.

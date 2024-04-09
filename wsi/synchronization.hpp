@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022, 2024 Arm Limited.
+ * Copyright (c) 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -45,6 +45,14 @@ class instance_private_data;
 namespace wsi
 {
 
+struct queue_submit_semaphores
+{
+   const VkSemaphore *wait_semaphores;
+   uint32_t wait_semaphores_count;
+   const VkSemaphore *signal_semaphores;
+   uint32_t signal_semaphores_count;
+};
+
 /**
  * Synchronization using a Vulkan Fence object.
  */
@@ -86,13 +94,12 @@ public:
     *
     * @note This method is not threadsafe.
     *
-    * @param     queue       The Vulkan queue that may be used to submit synchronization commands.
-    * @param[in] sem_payload Array of Vulkan Semaphores that comprise the payload.
-    * @param     sem_count   Number of elements in @p sem_payload.
+    * @param     queue  The Vulkan queue that may be used to submit synchronization commands.
+    * @param semaphores The wait and signal semaphores.
     *
     * @return VK_SUCCESS on success or other error code on failing to set the payload.
     */
-   VkResult set_payload(VkQueue queue, const VkSemaphore *sem_payload, uint32_t sem_count);
+   VkResult set_payload(VkQueue queue, const queue_submit_semaphores &semaphores);
 
 protected:
    /**
@@ -175,4 +182,17 @@ private:
    sync_fd_fence_sync(layer::device_private_data &device, VkFence vk_fence);
 };
 
+/**
+ * @brief Submit an empty queue operation for synchronization.
+ *
+ * @param device     The device private data for the fence.
+ * @param queue      The Vulkan queue that may be used to submit synchronization commands.
+ * @param fence      The fence to be signalled, it could be VK_NULL_HANDLE in the absence
+ *                   of a fence to be signalled.
+ * @param semaphores The wait and signal semaphores.
+ *
+ * @return VK_SUCCESS on success, an appropiate error code otherwise.
+ */
+VkResult sync_queue_submit(const layer::device_private_data &device, VkQueue queue, VkFence fence,
+                           const queue_submit_semaphores &semaphores);
 } /* namespace wsi */

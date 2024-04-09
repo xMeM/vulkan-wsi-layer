@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022, 2024 Arm Limited.
+ * Copyright (c) 2017-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -50,9 +50,7 @@ struct image_data
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator)
    : wsi::swapchain_base(dev_data, pAllocator)
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   , m_image_compression_control
-{
-}
+   , m_image_compression_control{}
 #endif
 {
 }
@@ -197,11 +195,11 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
    }
 }
 
-VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count)
+VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue,
+                                              const queue_submit_semaphores &semaphores)
 {
    auto data = reinterpret_cast<image_data *>(image.data);
-   return data->present_fence.set_payload(queue, sem_payload, sem_count);
+   return data->present_fence.set_payload(queue, semaphores);
 }
 
 VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)

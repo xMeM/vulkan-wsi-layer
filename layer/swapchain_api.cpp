@@ -37,6 +37,7 @@
 #include "private_data.hpp"
 #include "swapchain_api.hpp"
 #include <util/helpers.hpp>
+#include "wsi/synchronization.hpp"
 
 VWL_VKAPI_CALL(VkResult)
 wsi_layer_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pSwapchainCreateInfo,
@@ -138,31 +139,11 @@ static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &prese
       swapchain_semaphores[i] = swapchain->get_image_present_semaphore(present_info.pImageIndices[i]);
    }
 
-   util::vector<VkPipelineStageFlags> pipeline_stage_flags{ util::allocator(device_data.get_allocator(),
-                                                                            VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
-   if (!pipeline_stage_flags.try_resize(present_info.waitSemaphoreCount))
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
+   wsi::queue_submit_semaphores semaphores = { present_info.pWaitSemaphores, present_info.waitSemaphoreCount,
+                                               swapchain_semaphores.data(),
+                                               static_cast<uint32_t>(swapchain_semaphores.size()) };
 
-   for (uint32_t i = 0; i < present_info.waitSemaphoreCount; ++i)
-   {
-      pipeline_stage_flags[i] = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-   }
-
-   VkSubmitInfo submit_info = {
-      VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      NULL,
-      present_info.waitSemaphoreCount,
-      present_info.pWaitSemaphores,
-      pipeline_stage_flags.data(),
-      0,
-      NULL,
-      static_cast<uint32_t>(swapchain_semaphores.size()),
-      swapchain_semaphores.data(),
-   };
-
-   TRY(device_data.disp.QueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE));
+   TRY(wsi::sync_queue_submit(device_data, queue, VK_NULL_HANDLE, semaphores));
    return VK_SUCCESS;
 }
 
