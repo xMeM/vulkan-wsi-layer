@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2022-2023 Arm Limited.
+ * Copyright (c) 2017-2019, 2022-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -36,8 +36,14 @@ namespace headless
 class surface_properties : public wsi::surface_properties
 {
 public:
+   surface_properties();
+
    VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                      VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
+
+   VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
+                                     const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                     VkSurfaceCapabilities2KHR *pSurfaceCapabilities) override;
 
    VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
                                 VkSurfaceFormatKHR *surfaceFormats,
@@ -53,6 +59,15 @@ public:
    bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) override;
 
    static surface_properties &get_instance();
+
+private:
+   /* List of supported presentation modes */
+   std::array<VkPresentModeKHR, 4> supported_modes;
+
+   /* Stores compatible presentation modes */
+   std::array<present_mode_compatibility, 4> present_mode_compatibilities;
+
+   void populate_present_mode_compatibilities() override;
 };
 
 } /* namespace headless */

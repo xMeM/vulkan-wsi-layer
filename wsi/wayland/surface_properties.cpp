@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -47,15 +47,24 @@ namespace wsi
 namespace wayland
 {
 
-surface_properties::surface_properties(surface &wsi_surface, const util::allocator &allocator)
-   : specific_surface(&wsi_surface)
-   , supported_formats(allocator)
+void surface_properties::populate_present_mode_compatibilities()
 {
+   present_mode_compatibilities = {
+      present_mode_compatibility{ VK_PRESENT_MODE_FIFO_KHR, 1, { VK_PRESENT_MODE_FIFO_KHR } },
+      present_mode_compatibility{ VK_PRESENT_MODE_MAILBOX_KHR, 1, { VK_PRESENT_MODE_MAILBOX_KHR } }
+   };
+}
+
+surface_properties::surface_properties(surface *wsi_surface, const util::allocator &allocator)
+   : specific_surface(wsi_surface)
+   , supported_formats(allocator)
+   , supported_modes({ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR })
+{
+   populate_present_mode_compatibilities();
 }
 
 surface_properties::surface_properties()
-   : specific_surface(nullptr)
-   , supported_formats(util::allocator::get_generic())
+   : surface_properties(nullptr, util::allocator::get_generic())
 {
 }
 
@@ -68,6 +77,7 @@ surface_properties &surface_properties::get_instance()
 VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
                                                       VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
 {
+
    /* Image count limits */
    get_surface_capabilities_common(physical_device, pSurfaceCapabilities);
    pSurfaceCapabilities->minImageCount = 2;
@@ -75,6 +85,19 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    /* Composite alpha */
    pSurfaceCapabilities->supportedCompositeAlpha = static_cast<VkCompositeAlphaFlagBitsKHR>(
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR | VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR);
+   return VK_SUCCESS;
+}
+
+VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
+                                                      const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                                      VkSurfaceCapabilities2KHR *pSurfaceCapabilities)
+{
+   TRY(check_surface_present_mode_query_is_supported(pSurfaceInfo, supported_modes));
+
+   /* Image count limits */
+   get_surface_capabilities(physical_device, &pSurfaceCapabilities->surfaceCapabilities);
+
+   get_surface_present_mode_compatibility_common(pSurfaceInfo, pSurfaceCapabilities, present_mode_compatibilities);
 
    return VK_SUCCESS;
 }
@@ -213,13 +236,7 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                                        uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes)
 {
-
-   static const std::array<VkPresentModeKHR, 2> modes = {
-      VK_PRESENT_MODE_FIFO_KHR,
-      VK_PRESENT_MODE_MAILBOX_KHR,
-   };
-
-   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, modes);
+   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, supported_modes);
 }
 
 VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)

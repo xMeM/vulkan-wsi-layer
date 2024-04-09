@@ -46,6 +46,27 @@ namespace headless
 
 constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
 
+void surface_properties::populate_present_mode_compatibilities()
+{
+   present_mode_compatibilities = {
+      present_mode_compatibility{
+         VK_PRESENT_MODE_FIFO_KHR, 1, { VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR } },
+      present_mode_compatibility{
+         VK_PRESENT_MODE_FIFO_RELAXED_KHR, 1, { VK_PRESENT_MODE_FIFO_RELAXED_KHR, VK_PRESENT_MODE_FIFO_KHR } },
+      present_mode_compatibility{
+         VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR, 1, { VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR } },
+      present_mode_compatibility{
+         VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR, 1, { VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR } },
+   };
+}
+
+surface_properties::surface_properties()
+   : supported_modes({ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+                       VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR, VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR })
+{
+   populate_present_mode_compatibilities();
+}
+
 surface_properties &surface_properties::get_instance()
 {
    static surface_properties instance;
@@ -56,7 +77,16 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
                                                       VkSurfaceCapabilitiesKHR *surface_capabilities)
 {
    get_surface_capabilities_common(physical_device, surface_capabilities);
+   return VK_SUCCESS;
+}
 
+VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
+                                                      const VkPhysicalDeviceSurfaceInfo2KHR *surface_info,
+                                                      VkSurfaceCapabilities2KHR *surface_capabilities)
+{
+   TRY(check_surface_present_mode_query_is_supported(surface_info, supported_modes));
+   get_surface_capabilities_common(physical_device, &surface_capabilities->surfaceCapabilities);
+   get_surface_present_mode_compatibility_common(surface_info, surface_capabilities, present_mode_compatibilities);
    return VK_SUCCESS;
 }
 
@@ -110,15 +140,7 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
 {
    UNUSED(physical_device);
    UNUSED(surface);
-
-   static const std::array<VkPresentModeKHR, 4> modes = {
-      VK_PRESENT_MODE_FIFO_KHR,
-      VK_PRESENT_MODE_FIFO_RELAXED_KHR,
-      VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR,
-      VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR,
-   };
-
-   return get_surface_present_modes_common(present_mode_count, present_modes, modes);
+   return get_surface_present_modes_common(present_mode_count, present_modes, supported_modes);
 }
 
 VWL_VKAPI_CALL(VkResult)

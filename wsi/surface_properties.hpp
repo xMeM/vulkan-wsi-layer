@@ -41,6 +41,19 @@
 namespace wsi
 {
 
+static constexpr uint32_t MAX_PRESENT_MODES = 6;
+struct present_mode_compatibility
+{
+   /* Presentation mode */
+   VkPresentModeKHR present_mode;
+
+   /* Number of presentation modes compatible */
+   uint32_t present_mode_count;
+
+   /* Stores the compatible presentation modes */
+   std::array<VkPresentModeKHR, MAX_PRESENT_MODES> compatible_present_modes;
+};
+
 /**
  * @brief The base surface property query interface.
  */
@@ -52,6 +65,13 @@ public:
     */
    virtual VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                              VkSurfaceCapabilitiesKHR *surface_capabilities) = 0;
+
+   /**
+    * @brief Implementation of vkGetPhysicalDeviceSurfaceCapabilities2KHR for the specific VkSurface type.
+    */
+   virtual VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
+                                             const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                             VkSurfaceCapabilities2KHR *surface_capabilities) = 0;
 
    /**
     * @brief Implementation of vkGetPhysicalDeviceSurfaceFormatsKHR for the specific VkSurface type.
@@ -94,6 +114,12 @@ public:
 
    /* There is no maximum theoretically speaking however we choose 6 for practicality */
    static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 6;
+
+private:
+   /**
+    * @brief Set which presentation modes are compatible with each other for a particular surface
+    */
+   virtual void populate_present_mode_compatibilities() = 0;
 };
 
 class surface_format_properties
@@ -205,6 +231,36 @@ VkResult surface_properties_formats_helper(It begin, It end, uint32_t *surface_f
 }
 
 /**
+ * @brief Common function for handling VkSurfacePresentModeEXT.
+ *
+ * If VkSurfacePresentModeEXT is present in the pNext chain of VkPhysicalDeviceSurfaceInfo2KHR, then
+ * the presentation mode specified in the VkSurfacePresentModeEXT struct is checked to see if it is
+ * supported by the surface.
+ *
+ * @param surface_info             Pointer to Vulkan surface info struct.
+ * @param modes                    Array of presentation modes supported by the surface.
+ *
+ * @return VK_SUCCESS on success, VK_ERROR_OUT_OF_HOST_MEMORY otherwise.
+ */
+template <std::size_t SIZE>
+VkResult check_surface_present_mode_query_is_supported(const VkPhysicalDeviceSurfaceInfo2KHR *surface_info,
+                                                       const std::array<VkPresentModeKHR, SIZE> &modes)
+{
+   auto surface_present_mode =
+      util::find_extension<VkSurfacePresentModeEXT>(VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_EXT, surface_info);
+   if (surface_present_mode != nullptr)
+   {
+      VkPresentModeKHR present_mode = surface_present_mode->presentMode;
+      if (std::find(modes.begin(), modes.end(), present_mode) == modes.end())
+      {
+         WSI_LOG_ERROR("Querying surface capability support for a present mode that is not supported by the surface");
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+   }
+   return VK_SUCCESS;
+}
+
+/**
  * @brief Common function for the get_surface_capabilities.
  *
  * Initiates the different fields in surface_capabilities struct, also
@@ -253,6 +309,57 @@ VkResult get_surface_present_modes_common(uint32_t *present_mode_count, VkPresen
    }
 
    return res;
+}
+
+/**
+ * @brief Common function for handling VkSurfacePresentModeCompatibilityEXT if it exists in the pNext chain of VkSurfaceCapabilities2KHR.
+ *
+ * If pSurfaceInfo contains a VkSurfacePresentModeEXT struct in its pNext chain, and pSurfaceCapabilities contains a VkSurfacePresentModeCompatibilityEXT struct
+ * then this function fills the VkSurfacePresentModeCompatibilityEXT struct with the presentation modes that are compatible with the presentation mode specified
+ * in the VkSurfacePresentModeEXT struct.
+ *
+ * @param pSurfaceInfo                 Pointer to surface info that may or may not contain a VkSurfacePresentModeEXT.
+ * @param pSurfaceCapabilities         Pointer to surface capabilities that may or may not contain a VkSurfacePresentModeCompatibilityEXT struct.
+ * @param present_mode_compatibilities A table containing a mapping of presentation modes and what other modes they are compatible with.
+ *
+ */
+template <std::size_t SIZE>
+void get_surface_present_mode_compatibility_common(
+   const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo, VkSurfaceCapabilities2KHR *pSurfaceCapabilities,
+   const std::array<present_mode_compatibility, SIZE> &present_mode_compatibilities)
+{
+   auto surface_present_mode =
+      util::find_extension<VkSurfacePresentModeEXT>(VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_EXT, pSurfaceInfo);
+   auto surface_present_mode_compatibility = util::find_extension<VkSurfacePresentModeCompatibilityEXT>(
+      VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT, pSurfaceCapabilities);
+
+   if (surface_present_mode == nullptr || surface_present_mode_compatibility == nullptr)
+   {
+      return;
+   }
+
+   VkPresentModeKHR present_mode = surface_present_mode->presentMode;
+   auto it = std::find_if(present_mode_compatibilities.begin(), present_mode_compatibilities.end(),
+                          [present_mode](present_mode_compatibility p) { return p.present_mode == present_mode; });
+   if (it == present_mode_compatibilities.end())
+   {
+      WSI_LOG_ERROR("Querying compatible presentation mode support for a presentation mode that is not supported.");
+      return;
+   }
+   const present_mode_compatibility &surface_supported_compatibility = *it;
+
+   if (surface_present_mode_compatibility->pPresentModes == nullptr)
+   {
+      surface_present_mode_compatibility->presentModeCount = surface_supported_compatibility.present_mode_count;
+      return;
+   }
+
+   surface_present_mode_compatibility->presentModeCount = std::min(surface_present_mode_compatibility->presentModeCount,
+                                                                   surface_supported_compatibility.present_mode_count);
+   std::copy(surface_supported_compatibility.compatible_present_modes.begin(),
+             surface_supported_compatibility.compatible_present_modes.begin() +
+                surface_present_mode_compatibility->presentModeCount,
+             surface_present_mode_compatibility->pPresentModes);
 }
 
 } /* namespace wsi */

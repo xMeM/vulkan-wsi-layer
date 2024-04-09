@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -48,12 +48,15 @@ class surface;
 class surface_properties : public wsi::surface_properties
 {
 public:
-   surface_properties(surface &wsi_surface, const util::allocator &alloc);
+   surface_properties(surface *wsi_surface, const util::allocator &alloc);
 
    static surface_properties &get_instance();
 
    VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                      VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
+   VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
+                                     const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                     VkSurfaceCapabilities2KHR *pSurfaceCapabilities) override;
    VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
                                 VkSurfaceFormatKHR *surfaceFormats,
                                 VkSurfaceFormat2KHR *extended_surface_formats) override;
@@ -77,6 +80,14 @@ private:
    surface *specific_surface;
    /** Set of supported Vulkan formats by the @ref specific_surface. */
    surface_format_properties_map supported_formats;
+
+   /* List of supported presentation modes */
+   std::array<VkPresentModeKHR, 2> supported_modes;
+
+   /* Stores compatible presentation modes */
+   std::array<present_mode_compatibility, 2> present_mode_compatibilities;
+
+   void populate_present_mode_compatibilities() override;
 };
 
 } // namespace wayland

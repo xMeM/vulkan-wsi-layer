@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, 2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2016-2017, 2019, 2021-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -70,12 +70,7 @@ wsi_layer_vkGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDe
          shared_present_surface_cap_struct->sharedPresentSupportedUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
       }
 
-      /*
-       * Any of the extensions that extend pSurfaceInfo are not supported by the
-       * swapchain implementation so it is safe to ignore pNext here, even if
-       * the extensions are supported by the ICD.
-       */
-      return props->get_surface_capabilities(physicalDevice, &pSurfaceCapabilities->surfaceCapabilities);
+      return props->get_surface_capabilities(physicalDevice, pSurfaceInfo, pSurfaceCapabilities);
    }
 
    return instance.disp.GetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice, pSurfaceInfo, pSurfaceCapabilities);
