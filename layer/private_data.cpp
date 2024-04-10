@@ -65,7 +65,7 @@ VkResult instance_dispatch_table::populate(VkInstance instance, PFN_vkGetInstanc
       e.fn = ret;
       e.user_visible = false;
 
-      if (!entrypoints->try_insert(std::make_pair(e.name, e)).has_value())
+      if (!m_entrypoints->try_insert(std::make_pair(e.name, e)).has_value())
       {
          WSI_LOG_ERROR("Failed to allocate memory for instance dispatch table entry.");
          return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -79,7 +79,7 @@ void dispatch_table::set_user_enabled_extensions(const char *const *extension_na
 {
    for (size_t i = 0; i < extension_count; i++)
    {
-      for (auto &entrypoint : *entrypoints)
+      for (auto &entrypoint : *m_entrypoints)
       {
          if (!strcmp(entrypoint.second.ext_name, extension_names[i]))
          {
@@ -92,8 +92,8 @@ void dispatch_table::set_user_enabled_extensions(const char *const *extension_na
 PFN_vkVoidFunction instance_dispatch_table::get_user_enabled_entrypoint(VkInstance instance, uint32_t api_version,
                                                                         const char *fn_name) const
 {
-   auto item = entrypoints->find(fn_name);
-   if (item != entrypoints->end())
+   auto item = m_entrypoints->find(fn_name);
+   if (item != m_entrypoints->end())
    {
       /* An entrypoint is allowed to use if it has been enabled by the user or is included in the core specficiation of the API version.
        * Entrypoints included in API version 1.0 are allowed by default. */
@@ -133,7 +133,7 @@ VkResult device_dispatch_table::populate(VkDevice dev, PFN_vkGetDeviceProcAddr g
       e.fn = ret;
       e.user_visible = false;
 
-      if (!entrypoints->try_insert(std::make_pair(e.name, e)).has_value())
+      if (!m_entrypoints->try_insert(std::make_pair(e.name, e)).has_value())
       {
          WSI_LOG_ERROR("Failed to allocate memory for device dispatch table entry.");
          return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -146,8 +146,8 @@ VkResult device_dispatch_table::populate(VkDevice dev, PFN_vkGetDeviceProcAddr g
 PFN_vkVoidFunction device_dispatch_table::get_user_enabled_entrypoint(VkDevice device, uint32_t api_version,
                                                                       const char *fn_name) const
 {
-   auto item = entrypoints->find(fn_name);
-   if (item != entrypoints->end())
+   auto item = m_entrypoints->find(fn_name);
+   if (item != m_entrypoints->end())
    {
       /* An entrypoint is allowed to use if it has been enabled by the user or is included in the core specficiation of the API version.
        * Entrypoints included in API version 1.0 are allowed by default. */
@@ -165,8 +165,7 @@ PFN_vkVoidFunction device_dispatch_table::get_user_enabled_entrypoint(VkDevice d
    return GetDeviceProcAddr(device, fn_name).value_or(nullptr);
 }
 
-instance_private_data::instance_private_data(instance_dispatch_table &table,
-                                             PFN_vkSetInstanceLoaderData set_loader_data,
+instance_private_data::instance_private_data(instance_dispatch_table table, PFN_vkSetInstanceLoaderData set_loader_data,
                                              util::wsi_platform_set enabled_layer_platforms, const uint32_t api_version,
                                              const util::allocator &alloc)
    : disp{ std::move(table) }
@@ -191,13 +190,13 @@ static inline void *get_key(dispatchable_type dispatchable_object)
    return *reinterpret_cast<void **>(dispatchable_object);
 }
 
-VkResult instance_private_data::associate(VkInstance instance, instance_dispatch_table &table,
+VkResult instance_private_data::associate(VkInstance instance, instance_dispatch_table table,
                                           PFN_vkSetInstanceLoaderData set_loader_data,
                                           util::wsi_platform_set enabled_layer_platforms, const uint32_t api_version,
                                           const util::allocator &allocator)
 {
-   auto instance_data = allocator.make_unique<instance_private_data>(table, set_loader_data, enabled_layer_platforms,
-                                                                     api_version, allocator);
+   auto instance_data = allocator.make_unique<instance_private_data>(std::move(table), set_loader_data,
+                                                                     enabled_layer_platforms, api_version, allocator);
 
    if (instance_data == nullptr)
    {
@@ -383,7 +382,7 @@ bool instance_private_data::is_instance_extension_enabled(const char *extension_
 }
 
 device_private_data::device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
-                                         device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                                         device_dispatch_table table, PFN_vkSetDeviceLoaderData set_loader_data,
                                          const util::allocator &alloc)
    : disp{ std::move(table) }
    , instance_data{ inst_data }
@@ -401,11 +400,11 @@ device_private_data::device_private_data(instance_private_data &inst_data, VkPhy
 }
 
 VkResult device_private_data::associate(VkDevice dev, instance_private_data &inst_data, VkPhysicalDevice phys_dev,
-                                        device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                                        device_dispatch_table table, PFN_vkSetDeviceLoaderData set_loader_data,
                                         const util::allocator &allocator)
 {
-   auto device_data =
-      allocator.make_unique<device_private_data>(inst_data, phys_dev, dev, table, set_loader_data, allocator);
+   auto device_data = allocator.make_unique<device_private_data>(inst_data, phys_dev, dev, std::move(table),
+                                                                 set_loader_data, allocator);
 
    if (device_data == nullptr)
    {

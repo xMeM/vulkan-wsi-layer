@@ -82,6 +82,19 @@ static T get_instance_proc_addr(PFN_vkGetInstanceProcAddr fp_get_instance_proc_a
    return func;
 }
 
+template <typename T>
+static T get_device_proc_addr(PFN_vkGetDeviceProcAddr fp_get_device_proc_addr, const char *name,
+                              VkDevice device = VK_NULL_HANDLE)
+{
+   T func = reinterpret_cast<T>(fp_get_device_proc_addr(device, name));
+   if (func == nullptr)
+   {
+      WSI_LOG_WARNING("Failed to get address of %s", name);
+   }
+
+   return func;
+}
+
 /* This is where the layer is initialised and the instance dispatch table is constructed. */
 VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
                                     VkInstance *pInstance)
@@ -148,42 +161,41 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     * Also, the loader filters the extension list to ensure that ICDs do not see extensions that they do not support.
     */
    TRY_LOG(fpCreateInstance(&modified_info, pAllocator, pInstance), "Failed to create the instance");
+   /* Note: If the call to vkCreateInstance succeeded, the loader will do the clean-up for us
+    * after this function returns with an error code. We can't call vkDestroyInstance
+    * ourselves as this will cause double-free from the loader attempting to clean up after us.
+    * Any failing calls below this point should NOT call vkDestroyInstance and rather just
+    * return the error code. */
 
    /* Following the spec: use the callbacks provided to vkCreateInstance() if not nullptr,
     * otherwise use the default callbacks.
     */
    util::allocator instance_allocator{ VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
-   instance_dispatch_table table{ instance_allocator };
-   VkResult result = table.populate(*pInstance, fpGetInstanceProcAddr);
-   if (result != VK_SUCCESS)
+   std::optional<instance_dispatch_table> table = instance_dispatch_table::create(instance_allocator);
+   if (!table.has_value())
    {
-      table.DestroyInstance(*pInstance, pAllocator);
-      return result;
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
-   table.set_user_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+
+   TRY_LOG_CALL(table->populate(*pInstance, fpGetInstanceProcAddr));
+   table->set_user_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
 
    uint32_t api_version =
       pCreateInfo->pApplicationInfo != nullptr ? pCreateInfo->pApplicationInfo->apiVersion : VK_API_VERSION_1_3;
 
-   result = instance_private_data::associate(*pInstance, table, loader_callback, layer_platforms_to_enable, api_version,
-                                             instance_allocator);
-   if (result != VK_SUCCESS)
-   {
-      table.DestroyInstance(*pInstance, pAllocator);
-      return result;
-   }
+   TRY_LOG_CALL(instance_private_data::associate(*pInstance, std::move(*table), loader_callback,
+                                                 layer_platforms_to_enable, api_version, instance_allocator));
 
    /*
     * Store the enabled instance extensions in order to return nullptr in
     * vkGetInstanceProcAddr for functions of disabled extensions.
     */
-   result =
+   VkResult result =
       instance_private_data::get(*pInstance)
          .set_instance_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
    if (result != VK_SUCCESS)
    {
       instance_private_data::disassociate(*pInstance);
-      table.DestroyInstance(*pInstance, pAllocator);
       return result;
    }
 
@@ -243,27 +255,35 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    /* Now call create device on the chain further down the list. */
    TRY_LOG(fpCreateDevice(physicalDevice, &modified_info, pAllocator, pDevice), "Failed to create the device");
 
+   auto fn_destroy_device = get_device_proc_addr<PFN_vkDestroyDevice>(fpGetDeviceProcAddr, "vkDestroyDevice", *pDevice);
+   /* This should never be nullptr */
+   assert(fn_destroy_device != nullptr);
+
    /* Following the spec: use the callbacks provided to vkCreateDevice() if not nullptr, otherwise use the callbacks
     * provided to the instance (if no allocator callbacks was provided to the instance, it will use default ones).
     */
    util::allocator device_allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator };
-   device_dispatch_table table{ device_allocator };
-   VkResult result = table.populate(*pDevice, fpGetDeviceProcAddr);
+   std::optional<device_dispatch_table> table = device_dispatch_table::create(device_allocator);
+   if (!table.has_value())
+   {
+      fn_destroy_device(*pDevice, pAllocator);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   VkResult result = table->populate(*pDevice, fpGetDeviceProcAddr);
    if (result != VK_SUCCESS)
    {
-      table.DestroyDevice(*pDevice, pAllocator);
-
+      fn_destroy_device(*pDevice, pAllocator);
       return result;
    }
 
-   table.set_user_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+   table->set_user_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
 
-   result =
-      device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator);
+   result = device_private_data::associate(*pDevice, inst_data, physicalDevice, std::move(*table), loader_callback,
+                                           device_allocator);
    if (result != VK_SUCCESS)
    {
-      table.DestroyDevice(*pDevice, pAllocator);
-
+      fn_destroy_device(*pDevice, pAllocator);
       return result;
    }
 
@@ -276,7 +296,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    if (result != VK_SUCCESS)
    {
       layer::device_private_data::disassociate(*pDevice);
-      table.DestroyDevice(*pDevice, pAllocator);
+      fn_destroy_device(*pDevice, pAllocator);
       return result;
    }
 

@@ -74,14 +74,18 @@ struct entrypoint
 class dispatch_table
 {
 public:
+   using entrypoint_list = util::unordered_map<std::string, entrypoint>;
+
    /**
     * @brief Construct a new dispatch table object
     *
-    * @param allocator Allocator for entrypoints vector
+    * @param allocator Pre-allocated entrypoint storage container
     */
-   dispatch_table(const util::allocator &allocator)
+   dispatch_table(util::unique_ptr<entrypoint_list> entrypoints)
+      : m_entrypoints(std::move(entrypoints))
    {
-      entrypoints = allocator.make_unique<util::unordered_map<std::string, entrypoint>>(allocator);
+      /* This pointer is expected to be valid */
+      assert(m_entrypoints != nullptr);
    }
 
    /**
@@ -94,8 +98,8 @@ public:
    template <typename FunctionType>
    std::optional<FunctionType> get_fn(const char *fn_name) const
    {
-      auto fn = entrypoints->find(fn_name);
-      if (fn != entrypoints->end())
+      auto fn = m_entrypoints->find(fn_name);
+      if (fn != m_entrypoints->end())
       {
          return reinterpret_cast<FunctionType>(fn->second.fn);
       }
@@ -188,7 +192,7 @@ protected:
    }
 
    /** @brief Vector that holds the entrypoints of the dispatch table */
-   util::unique_ptr<util::unordered_map<std::string, entrypoint>> entrypoints;
+   util::unique_ptr<entrypoint_list> m_entrypoints;
 };
 
 /* Represents the maximum possible Vulkan API version. */
@@ -258,6 +262,17 @@ static constexpr uint32_t API_VERSION_MAX = UINT32_MAX;
 class instance_dispatch_table : public dispatch_table
 {
 public:
+   static std::optional<instance_dispatch_table> create(const util::allocator &allocator)
+   {
+      auto entrypoints = allocator.make_unique<dispatch_table::entrypoint_list>(allocator);
+      if (entrypoints == nullptr)
+      {
+         return std::nullopt;
+      }
+
+      return instance_dispatch_table{ std::move(entrypoints) };
+   }
+
    /**
     * @brief Populate the instance dispatch table with functions that it requires.
     * @note  The function greedy fetches all the functions it needs so even in the
@@ -294,6 +309,17 @@ public:
 
    INSTANCE_ENTRYPOINTS_LIST(DISPATCH_TABLE_SHORTCUT)
 #undef DISPATCH_TABLE_SHORTCUT
+
+private:
+   /**
+    * @brief Construct instance dispatch table object
+    *
+    * @param table Pre-allocated dispatch table
+    */
+   instance_dispatch_table(util::unique_ptr<dispatch_table::entrypoint_list> table)
+      : dispatch_table{ std::move(table) }
+   {
+   }
 };
 
 /* List of device entrypoints in the layer's device dispatch table.
@@ -381,6 +407,17 @@ public:
 class device_dispatch_table : public dispatch_table
 {
 public:
+   static std::optional<device_dispatch_table> create(const util::allocator &allocator)
+   {
+      auto entrypoints = allocator.make_unique<dispatch_table::entrypoint_list>(allocator);
+      if (entrypoints == nullptr)
+      {
+         return std::nullopt;
+      }
+
+      return device_dispatch_table{ std::move(entrypoints) };
+   }
+
    /**
     * @brief Populate the device dispatch table with functions that it requires.
     * @note  The function greedy fetches all the functions it needs so even in the
@@ -417,6 +454,17 @@ public:
 
    DEVICE_ENTRYPOINTS_LIST(DISPATCH_TABLE_SHORTCUT)
 #undef DISPATCH_TABLE_SHORTCUT
+
+private:
+   /**
+    * @brief Construct instance dispatch table object
+    *
+    * @param table Pre-allocated dispatch table
+    */
+   device_dispatch_table(util::unique_ptr<dispatch_table::entrypoint_list> table)
+      : dispatch_table{ std::move(table) }
+   {
+   }
 };
 
 /**
@@ -448,7 +496,7 @@ public:
     *
     * @return VkResult VK_SUCCESS if successful, otherwise an error.
     */
-   static VkResult associate(VkInstance instance, instance_dispatch_table &table,
+   static VkResult associate(VkInstance instance, instance_dispatch_table table,
                              PFN_vkSetInstanceLoaderData set_loader_data,
                              util::wsi_platform_set enabled_layer_platforms, const uint32_t api_version,
                              const util::allocator &allocator);
@@ -588,7 +636,7 @@ private:
     * @param enabled_layer_platforms The platforms that are enabled by the layer.
     * @param alloc The allocator that the instance_private_data will use.
     */
-   instance_private_data(instance_dispatch_table &table, PFN_vkSetInstanceLoaderData set_loader_data,
+   instance_private_data(instance_dispatch_table table, PFN_vkSetInstanceLoaderData set_loader_data,
                          util::wsi_platform_set enabled_layer_platforms, const uint32_t api_version,
                          const util::allocator &alloc);
 
@@ -652,7 +700,7 @@ public:
     * @return VkResult VK_SUCCESS if successful, otherwise an error
     */
    static VkResult associate(VkDevice dev, instance_private_data &inst_data, VkPhysicalDevice phys_dev,
-                             device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                             device_dispatch_table table, PFN_vkSetDeviceLoaderData set_loader_data,
                              const util::allocator &allocator);
 
    static void disassociate(VkDevice dev);
@@ -767,7 +815,7 @@ private:
     * @param alloc The allocator that the device_private_data will use.
     */
    device_private_data(instance_private_data &inst_data, VkPhysicalDevice phys_dev, VkDevice dev,
-                       device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
+                       device_dispatch_table table, PFN_vkSetDeviceLoaderData set_loader_data,
                        const util::allocator &alloc);
 
    /**
