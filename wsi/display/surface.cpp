@@ -35,8 +35,9 @@ namespace wsi
 namespace display
 {
 
-surface::surface(drm_display_mode *display_mode)
+surface::surface(drm_display_mode *display_mode, VkExtent2D extent)
    : m_display_mode(display_mode)
+   , m_extent(extent)
    , m_surface_properties(*this)
 {
 }
@@ -53,14 +54,9 @@ util::unique_ptr<swapchain_base> surface::allocate_swapchain(layer::device_priva
    return util::unique_ptr<swapchain_base>(alloc.make_unique<swapchain>(dev_data, allocator, *this));
 }
 
-VkExtent2D surface::get_current_extent() const
+VkExtent2D surface::get_extent() const
 {
-   return m_current_extent;
-}
-
-void surface::set_current_extent(VkExtent2D extent)
-{
-   m_current_extent = extent;
+   return m_extent;
 }
 
 drm_display_mode *surface::get_display_mode()

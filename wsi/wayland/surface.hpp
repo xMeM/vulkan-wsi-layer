@@ -40,12 +40,6 @@ namespace wsi
 namespace wayland
 {
 
-struct drm_format_pair
-{
-   uint32_t fourcc;
-   uint64_t modifier;
-};
-
 /**
  * Wayland callback for global wl_registry events to handle global objects required by @ref wsi::wayland::surface
  */

@@ -75,12 +75,6 @@ struct image_creation_parameters
    }
 };
 
-struct drm_format_pair
-{
-   uint32_t fourcc;
-   uint64_t modifier;
-};
-
 /**
  * @brief Display swapchain class.
  */

@@ -40,18 +40,42 @@ namespace display
 class surface : public wsi::surface
 {
 public:
-   surface(drm_display_mode *mode);
+   /**
+    * @brief Construct a new surface.
+    *
+    * @param mode The display mode to be used with the surface.
+    * @param extent The extent of the surface.
+    */
+   surface(drm_display_mode *mode, VkExtent2D extent);
+
    wsi::surface_properties &get_properties() override;
    util::unique_ptr<swapchain_base> allocate_swapchain(layer::device_private_data &dev_data,
                                                        const VkAllocationCallbacks *allocator) override;
 
-   VkExtent2D get_current_extent() const;
-   void set_current_extent(VkExtent2D extent);
+   /**
+    * @brief Get the extent of the surface.
+    */
+   VkExtent2D get_extent() const;
+
+   /**
+    * @brief Get the display mode associated with this surface.
+    */
    drm_display_mode *get_display_mode();
 
 private:
+   /**
+    * @brief Pointer to the DRM display mode used with this surface.
+    */
    drm_display_mode *m_display_mode;
-   VkExtent2D m_current_extent;
+
+   /**
+    * @brief The extent of this surface.
+    */
+   VkExtent2D m_extent;
+
+   /**
+    * @brief Surface properties instance specific to this surface.
+    */
    surface_properties m_surface_properties;
 };
 

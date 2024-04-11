@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,6 +35,15 @@
 
 namespace wsi
 {
+
+/**
+ * @brief Struct describing a DRM format with modifier.
+ */
+struct drm_format_pair
+{
+   uint32_t fourcc;
+   uint64_t modifier;
+};
 
 /**
  * @brief A generic WSI representation of a VkSurface.

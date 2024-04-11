@@ -54,9 +54,9 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
 
    if (m_specific_surface != nullptr)
    {
-      pSurfaceCapabilities->currentExtent = m_specific_surface->get_current_extent();
-      pSurfaceCapabilities->minImageExtent = m_specific_surface->get_current_extent();
-      pSurfaceCapabilities->maxImageExtent = m_specific_surface->get_current_extent();
+      pSurfaceCapabilities->currentExtent = m_specific_surface->get_extent();
+      pSurfaceCapabilities->minImageExtent = m_specific_surface->get_extent();
+      pSurfaceCapabilities->maxImageExtent = m_specific_surface->get_extent();
    }
 
    /* Image count limits */
@@ -80,73 +80,18 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 
-   int drm_fd = display->get_drm_fd();
-   if (drm_fd == -1)
-   {
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-   /* Allow userspace to query native primary plane information */
-   if (drmSetClientCap(drm_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) != 0)
-   {
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-
-   drm_plane_resources_owner plane_res{ drmModeGetPlaneResources(drm_fd) };
-   if (plane_res == nullptr || plane_res->count_planes == 0)
-   {
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
-
-   /* Look for the primary plane */
-   drm_plane_owner plane{ nullptr };
-   for (uint32_t i = 0; i < plane_res->count_planes; i++)
-   {
-      drm_plane_owner temp_plane{ drmModeGetPlane(drm_fd, plane_res->planes[i]) };
-      if (temp_plane != nullptr)
-      {
-         drm_object_properties_owner props{ drmModeObjectGetProperties(drm_fd, plane_res->planes[i],
-                                                                       DRM_MODE_OBJECT_PLANE) };
-         if (props != nullptr)
-         {
-            auto props_end = props->props + props->count_props;
-            auto prop = std::find_if(props->props, props_end, [drm_fd](auto &property_id) {
-               drm_property_owner prop{ drmModeGetProperty(drm_fd, property_id) };
-               if (prop != nullptr && !strcmp(prop->name, "type"))
-               {
-                  return true;
-               }
-               return false;
-            });
-            if (prop != props_end)
-            {
-               auto index = std::distance(props->props, prop);
-               if (props->prop_values[index] == DRM_PLANE_TYPE_PRIMARY)
-               {
-                  plane = std::move(temp_plane);
-                  break;
-               }
-            }
-         }
-      }
-   }
-
-   if (plane == nullptr)
-   {
-      WSI_LOG_ERROR("Failed to find primary plane.");
-      return VK_ERROR_SURFACE_LOST_KHR;
-   }
+   auto display_formats = display->get_supported_formats();
 
    uint32_t format_count = 0;
 
-   /* If this happens, it is just wrong */
-   assert(plane->count_formats > 0);
-   assert(plane->count_formats <= max_core_1_0_formats);
+   assert(display_formats->size() > 0);
+   assert(display_formats->size() <= max_core_1_0_formats);
 
    std::array<surface_format_properties, max_core_1_0_formats> formats{};
 
-   for (uint32_t i = 0; i < plane->count_formats; ++i)
+   for (const auto &drm_format : *display_formats)
    {
-      auto vk_format = util::drm::drm_to_vk_format(plane->formats[i]);
+      auto vk_format = util::drm::drm_to_vk_format(drm_format.fourcc);
       if (VK_FORMAT_UNDEFINED != vk_format)
       {
          formats[format_count] = surface_format_properties{ vk_format };
@@ -174,7 +119,7 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
        * The colorSpace value is how the presentation engine interprets the format.
        * The linearity of VkFormat and the display format may be different.
        */
-      auto vk_srgb_format = util::drm::drm_to_vk_srgb_format(plane->formats[i]);
+      auto vk_srgb_format = util::drm::drm_to_vk_srgb_format(drm_format.fourcc);
       if (VK_FORMAT_UNDEFINED != vk_srgb_format)
       {
          formats[format_count] = surface_format_properties{ vk_srgb_format };
@@ -263,17 +208,16 @@ CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateIn
 
    drm_display_mode *display_mode = reinterpret_cast<drm_display_mode *>(pCreateInfo->displayMode);
 
-   auto wsi_surface = allocator.make_unique<surface>(display_mode);
-   if (wsi_surface == nullptr)
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
-
    VkResult res = instance_data.disp.CreateDisplayPlaneSurfaceKHR(instance, pCreateInfo, pAllocator, pSurface);
    if (res == VK_SUCCESS)
    {
 
-      wsi_surface->set_current_extent(pCreateInfo->imageExtent);
+      auto wsi_surface = allocator.make_unique<surface>(display_mode, pCreateInfo->imageExtent);
+      if (wsi_surface == nullptr)
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+
       auto surface_base = util::unique_ptr<wsi::surface>(std::move(wsi_surface));
       res = instance_data.add_surface(*pSurface, surface_base);
       if (res != VK_SUCCESS)

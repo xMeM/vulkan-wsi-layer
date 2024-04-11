@@ -108,12 +108,18 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
    TRY_LOG(util::get_drm_format_properties(m_device_data.physical_device, info.format, drm_format_props),
            "Failed to get format properties");
 
+   auto &display = drm_display::get_display();
+   if (!display.has_value())
+   {
+      WSI_LOG_ERROR("DRM display not available.");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
    for (const auto &prop : drm_format_props)
    {
       drm_format_pair drm_format{ util::drm::vk_to_drm_format(info.format), prop.drmFormatModifier };
 
-      // TODO query surface class for support of format+modifier combination. For now support no modifiers.
-      if ((drm_format.modifier != 0))
+      if (!display->is_format_supported(drm_format))
       {
          continue;
       }
@@ -315,6 +321,9 @@ VkResult swapchain::create_framebuffer(const VkImageCreateInfo &image_create_inf
 {
    VkResult ret_code = VK_SUCCESS;
    std::array<uint32_t, util::MAX_PLANES> strides{ 0, 0, 0, 0 };
+   std::array<uint64_t, util::MAX_PLANES> modifiers{ 0, 0, 0, 0 };
+   const drm_format_pair allocated_format{ m_image_creation_parameters.m_allocated_format.fourcc,
+                                           m_image_creation_parameters.m_allocated_format.modifier };
 
    auto &display = drm_display::get_display();
    if (!display.has_value())
@@ -330,6 +339,7 @@ VkResult swapchain::create_framebuffer(const VkImageCreateInfo &image_create_inf
    {
       assert(image_data->external_mem.get_strides()[plane] > 0);
       strides[plane] = image_data->external_mem.get_strides()[plane];
+      modifiers[plane] = allocated_format.modifier;
       if (drmPrimeFDToHandle(display->get_drm_fd(), buffer_fds[plane], &buffer_handles[plane]) != 0)
       {
          WSI_LOG_ERROR("Failed to convert buffer FD to GEM handle: %s", std::strerror(errno));
@@ -337,9 +347,26 @@ VkResult swapchain::create_framebuffer(const VkImageCreateInfo &image_create_inf
       }
    }
 
-   int error = drmModeAddFB2(display->get_drm_fd(), image_create_info.extent.width, image_create_info.extent.height,
-                             m_image_creation_parameters.m_allocated_format.fourcc, buffer_handles.data(),
-                             strides.data(), image_data->external_mem.get_offsets().data(), &image_data->fb_id, 0);
+   if (!display->is_format_supported(allocated_format))
+   {
+      WSI_LOG_ERROR("Format not supported.");
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   int error = 0;
+   if (display->supports_fb_modifiers())
+   {
+      error = drmModeAddFB2WithModifiers(
+         display->get_drm_fd(), image_create_info.extent.width, image_create_info.extent.height,
+         allocated_format.fourcc, buffer_handles.data(), strides.data(), image_data->external_mem.get_offsets().data(),
+         modifiers.data(), &image_data->fb_id, DRM_MODE_FB_MODIFIERS);
+   }
+   else
+   {
+      error = drmModeAddFB2(display->get_drm_fd(), image_create_info.extent.width, image_create_info.extent.height,
+                            allocated_format.fourcc, buffer_handles.data(), strides.data(),
+                            image_data->external_mem.get_offsets().data(), &image_data->fb_id, 0);
+   }
 
    if (error != 0)
    {
