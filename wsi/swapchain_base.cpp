@@ -62,24 +62,47 @@ void swapchain_base::page_flip_thread()
     */
    while (m_page_flip_thread_run)
    {
-      /* Waiting for the page_flip_semaphore which will be signalled once there is an
-       * image to display.*/
-      if ((vk_res = m_page_flip_semaphore.wait(SEMAPHORE_TIMEOUT)) == VK_TIMEOUT)
-      {
-         /* Image is not ready yet. */
-         continue;
-      }
-      assert(vk_res == VK_SUCCESS);
 
-      /* We want to present the oldest queued for present image from our present queue,
-       * which we can find at the sc->pending_buffer_pool.head index. */
-      std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
-      auto pending_index = m_pending_buffer_pool.pop_front();
-      assert(pending_index.has_value());
-      image_status_lock.unlock();
+      uint32_t image_index;
+      if (m_present_mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR)
+      {
+         /* In continuous mode the application will only make one presentation request,
+          * therefore the page flip semaphore will only be signalled once. */
+         if (!m_first_present)
+         {
+            vk_res = VK_SUCCESS;
+         }
+         else if ((vk_res = m_page_flip_semaphore.wait(SEMAPHORE_TIMEOUT)) == VK_TIMEOUT)
+         {
+            /* Image is not ready yet. */
+            continue;
+         }
+         assert(vk_res == VK_SUCCESS);
+
+         /* For continuous mode there will be only one image in the swapchain.
+          * This image will always be used, and there is no pending state in this case. */
+         image_index = 0;
+      }
+      else
+      {
+         /* Waiting for the page_flip_semaphore which will be signalled once there is an
+          * image to display.*/
+         if ((vk_res = m_page_flip_semaphore.wait(SEMAPHORE_TIMEOUT)) == VK_TIMEOUT)
+         {
+            /* Image is not ready yet. */
+            continue;
+         }
+
+         /* We want to present the oldest queued for present image from our present queue,
+          * which we can find at the sc->pending_buffer_pool.head index. */
+         std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+         auto pending_index = m_pending_buffer_pool.pop_front();
+         assert(pending_index.has_value());
+         image_index = *pending_index;
+      }
 
       /* We may need to wait for the payload of the present sync of the oldest pending image to be finished. */
-      while ((vk_res = image_wait_present(sc_images[*pending_index], timeout)) == VK_TIMEOUT)
+      while ((vk_res = image_wait_present(sc_images[image_index], timeout)) == VK_TIMEOUT)
       {
          WSI_LOG_WARNING("Timeout waiting for image's present fences, retrying..");
       }
@@ -90,7 +113,7 @@ void swapchain_base::page_flip_thread()
          continue;
       }
 
-      call_present(*pending_index);
+      call_present(image_index);
    }
 }
 
@@ -157,10 +180,23 @@ void swapchain_base::unpresent_image(uint32_t presented_index)
 {
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
 
-   m_swapchain_images[presented_index].status = swapchain_image::FREE;
+   if (m_present_mode == VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
+       m_present_mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR)
+   {
+      m_swapchain_images[presented_index].status = swapchain_image::ACQUIRED;
+   }
+   else
+   {
+      m_swapchain_images[presented_index].status = swapchain_image::FREE;
+   }
 
    image_status_lock.unlock();
-   m_free_image_semaphore.post();
+
+   if (m_present_mode != VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR &&
+       m_present_mode != VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR)
+   {
+      m_free_image_semaphore.post();
+   }
 }
 
 swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAllocationCallbacks *callbacks)
@@ -519,6 +555,11 @@ VkResult swapchain_base::create_aliased_image_handle(VkImage *image)
    return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image);
 }
 
+VkResult swapchain_base::get_swapchain_status()
+{
+   return get_error_state();
+}
+
 VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
 {
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
@@ -561,6 +602,13 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    {
       wait_semaphores = present_info->pWaitSemaphores;
       sem_count = present_info->waitSemaphoreCount;
+   }
+
+   if (!m_page_flip_thread_run)
+   {
+      /* If the page flip thread is not running, we need to wait for any present payload here, before setting a new present payload. */
+      constexpr uint64_t WAIT_PRESENT_TIMEOUT = 1000000000; /* 1 second */
+      TRY_LOG_CALL(image_wait_present(m_swapchain_images[image_index], WAIT_PRESENT_TIMEOUT));
    }
 
    TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, wait_semaphores, sem_count));

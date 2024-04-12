@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -206,6 +206,13 @@ public:
    {
       return m_swapchain_images[image_index].present_semaphore;
    }
+
+   /**
+    * @brief Get the swapchain status.
+    *
+    * @return VK_SUCCESS
+    */
+   VkResult get_swapchain_status();
 
 protected:
    layer::device_private_data &m_device_data;

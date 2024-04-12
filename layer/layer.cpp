@@ -435,6 +435,11 @@ wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POS
       GET_PROC_ADDR(vkGetDeviceGroupPresentCapabilitiesKHR);
       GET_PROC_ADDR(vkGetDeviceGroupSurfacePresentModesKHR);
    }
+   if (layer::device_private_data::get(device).is_device_extension_enabled(
+          VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME))
+   {
+      GET_PROC_ADDR(vkGetSwapchainStatusKHR);
+   }
    GET_PROC_ADDR(vkDestroyDevice);
 
    GET_PROC_ADDR(vkCreateImage);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Arm Limited.
+ * Copyright (c) 2018-2019, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -76,3 +76,6 @@ wsi_layer_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo, c
 VWL_VKAPI_CALL(VkResult)
 wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
                              const VkBindImageMemoryInfo *pBindInfos) VWL_API_POST;
+
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR swapchain) VWL_API_POST;

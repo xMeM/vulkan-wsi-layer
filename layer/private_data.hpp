@@ -369,6 +369,8 @@ private:
    EP(GetSwapchainImagesKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                  \
    EP(AcquireNextImageKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                    \
    EP(QueuePresentKHR, VK_KHR_SWAPCHAIN_EXTENSION_NAME, API_VERSION_MAX, false)                                        \
+   /* VK_KHR_shared_presentable_image */                                                                               \
+   EP(GetSwapchainStatusKHR, VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME, API_VERSION_MAX, false)                   \
    /* VK_KHR_device_group + VK_KHR_swapchain or */                                                                     \
    /* 1.1 with VK_KHR_swapchain */                                                                                     \
    EP(AcquireNextImage2KHR, VK_KHR_DEVICE_GROUP_EXTENSION_NAME, VK_API_VERSION_1_1, false)                             \

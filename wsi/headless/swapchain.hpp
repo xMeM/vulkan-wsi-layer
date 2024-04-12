@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -57,11 +57,7 @@ protected:
     * @brief Platform specific init
     */
    VkResult init_platform(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
-                          bool &use_presentation_thread) override
-   {
-      use_presentation_thread = true;
-      return VK_SUCCESS;
-   };
+                          bool &use_presentation_thread) override;
 
    /**
     * @brief Creates and binds a new swapchain image.
@@ -109,7 +105,6 @@ protected:
                                  const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
 
 private:
-
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    VkImageCompressionControlEXT m_image_compression_control;
 #endif

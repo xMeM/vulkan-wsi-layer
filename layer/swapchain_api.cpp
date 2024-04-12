@@ -382,3 +382,18 @@ wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
    }
    return endpoint_result;
 }
+
+VWL_VKAPI_CALL(VkResult)
+wsi_layer_vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR swapchain) VWL_API_POST
+{
+   auto &device_data = layer::device_private_data::get(device);
+
+   if (!device_data.layer_owns_swapchain(swapchain))
+   {
+      return device_data.disp.GetSwapchainStatusKHR(device, swapchain);
+   }
+
+   auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapchain);
+
+   return sc->get_swapchain_status();
+}

@@ -17,6 +17,7 @@
             {"name" : "VK_KHR_get_surface_capabilities2", "spec_version" : "1"}
         ],
         "device_extensions": [
+            {"name": "VK_KHR_shared_presentable_image", "spec_version": "1", "entrypoints": ["vkGetSwapchainStatusKHR"]},
             {"name": "VK_EXT_image_compression_control_swapchain", "spec_version": "1"},
             {
                 "name": "VK_KHR_swapchain",

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -113,7 +113,12 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    UNUSED(physical_device);
    UNUSED(surface);
 
-   static const std::array<VkPresentModeKHR, 2> modes = { VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR };
+   static const std::array<VkPresentModeKHR, 4> modes = {
+      VK_PRESENT_MODE_FIFO_KHR,
+      VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+      VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR,
+      VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR,
+   };
 
    return get_surface_present_modes_common(present_mode_count, present_modes, modes);
 }
