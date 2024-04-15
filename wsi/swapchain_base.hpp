@@ -58,6 +58,7 @@ struct swapchain_image
       PENDING,
       PRESENTED,
       FREE,
+      UNALLOCATED,
    };
 
    /* Implementation specific data */
@@ -228,6 +229,15 @@ public:
     * @param indices Array of image indices
     */
    void release_images(uint32_t image_count, const uint32_t *indices);
+
+   /**
+    * @brief Check if bind is allowed for a swapchain image.
+    *
+    * @param image_index The image's index.
+    *
+    * @return VK_SUCCESS on success, an error code otherwise.
+    */
+   VkResult is_bind_allowed(uint32_t image_index) const;
 
 protected:
    layer::device_private_data &m_device_data;

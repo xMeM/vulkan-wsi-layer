@@ -342,6 +342,8 @@ wsi_layer_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
       else
       {
          auto sc = reinterpret_cast<wsi::swapchain_base *>(bind_sc_info->swapchain);
+         TRY_LOG(sc->is_bind_allowed(bind_sc_info->imageIndex),
+                 "Bind is not allowed on images that haven't been acquired first.");
          result = sc->bind_swapchain_image(device, &pBindInfos[i], bind_sc_info);
          error_message = "Failed to bind an image to the swapchain";
       }

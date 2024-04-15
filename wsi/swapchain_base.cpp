@@ -290,9 +290,19 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
       return result;
    }
 
+   const bool image_deferred_allocation =
+      image_create_info.flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
    for (auto &img : m_swapchain_images)
    {
-      TRY_LOG_CALL(create_and_bind_swapchain_image(image_create_info, img));
+      if (image_deferred_allocation)
+      {
+         m_image_create_info = image_create_info;
+         img.status = swapchain_image::UNALLOCATED;
+      }
+      else
+      {
+         TRY_LOG_CALL(create_and_bind_swapchain_image(image_create_info, img));
+      }
 
       VkSemaphoreCreateInfo semaphore_info = {};
       semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -422,6 +432,16 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    size_t i;
    for (i = 0; i < m_swapchain_images.size(); ++i)
    {
+      if (m_swapchain_images[i].status == swapchain_image::UNALLOCATED)
+      {
+         auto res = create_and_bind_swapchain_image(m_image_create_info, m_swapchain_images[i]);
+         if (res != VK_SUCCESS)
+         {
+            WSI_LOG_ERROR("Failed to allocate swapchain image.");
+            return res != VK_ERROR_INITIALIZATION_FAILED ? res : VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+      }
+
       if (m_swapchain_images[i].status == swapchain_image::FREE)
       {
          m_swapchain_images[i].status = swapchain_image::ACQUIRED;
@@ -714,6 +734,12 @@ void swapchain_base::release_images(uint32_t image_count, const uint32_t *indice
       assert(m_swapchain_images[index].status == swapchain_image::ACQUIRED);
       unpresent_image(index);
    }
+}
+
+VkResult swapchain_base::is_bind_allowed(uint32_t image_index) const
+{
+   return m_swapchain_images[image_index].status != swapchain_image::UNALLOCATED ? VK_SUCCESS :
+                                                                                   VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 } /* namespace wsi */
