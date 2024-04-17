@@ -47,7 +47,9 @@
 #endif
 
 #if BUILD_WSI_X11
+#include <X11/Xlib-xcb.h>
 #include <vulkan/vulkan_xcb.h>
+#include <vulkan/vulkan_xlib.h>
 #include "x11/surface_properties.hpp"
 #endif
 
@@ -67,6 +69,7 @@ static struct wsi_extension
 #endif
 #if BUILD_WSI_X11
    { { VK_KHR_XCB_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_XCB },
+   { { VK_KHR_XLIB_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_SPEC_VERSION }, VK_ICD_WSI_PLATFORM_XLIB },
 #endif
 };
 
@@ -84,6 +87,7 @@ static surface_properties *get_surface_properties(VkIcdWsiPlatform platform)
 #endif
 #if BUILD_WSI_X11
    case VK_ICD_WSI_PLATFORM_XCB:
+   case VK_ICD_WSI_PLATFORM_XLIB:
       return &x11::surface_properties::get_instance();
 #endif
    default:

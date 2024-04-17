@@ -199,7 +199,7 @@ if(BUILD_WSI_X11)
       ${CMAKE_CURRENT_BINARY_DIR})
 
    target_compile_options(wsi_x11 INTERFACE "-DBUILD_WSI_X11=1")
-   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3)
+   list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3 X11-xcb)
 else()
    list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_xcb_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()

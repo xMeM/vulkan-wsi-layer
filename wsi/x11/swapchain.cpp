@@ -37,6 +37,7 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <util/timed_semaphore.hpp>
 #include <vulkan/vulkan_core.h>
@@ -92,6 +93,7 @@ struct external_memory_android
       LOAD_SYMBOL(AHardwareBuffer_release)
       LOAD_SYMBOL(AHardwareBuffer_describe)
       LOAD_SYMBOL(AHardwareBuffer_getNativeHandle)
+      LOAD_SYMBOL(AHardwareBuffer_sendHandleToUnixSocket)
 #undef LOAD_SYMBOL
    }
 
@@ -123,12 +125,18 @@ struct external_memory_android
       return -1;
    }
 
+   int send(int socket_fd)
+   {
+      return pfnAHardwareBuffer_sendHandleToUnixSocket(m_ahwb, socket_fd);
+   }
+
 private:
    void *m_libandroid_handle;
    AHardwareBuffer *m_ahwb;
    void (*pfnAHardwareBuffer_describe)(const AHardwareBuffer *buffer, AHardwareBuffer_Desc *outDesc);
    void (*pfnAHardwareBuffer_release)(AHardwareBuffer *buffer);
    const native_handle_t *(*pfnAHardwareBuffer_getNativeHandle)(const AHardwareBuffer *buffer);
+   int (*pfnAHardwareBuffer_sendHandleToUnixSocket)(const AHardwareBuffer *buffer, int socketFd);
 };
 
 struct image_data
@@ -213,12 +221,8 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
       return res;
    }
 
-   VkMemoryRequirements memory_requirements = {};
-   m_device_data.disp.GetImageMemoryRequirements(m_device, image.image, &memory_requirements);
-
    /* Find a memory type */
-   size_t mem_type_idx =
-      get_memory_type(m_memory_props, memory_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+   size_t mem_type_idx = get_memory_type(m_memory_props, 0xFFFFFFFF, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
    if (mem_type_idx < 0)
    {
       WSI_LOG_ERROR("required memory type not found");
@@ -285,6 +289,7 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    {
       try
       {
+         int fds[2];
          AHardwareBuffer *ahwb;
 
          VkMemoryGetAndroidHardwareBufferInfoANDROID get_ahb_info;
@@ -297,15 +302,27 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
          {
             throw std::runtime_error("vkGetMemoryAndroidHardwareBufferANDROID failed");
          }
+         auto external_memory = external_memory_android(ahwb);
 
-         int fd = external_memory_android(ahwb).dupfd();
+         if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) < 0)
+         {
+            throw std::runtime_error("socketpair failed");
+         }
 
          data->pixmap = xcb_generate_id(m_connection);
 
-         auto cookie = xcb_dri3_pixmap_from_buffers_checked(m_connection, data->pixmap, m_window, 1,
-                                                            m_image_create_info.extent.width,
-                                                            m_image_create_info.extent.height, data->layout.rowPitch,
-                                                            data->layout.offset, 0, 0, 0, 0, 0, 0, 24, 32, 1274, &fd);
+         auto cookie = xcb_dri3_pixmap_from_buffers_checked(
+            m_connection, data->pixmap, m_window, 1, m_image_create_info.extent.width,
+            m_image_create_info.extent.height, data->layout.rowPitch, data->layout.offset, 0, 0, 0, 0, 0, 0, 24, 32,
+            1255, &fds[1]);
+         xcb_flush(m_connection);
+
+         uint8_t buf = 0;
+         read(fds[0], &buf, 1);
+
+         external_memory.send(fds[0]);
+
+         close(fds[0]);
 
          auto err = xcb_request_check(m_connection, cookie);
          if (err)

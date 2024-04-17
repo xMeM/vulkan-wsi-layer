@@ -36,9 +36,11 @@
 #include <ostream>
 #include <vector>
 #include <xcb/xcb.h>
+#include <X11/Xlib-xcb.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xcb.h>
+#include <vulkan/vulkan_xlib.h>
 #include <vulkan/vulkan_core.h>
 
 #include <layer/private_data.hpp>
@@ -120,9 +122,9 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    UNUSED(physical_device);
    UNUSED(surface);
 
-   static const std::array<VkPresentModeKHR, 4> modes = {
-      VK_PRESENT_MODE_FIFO_KHR,
+   static const std::array<VkPresentModeKHR, 2> modes = {
       VK_PRESENT_MODE_MAILBOX_KHR,
+      VK_PRESENT_MODE_FIFO_KHR,
    };
 
    return get_surface_present_modes_common(present_mode_count, present_modes, modes);
@@ -137,6 +139,11 @@ static const char *required_device_extensions[] = {
    VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
    VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME,
    VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+   VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+   VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
+   VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
+   VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+   VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
 };
 
 VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
@@ -243,11 +250,37 @@ GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint
    return VK_TRUE;
 }
 
+VWL_VKAPI_CALL(VkResult)
+CreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR *pCreateInfo,
+                     const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
+{
+   const VkXcbSurfaceCreateInfoKHR CreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
+      .flags = 0,
+      .pNext = NULL,
+      .connection = XGetXCBConnection(pCreateInfo->dpy),
+      .window = static_cast<xcb_window_t>(pCreateInfo->window),
+   };
+   return CreateXcbSurfaceKHR(instance, &CreateInfo, pAllocator, pSurface);
+}
+
+VWL_VKAPI_CALL(VkBool32)
+GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, Display *dpy,
+                                            VisualID visualID)
+{
+   return GetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice, queueFamilyIndex, XGetXCBConnection(dpy),
+                                                     visualID);
+}
+
 PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
 {
    if (strcmp(name, "vkCreateXcbSurfaceKHR") == 0)
    {
       return reinterpret_cast<PFN_vkVoidFunction>(CreateXcbSurfaceKHR);
+   }
+   if (strcmp(name, "vkCreateXlibSurfaceKHR") == 0)
+   {
+      return reinterpret_cast<PFN_vkVoidFunction>(CreateXlibSurfaceKHR);
    }
    if (strcmp(name, "vkGetPhysicalDeviceSurfaceSupportKHR") == 0)
    {
@@ -256,6 +289,10 @@ PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
    if (strcmp(name, "vkGetPhysicalDeviceXcbPresentationSupportKHR") == 0)
    {
       return reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceXcbPresentationSupportKHR);
+   }
+   if (strcmp(name, "vkGetPhysicalDeviceXlibPresentationSupportKHR") == 0)
+   {
+      return reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceXlibPresentationSupportKHR);
    }
    return nullptr;
 }
