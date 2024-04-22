@@ -115,6 +115,12 @@ public:
    /* There is no maximum theoretically speaking however we choose 6 for practicality */
    static constexpr uint32_t MAX_SWAPCHAIN_IMAGE_COUNT = 6;
 
+   /**
+    * @brief Get the scaling and gravity capabilities of the surface.
+    */
+   virtual void get_surface_present_scaling_and_gravity(
+      VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities) = 0;
+
 private:
    /**
     * @brief Set which presentation modes are compatible with each other for a particular surface

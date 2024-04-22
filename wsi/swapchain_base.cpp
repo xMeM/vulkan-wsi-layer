@@ -45,6 +45,7 @@
 #include "util/helpers.hpp"
 
 #include "swapchain_base.hpp"
+#include "wsi_factory.hpp"
 namespace wsi
 {
 
@@ -224,6 +225,34 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
 {
 }
 
+static VkResult handle_scaling_create_info(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info,
+                                           const VkSurfaceKHR &surface)
+{
+
+   auto present_scaling_create_info = util::find_extension<VkSwapchainPresentScalingCreateInfoEXT>(
+      VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_SCALING_CREATE_INFO_EXT, swapchain_create_info);
+   if (present_scaling_create_info != nullptr)
+   {
+      auto &device_data = layer::device_private_data::get(device);
+      auto &instance = device_data.instance_data;
+
+      VkSurfacePresentScalingCapabilitiesEXT scaling_capabilities = {};
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, surface);
+      props->get_surface_present_scaling_and_gravity(&scaling_capabilities);
+
+      if (((present_scaling_create_info->scalingBehavior != 0) &&
+           ((scaling_capabilities.supportedPresentScaling & present_scaling_create_info->scalingBehavior) == 0)) ||
+          ((present_scaling_create_info->presentGravityX != 0) &&
+           ((scaling_capabilities.supportedPresentGravityX & present_scaling_create_info->presentGravityX) == 0)) ||
+          ((present_scaling_create_info->presentGravityY != 0) &&
+           ((scaling_capabilities.supportedPresentGravityY & present_scaling_create_info->presentGravityY) == 0)))
+      {
+         return VK_ERROR_INITIALIZATION_FAILED;
+      }
+   }
+   return VK_SUCCESS;
+}
+
 VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info)
 {
    assert(device != VK_NULL_HANDLE);
@@ -255,6 +284,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+
+   TRY_LOG_CALL(handle_scaling_create_info(device, swapchain_create_info, m_surface));
 
    /* We have allocated images, we can call the platform init function if something needs to be done. */
    bool use_presentation_thread = true;

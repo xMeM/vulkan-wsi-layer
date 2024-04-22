@@ -68,6 +68,8 @@ private:
    std::array<present_mode_compatibility, 4> present_mode_compatibilities;
 
    void populate_present_mode_compatibilities() override;
+
+   void get_surface_present_scaling_and_gravity(VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities) override;
 };
 
 } /* namespace headless */

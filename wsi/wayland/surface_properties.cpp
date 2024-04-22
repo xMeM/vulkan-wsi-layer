@@ -99,6 +99,15 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
 
    get_surface_present_mode_compatibility_common(pSurfaceInfo, pSurfaceCapabilities, present_mode_compatibilities);
 
+   auto surface_scaling_capabilities = util::find_extension<VkSurfacePresentScalingCapabilitiesEXT>(
+      VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT, pSurfaceCapabilities);
+   if (surface_scaling_capabilities != nullptr)
+   {
+      get_surface_present_scaling_and_gravity(surface_scaling_capabilities);
+      surface_scaling_capabilities->minScaledImageExtent = pSurfaceCapabilities->surfaceCapabilities.minImageExtent;
+      surface_scaling_capabilities->maxScaledImageExtent = pSurfaceCapabilities->surfaceCapabilities.maxImageExtent;
+   }
+
    return VK_SUCCESS;
 }
 
@@ -392,6 +401,14 @@ PFN_vkVoidFunction surface_properties::get_proc_addr(const char *name)
 bool surface_properties::is_surface_extension_enabled(const layer::instance_private_data &instance_data)
 {
    return instance_data.is_instance_extension_enabled(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+}
+
+void surface_properties::get_surface_present_scaling_and_gravity(
+   VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities)
+{
+   scaling_capabilities->supportedPresentScaling = VK_PRESENT_SCALING_ONE_TO_ONE_BIT_EXT;
+   scaling_capabilities->supportedPresentGravityX = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
+   scaling_capabilities->supportedPresentGravityY = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
 }
 
 } // namespace wayland

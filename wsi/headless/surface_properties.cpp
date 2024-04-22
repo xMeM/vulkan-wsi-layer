@@ -87,6 +87,16 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    TRY(check_surface_present_mode_query_is_supported(surface_info, supported_modes));
    get_surface_capabilities_common(physical_device, &surface_capabilities->surfaceCapabilities);
    get_surface_present_mode_compatibility_common(surface_info, surface_capabilities, present_mode_compatibilities);
+
+   auto surface_scaling_capabilities = util::find_extension<VkSurfacePresentScalingCapabilitiesEXT>(
+      VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT, surface_capabilities);
+   if (surface_scaling_capabilities != nullptr)
+   {
+      get_surface_present_scaling_and_gravity(surface_scaling_capabilities);
+      surface_scaling_capabilities->minScaledImageExtent = surface_capabilities->surfaceCapabilities.minImageExtent;
+      surface_scaling_capabilities->maxScaledImageExtent = surface_capabilities->surfaceCapabilities.maxImageExtent;
+   }
+
    return VK_SUCCESS;
 }
 
@@ -188,6 +198,14 @@ VkResult surface_properties::get_required_instance_extensions(util::extension_li
 bool surface_properties::is_surface_extension_enabled(const layer::instance_private_data &instance_data)
 {
    return instance_data.is_instance_extension_enabled(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+}
+
+void surface_properties::get_surface_present_scaling_and_gravity(
+   VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities)
+{
+   scaling_capabilities->supportedPresentScaling = 0;
+   scaling_capabilities->supportedPresentGravityX = 0;
+   scaling_capabilities->supportedPresentGravityY = 0;
 }
 
 } /* namespace headless */
