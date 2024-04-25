@@ -60,16 +60,26 @@ protected:
                           bool &use_presentation_thread) override;
 
    /**
-    * @brief Creates and binds a new swapchain image.
+    * @brief Allocates and binds a new swapchain image.
+    *
+    * @param image_create_info Data to be used to create the image.
+    * @param image             Handle to the image.
+    *
+    * @return Returns VK_SUCCESS on success, otherwise an appropriate error code.
+    */
+   VkResult allocate_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
+
+   /**
+    * @brief Creates a new swapchain image.
     *
     * @param image_create_info Data to be used to create the image.
     * @param image             Handle to the image.
     *
     * @return If image creation is successful returns VK_SUCCESS, otherwise
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
-    * depending on the error that occured.
+    * depending on the error that occurred.
     */
-   VkResult create_and_bind_swapchain_image(VkImageCreateInfo image_create_info, wsi::swapchain_image &image) override;
+   VkResult create_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
 
    /**
     * @brief Method to perform a present - just calls unpresent_image on headless

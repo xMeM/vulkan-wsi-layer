@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Arm Limited.
+ * Copyright (c) 2022-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -68,7 +68,7 @@ uint32_t external_memory::get_num_planes()
    {
       for (uint32_t plane = 0; plane < MAX_PLANES; plane++)
       {
-         if (m_buffer_fds[plane] == -1)
+         if (m_strides[plane] == -1)
          {
             break;
          }

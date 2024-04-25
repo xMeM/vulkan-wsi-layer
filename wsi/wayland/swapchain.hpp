@@ -94,7 +94,17 @@ protected:
                           bool &use_presentation_thread) override;
 
    /**
-    * @brief Creates and binds a new swapchain image.
+    * @brief Allocates and binds a new swapchain image.
+    *
+    * @param image_create_info Data to be used to create the image.
+    * @param image             Handle to the image.
+    *
+    * @return Returns VK_SUCCESS on success, otherwise an appropriate error code.
+    */
+   VkResult allocate_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
+
+   /**
+    * @brief Creates a new swapchain image.
     *
     * @param image_create_info Data to be used to create the image.
     * @param image             Handle to the image.
@@ -103,7 +113,7 @@ protected:
     * will return VK_ERROR_OUT_OF_DEVICE_MEMORY or VK_ERROR_INITIALIZATION_FAILED
     * depending on the error that occurred.
     */
-   VkResult create_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
+   VkResult create_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
 
    /**
     * @brief Method to present an image
@@ -158,9 +168,10 @@ protected:
 private:
    VkResult create_wl_buffer(const VkImageCreateInfo &image_create_info, swapchain_image &image,
                              wayland_image_data *image_data);
-   VkResult allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data, VkImage *image);
+   VkResult allocate_image(VkImageCreateInfo &image_create_info, wayland_image_data *image_data);
    VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, wayland_image_data *image_data,
-                              util::vector<wsialloc_format> &importable_formats, wsialloc_format *allocated_format);
+                              util::vector<wsialloc_format> &importable_formats, wsialloc_format *allocated_format,
+                              bool avoid_allocation);
 
    struct wl_display *m_display;
    struct wl_surface *m_surface;

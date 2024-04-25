@@ -322,17 +322,18 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    }
 
    const bool image_deferred_allocation =
-      image_create_info.flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
+      swapchain_create_info->flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
    for (auto &img : m_swapchain_images)
    {
+      TRY(create_swapchain_image(image_create_info, img));
+
       if (image_deferred_allocation)
       {
-         m_image_create_info = image_create_info;
          img.status = swapchain_image::UNALLOCATED;
       }
       else
       {
-         TRY_LOG_CALL(create_and_bind_swapchain_image(image_create_info, img));
+         TRY_LOG_CALL(allocate_and_bind_swapchain_image(image_create_info, img));
       }
 
       VkSemaphoreCreateInfo semaphore_info = {};
@@ -465,7 +466,7 @@ VkResult swapchain_base::acquire_next_image(uint64_t timeout, VkSemaphore semaph
    {
       if (m_swapchain_images[i].status == swapchain_image::UNALLOCATED)
       {
-         auto res = create_and_bind_swapchain_image(m_image_create_info, m_swapchain_images[i]);
+         auto res = allocate_and_bind_swapchain_image(m_image_create_info, m_swapchain_images[i]);
          if (res != VK_SUCCESS)
          {
             WSI_LOG_ERROR("Failed to allocate swapchain image.");

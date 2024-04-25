@@ -76,31 +76,10 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    return VK_SUCCESS;
 }
 
-VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create, wsi::swapchain_image &image)
+VkResult swapchain::allocate_and_bind_swapchain_image(VkImageCreateInfo image_create, swapchain_image &image)
 {
    VkResult res = VK_SUCCESS;
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
-
-   m_image_create_info = image_create;
-#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   if (m_device_data.is_swapchain_compression_control_enabled())
-   {
-      /* Initialize compression control */
-      m_image_compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
-      m_image_compression_control.compressionControlPlaneCount =
-         m_image_compression_control_params.compression_control_plane_count;
-      m_image_compression_control.flags = m_image_compression_control_params.flags;
-      m_image_compression_control.pFixedRateFlags = m_image_compression_control_params.fixed_rate_flags.data();
-      m_image_compression_control.pNext = m_image_create_info.pNext;
-
-      m_image_create_info.pNext = &m_image_compression_control;
-   }
-#endif
-   res = m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
-   if (res != VK_SUCCESS)
-   {
-      return res;
-   }
 
    VkMemoryRequirements memory_requirements = {};
    m_device_data.disp.GetImageMemoryRequirements(m_device, image.image, &memory_requirements);
@@ -159,6 +138,27 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    data->present_fence = std::move(present_fence.value());
 
    return res;
+}
+
+VkResult swapchain::create_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image)
+{
+   m_image_create_info = image_create_info;
+#if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
+   if (m_device_data.is_swapchain_compression_control_enabled())
+   {
+      /* Initialize compression control */
+      m_image_compression_control.sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
+      m_image_compression_control.compressionControlPlaneCount =
+         m_image_compression_control_params.compression_control_plane_count;
+      m_image_compression_control.flags = m_image_compression_control_params.flags;
+      m_image_compression_control.pFixedRateFlags = m_image_compression_control_params.fixed_rate_flags.data();
+      m_image_compression_control.pNext = m_image_create_info.pNext;
+
+      m_image_create_info.pNext = &m_image_compression_control;
+   }
+#endif
+
+   return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
 }
 
 void swapchain::present_image(uint32_t pending_index)
