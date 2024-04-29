@@ -85,7 +85,7 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    surface_capabilities->minImageExtent = extent;
    surface_capabilities->maxImageExtent = extent;
 
-   surface_capabilities->minImageCount = 2;
+   surface_capabilities->minImageCount = 4;
    surface_capabilities->maxImageCount = 0;
 
    surface_capabilities->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;

@@ -32,6 +32,7 @@
 
 #include "surface.hpp"
 #include <cstdint>
+#include <atomic>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan.h>
 #include <wsi/swapchain_base.hpp>
@@ -116,8 +117,10 @@ protected:
                                  const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
 
 private:
-   bool free_image_found();
-   VkResult get_free_buffer(uint64_t *timeout) override;
+   void present_event_thread();
+   std::atomic<bool> m_present_event_thread_run;
+   std::atomic<bool> m_present_pending;
+   std::thread m_present_event_thread;
 
    surface *m_surface;
    uint64_t m_send_sbc;
@@ -129,7 +132,6 @@ private:
 
    bool has_dri3;
    bool has_present;
-   bool sw_wsi;
 
    xcb_special_event_t *m_special_event;
    VkPhysicalDeviceMemoryProperties m_memory_props;

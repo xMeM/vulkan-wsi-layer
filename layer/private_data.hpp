@@ -171,9 +171,7 @@ struct instance_dispatch_table
    OPTIONAL(ImportFenceFdKHR)                       \
    /* VK_KHR_external_semaphore_fd */               \
    OPTIONAL(ImportSemaphoreFdKHR)                   \
-   OPTIONAL(GetMemoryAndroidHardwareBufferANDROID)  \
-   OPTIONAL(MapMemory)                              \
-   OPTIONAL(UnmapMemory)
+   OPTIONAL(GetMemoryAndroidHardwareBufferANDROID)
 
 struct device_dispatch_table
 {

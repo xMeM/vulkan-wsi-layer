@@ -144,36 +144,35 @@ struct image_data
    /* Device memory backing the image. */
    VkDeviceMemory memory{};
    VkSubresourceLayout layout;
-   void *map;
 
    xcb_pixmap_t pixmap;
    uint64_t serial;
    fence_sync present_fence;
-
-   image_data()
-      : map(nullptr)
-      , pixmap(0)
-      , serial(0)
-   {
-   }
 };
 
 swapchain::swapchain(layer::device_private_data &dev_data, const VkAllocationCallbacks *pAllocator, surface *surface)
    : wsi::swapchain_base(dev_data, pAllocator)
+   , m_present_pending(false)
    , m_surface(surface)
    , m_send_sbc(0)
    , m_connection(surface->get_connection())
    , m_window(surface->get_window())
    , has_dri3(false)
    , has_present(false)
-   , sw_wsi(false)
 {
 }
 
 swapchain::~swapchain()
 {
+   m_present_event_thread_run = false;
+   m_present_pending = true;
+   m_present_pending.notify_one();
+   m_present_event_thread.join();
+
    auto cookie = xcb_free_gc(m_connection, m_gc);
    xcb_discard_reply(m_connection, cookie.sequence);
+
+   xcb_unregister_for_special_event(m_connection, m_special_event);
 
    /* Call the base's teardown */
    teardown();
@@ -285,105 +284,80 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
    m_device_data.disp.GetImageSubresourceLayout(m_device, image.image, &subres, &data->layout);
 
-   if (!sw_wsi)
+   try
    {
-      try
+      int fds[2];
+      AHardwareBuffer *ahwb;
+
+      VkMemoryGetAndroidHardwareBufferInfoANDROID get_ahb_info;
+      get_ahb_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
+      get_ahb_info.pNext = nullptr;
+      get_ahb_info.memory = data->memory;
+
+      res = m_device_data.disp.GetMemoryAndroidHardwareBufferANDROID(m_device, &get_ahb_info, &ahwb);
+      if (res != VK_SUCCESS)
       {
-         int fds[2];
-         AHardwareBuffer *ahwb;
-
-         VkMemoryGetAndroidHardwareBufferInfoANDROID get_ahb_info;
-         get_ahb_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
-         get_ahb_info.pNext = nullptr;
-         get_ahb_info.memory = data->memory;
-
-         res = m_device_data.disp.GetMemoryAndroidHardwareBufferANDROID(m_device, &get_ahb_info, &ahwb);
-         if (res != VK_SUCCESS)
-         {
-            throw std::runtime_error("vkGetMemoryAndroidHardwareBufferANDROID failed");
-         }
-         auto external_memory = external_memory_android(ahwb);
-
-         if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) < 0)
-         {
-            throw std::runtime_error("socketpair failed");
-         }
-
-         data->pixmap = xcb_generate_id(m_connection);
-
-         auto cookie = xcb_dri3_pixmap_from_buffers_checked(
-            m_connection, data->pixmap, m_window, 1, m_image_create_info.extent.width,
-            m_image_create_info.extent.height, data->layout.rowPitch, data->layout.offset, 0, 0, 0, 0, 0, 0, 24, 32,
-            1255, &fds[1]);
-         xcb_flush(m_connection);
-
-         uint8_t buf = 0;
-         read(fds[0], &buf, 1);
-
-         external_memory.send(fds[0]);
-
-         close(fds[0]);
-
-         auto err = xcb_request_check(m_connection, cookie);
-         if (err)
-         {
-            free(err);
-            throw std::runtime_error("xcb_dri3_pixmap_from_buffers failed");
-         }
+         throw std::runtime_error("vkGetMemoryAndroidHardwareBufferANDROID failed");
       }
-      catch (const std::exception &e)
+      auto external_memory = external_memory_android(ahwb);
+
+      if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) < 0)
       {
-         WSI_LOG_ERROR("%s", e.what());
-         WSI_LOG_ERROR("DRI3 is not available, falling back to sw WSI");
-         sw_wsi = true;
+         throw std::runtime_error("socketpair failed");
       }
+
+      data->pixmap = xcb_generate_id(m_connection);
+
+      auto cookie = xcb_dri3_pixmap_from_buffers_checked(
+         m_connection, data->pixmap, m_window, 1, m_image_create_info.extent.width, m_image_create_info.extent.height,
+         data->layout.rowPitch, data->layout.offset, 0, 0, 0, 0, 0, 0, 24, 32, 1255, &fds[1]);
+      xcb_flush(m_connection);
+
+      uint8_t buf = 0;
+      read(fds[0], &buf, 1);
+
+      external_memory.send(fds[0]);
+
+      close(fds[0]);
+
+      auto err = xcb_request_check(m_connection, cookie);
+      if (err)
+      {
+         free(err);
+         throw std::runtime_error("xcb_dri3_pixmap_from_buffers failed");
+      }
+   }
+   catch (const std::exception &e)
+   {
+      WSI_LOG_ERROR("%s", e.what());
+      destroy_image(image);
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    }
 
    return VK_SUCCESS;
 }
 
-bool swapchain::free_image_found()
+void swapchain::present_event_thread()
 {
-   std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
+   m_present_event_thread_run = true;
 
-   for (auto &img : m_swapchain_images)
+   while (m_present_event_thread_run)
    {
-      if (img.status == swapchain_image::FREE)
+      if (!m_present_pending)
       {
-         image_status_lock.unlock();
-         return true;
+         m_present_pending.wait(false);
       }
-   }
 
-   image_status_lock.unlock();
-   return false;
-}
+      if (!m_present_event_thread_run)
+      {
+         break;
+      }
 
-static long get_current_time_ns()
-{
-   std::timespec ts;
-   clock_gettime(CLOCK_MONOTONIC, &ts);
-   return ts.tv_nsec;
-}
-
-VkResult swapchain::get_free_buffer(uint64_t *timeout)
-{
-   if (sw_wsi)
-   {
-      if (free_image_found())
-         *timeout = 0;
-
-      return VK_SUCCESS;
-   }
-
-   long time = get_current_time_ns();
-
-   do
-   {
       auto event = xcb_wait_for_special_event(m_connection, m_special_event);
       if (event == nullptr)
       {
-         return VK_ERROR_SURFACE_LOST_KHR;
+         set_error_state(VK_ERROR_SURFACE_LOST_KHR);
+         break;
       }
 
       auto pe = reinterpret_cast<xcb_present_generic_event_t *>(event);
@@ -393,9 +367,9 @@ VkResult swapchain::get_free_buffer(uint64_t *timeout)
       {
          auto config = reinterpret_cast<xcb_present_configure_notify_event_t *>(event);
          if (config->pixmap_flags & (1 << 0))
-            return VK_ERROR_SURFACE_LOST_KHR;
+            set_error_state(VK_ERROR_SURFACE_LOST_KHR);
          else if (config->width != m_windowExtent.width || config->height != m_windowExtent.height)
-            return VK_SUBOPTIMAL_KHR;
+            set_error_state(VK_SUBOPTIMAL_KHR);
 
          break;
       }
@@ -407,63 +381,48 @@ VkResult swapchain::get_free_buffer(uint64_t *timeout)
             auto data = reinterpret_cast<image_data *>(m_swapchain_images[i].data);
             if (idle->pixmap == data->pixmap)
             {
-               if (m_swapchain_images[i].status != swapchain_image::FREE)
-               {
-                  unpresent_image(i);
-                  *timeout = 0;
-                  return VK_SUCCESS;
-               }
+               unpresent_image(i);
             }
+         }
+         break;
+      }
+      case XCB_PRESENT_EVENT_COMPLETE_NOTIFY:
+      {
+         auto complete = reinterpret_cast<xcb_present_complete_notify_event_t *>(event);
+         if (complete->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP)
+         {
+            m_present_pending = false;
+            m_present_pending.notify_one();
          }
          break;
       }
       }
       free(event);
-   } while (!free_image_found() && get_current_time_ns() - time < *timeout);
-
-   if (*timeout == 0)
-      return VK_NOT_READY;
-
-   return VK_TIMEOUT;
+   }
 }
 
 void swapchain::present_image(uint32_t pending_index)
 {
    image_data *image = reinterpret_cast<image_data *>(m_swapchain_images[pending_index].data);
 
-   if (sw_wsi)
+   if (m_present_pending)
    {
-      auto res = m_device_data.disp.MapMemory(m_device, image->memory, 0, VK_WHOLE_SIZE, 0, &image->map);
-      if (res != VK_SUCCESS)
+      if (m_present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
       {
-         WSI_LOG_ERROR("vkMapMemory failed:%d", res);
+         unpresent_image(pending_index);
          return;
       }
-      int stride = image->layout.rowPitch;
-      int bytesPerPixel = 4;
-      int width = stride / bytesPerPixel;
-      auto buffer = reinterpret_cast<uint8_t *>(image->map);
-      size_t max_request_size = static_cast<size_t>(xcb_get_maximum_request_length(m_connection)) * 4;
-      size_t max_strides = (max_request_size - sizeof(xcb_put_image_request_t)) / stride;
-      for (size_t y = 0; y < m_windowExtent.height; y += max_strides)
+      else if (m_present_mode == VK_PRESENT_MODE_FIFO_KHR)
       {
-         size_t num_strides = std::min(max_strides, m_windowExtent.height - y);
-         xcb_put_image(m_connection, XCB_IMAGE_FORMAT_Z_PIXMAP, m_window, m_gc, width, num_strides, 0, y, // dst x, y
-                       0,                                                                                 // left_pad
-                       m_depth,
-                       num_strides * stride, // data_len
-                       buffer + y * stride   // data
-         );
+         m_present_pending.wait(true);
       }
-      m_device_data.disp.UnmapMemory(m_device, image->memory);
-      unpresent_image(pending_index);
    }
-   else
-   {
-      image->serial = ++m_send_sbc;
-      xcb_present_pixmap(m_connection, m_window, image->pixmap, image->serial, 0, 0, 0, 0, 0, 0, 0,
-                         XCB_PRESENT_OPTION_NONE, 0, 0, 0, 0, nullptr);
-   }
+   m_present_pending = true;
+   m_present_pending.notify_one();
+
+   image->serial = ++m_send_sbc;
+   xcb_present_pixmap(m_connection, m_window, image->pixmap, image->serial, 0, 0, 0, 0, 0, 0, 0,
+                      XCB_PRESENT_OPTION_NONE, 0, 0, 0, 0, nullptr);
    xcb_flush(m_connection);
 }
 
@@ -491,10 +450,7 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
          m_device_data.disp.FreeMemory(m_device, data->memory, get_allocation_callbacks());
          data->memory = VK_NULL_HANDLE;
       }
-      if (!sw_wsi)
-      {
-         xcb_free_pixmap(m_connection, data->pixmap);
-      }
+      xcb_free_pixmap(m_connection, data->pixmap);
       m_allocator.destroy(1, data);
       image.data = nullptr;
    }
@@ -534,12 +490,6 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
 
    m_device_data.instance_data.disp.GetPhysicalDeviceMemoryProperties(m_device_data.physical_device, &m_memory_props);
 
-   m_surface->getWindowSizeAndDepth(&m_windowExtent, &m_depth);
-
-   m_gc = xcb_generate_id(m_connection);
-   auto gc_cookie = xcb_create_gc_checked(m_connection, m_gc, m_window, XCB_GC_GRAPHICS_EXPOSURES, (uint32_t[]){ 0 });
-   xcb_request_check(m_connection, gc_cookie);
-
    auto dri3_cookie = xcb_dri3_query_version_unchecked(m_connection, 1, 2);
    auto dri3_reply = xcb_dri3_query_version_reply(m_connection, dri3_cookie, nullptr);
    has_dri3 = dri3_reply && (dri3_reply->major_version > 1 || dri3_reply->minor_version >= 2);
@@ -550,16 +500,26 @@ VkResult swapchain::init_platform(VkDevice device, const VkSwapchainCreateInfoKH
    has_present = present_reply && (present_reply->major_version > 1 || present_reply->minor_version >= 2);
    free(present_reply);
 
-   if (has_dri3 && has_present)
+   if (!has_dri3 || !has_present)
    {
-      auto eid = xcb_generate_id(m_connection);
-      m_special_event = xcb_register_for_special_xge(m_connection, &xcb_present_id, eid, nullptr);
-      xcb_present_select_input(m_connection, eid, m_window,
-                               XCB_PRESENT_EVENT_MASK_IDLE_NOTIFY | XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY |
-                                  XCB_PRESENT_EVENT_MASK_CONFIGURE_NOTIFY);
+      WSI_LOG_ERROR("DRI3 extension not present");
+      return VK_ERROR_INITIALIZATION_FAILED;
    }
 
+   m_gc = xcb_generate_id(m_connection);
+   auto gc_cookie = xcb_create_gc_checked(m_connection, m_gc, m_window, XCB_GC_GRAPHICS_EXPOSURES, (uint32_t[]){ 0 });
+   xcb_request_check(m_connection, gc_cookie);
+
+   auto eid = xcb_generate_id(m_connection);
+   m_special_event = xcb_register_for_special_xge(m_connection, &xcb_present_id, eid, nullptr);
+   xcb_present_select_input(m_connection, eid, m_window,
+                            XCB_PRESENT_EVENT_MASK_IDLE_NOTIFY | XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY |
+                               XCB_PRESENT_EVENT_MASK_CONFIGURE_NOTIFY);
+
+   m_surface->getWindowSizeAndDepth(&m_windowExtent, &m_depth);
+
    use_presentation_thread = true;
+   m_present_event_thread = std::thread(&swapchain::present_event_thread, this);
    return VK_SUCCESS;
 }
 
