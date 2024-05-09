@@ -60,6 +60,8 @@ public:
 
    static surface_properties &get_instance();
 
+   bool is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b) override;
+
 private:
    /* List of supported presentation modes */
    std::array<VkPresentModeKHR, 4> supported_modes;

@@ -411,5 +411,10 @@ void surface_properties::get_surface_present_scaling_and_gravity(
    scaling_capabilities->supportedPresentGravityY = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
 }
 
+bool surface_properties::is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b)
+{
+   return is_compatible_present_modes_common(present_mode_a, present_mode_b, present_mode_compatibilities);
+}
+
 } // namespace wayland
 } // namespace wsi

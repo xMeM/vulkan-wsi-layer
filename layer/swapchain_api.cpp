@@ -172,6 +172,8 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
    VkResult ret = VK_SUCCESS;
    const auto present_fence_info = util::find_extension<VkSwapchainPresentFenceInfoEXT>(
       VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT, present_info->pNext);
+   const auto swapchain_present_mode_info = util::find_extension<VkSwapchainPresentModeInfoEXT>(
+      VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT, present_info->pNext);
    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; ++i)
    {
       VkSwapchainKHR swapc = pPresentInfo->pSwapchains[i];
@@ -179,9 +181,15 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
       auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapc);
       assert(sc != nullptr);
 
-      const VkFence present_fence = (present_fence_info == nullptr) ? VK_NULL_HANDLE : present_fence_info->pFences[i];
+      wsi::swapchain_presentation_parameters present_params;
+      present_params.present_fence = (present_fence_info == nullptr) ? VK_NULL_HANDLE : present_fence_info->pFences[i];
+      if (swapchain_present_mode_info != nullptr)
+      {
+         present_params.switch_presentation_mode = true;
+         present_params.present_mode = swapchain_present_mode_info->pPresentModes[i];
+      }
       VkResult res = sc->queue_present(queue, present_info, pPresentInfo->pImageIndices[i], use_image_present_semaphore,
-                                       present_fence);
+                                       present_params);
       if (pPresentInfo->pResults != nullptr)
       {
          pPresentInfo->pResults[i] = res;

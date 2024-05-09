@@ -121,6 +121,8 @@ public:
    virtual void get_surface_present_scaling_and_gravity(
       VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities) = 0;
 
+   virtual bool is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b) = 0;
+
 private:
    /**
     * @brief Set which presentation modes are compatible with each other for a particular surface
@@ -366,6 +368,39 @@ void get_surface_present_mode_compatibility_common(
              surface_supported_compatibility.compatible_present_modes.begin() +
                 surface_present_mode_compatibility->presentModeCount,
              surface_present_mode_compatibility->pPresentModes);
+}
+
+/**
+ * @brief Common function for handling checking whether a present mode is compatible with another.
+ *
+ * @param present_mode_a                 First present mode.
+ * @param present_mode_b                 Second present mode to compare against.
+ * @param present_mode_compatibilities   A table containing a mapping of presentation modes and what other modes they are compatible with.
+ *
+ * @return true if compatible, false otherwise.
+ */
+template <std::size_t SIZE>
+bool is_compatible_present_modes_common(
+   VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b,
+   const std::array<present_mode_compatibility, SIZE> &present_mode_compatibilities)
+{
+   auto it = std::find_if(present_mode_compatibilities.begin(), present_mode_compatibilities.end(),
+                          [present_mode_a](present_mode_compatibility p) { return p.present_mode == present_mode_a; });
+   if (it == present_mode_compatibilities.end())
+   {
+      WSI_LOG_ERROR("Querying compatible presentation mode support for a presentation mode that is not supported.");
+      return false;
+   }
+
+   const present_mode_compatibility &present_mode_comp = *it;
+   auto present_mode_it =
+      std::find_if(present_mode_comp.compatible_present_modes.begin(), present_mode_comp.compatible_present_modes.end(),
+                   [present_mode_b](VkPresentModeKHR p) { return p == present_mode_b; });
+   if (present_mode_it == present_mode_comp.compatible_present_modes.end())
+   {
+      return false;
+   }
+   return true;
 }
 
 } /* namespace wsi */

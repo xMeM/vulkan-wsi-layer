@@ -70,6 +70,18 @@ struct swapchain_image
    VkSemaphore present_fence_wait{ VK_NULL_HANDLE };
 };
 
+struct swapchain_presentation_parameters
+{
+   /* Fence supplied by the application with VkSwapchainPresentFenceInfoEXT. */
+   VkFence present_fence{ VK_NULL_HANDLE };
+
+   /* Whether the swapchain needs to switch to a different presentation mode. */
+   VkBool32 switch_presentation_mode{ false };
+
+   /* The presentation mode to switch to. */
+   VkPresentModeKHR present_mode;
+};
+
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
 struct image_compression_control_params
 {
@@ -150,14 +162,14 @@ public:
     *                                    and not the semaphores that come with
     *                                    \p present_info.
     *
-    * @param present_fence Fence supplied by the application with VkSwapchainPresentFenceInfoEXT.
+    * @param presentation_parameters Presentation parameters.
     *
     * @return If queue submission fails returns error of vkQueueSubmit, if the
     * swapchain has a descendant who started presenting returns VK_ERROR_OUT_OF_DATE_KHR,
     * otherwise returns VK_SUCCESS.
     */
    VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index,
-                          bool use_image_present_semaphore, const VkFence present_fence);
+                          bool use_image_present_semaphore, swapchain_presentation_parameters presentation_parameters);
 
    /**
     * @brief Get the allocator
@@ -310,9 +322,14 @@ protected:
    VkSurfaceKHR m_surface;
 
    /**
-    * @brief present mode to use for this swapchain
+    * @brief Present mode currently being used for this swapchain
     */
    VkPresentModeKHR m_present_mode;
+
+   /**
+    * @brief Possible presentation modes this swapchain is allowed to present with VkSwapchainPresentModesCreateInfoEXT
+    */
+   util::vector<VkPresentModeKHR> m_present_modes;
 
    /**
     * @brief Descendant of this swapchain.
@@ -624,6 +641,33 @@ private:
     * @brief A flag to track if swapchain has started presenting.
     */
    bool m_started_presenting;
+
+   /**
+    * @brief Handle presentation mode switching.
+    *
+    * If VkSwapchainPresentModeInfoEXT is supplied as part of the pNext chain of VkPresentInfoKHR
+    * then this function handles switching the swapchains(s)' presentation mode
+    * to the one(s) requested in VkSwapchainPresentModeInfoEXT structure.
+    *
+    * @param swapchain_present_mode         presentation mode to switch to.
+    *
+    * @return VK_SUCCESS on success or an error code otherwise.
+    */
+   virtual VkResult handle_switching_presentation_mode(VkPresentModeKHR swapchain_present_mode);
+
+   /**
+    * @brief Handle VkSwapchainPresentModesCreateInfoEXT .
+    *
+    * If VkSwapchainPresentModesCreateInfoEXT is supplied as part of the pNext chain of VkSwapchainCreateInfoKHR
+    * then this function handles setting up the presentation modes for the swapchain.
+    *
+    * @param device                  VkDevice object.
+    * @param swapchain_create_info   Pointer to the swapchain create info struct.
+    *
+    * @return VK_SUCCESS on success or an error code otherwise.
+    */
+   VkResult handle_swapchain_present_modes_create_info(VkDevice device,
+                                                       const VkSwapchainCreateInfoKHR *swapchain_create_info);
 };
 
 } /* namespace wsi */

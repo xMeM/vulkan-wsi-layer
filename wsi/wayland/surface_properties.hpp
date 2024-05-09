@@ -71,6 +71,8 @@ public:
 
    bool is_surface_extension_enabled(const layer::instance_private_data &instance_data) override;
 
+   bool is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b) override;
+
 private:
    surface_properties();
 

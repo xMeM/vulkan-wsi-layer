@@ -211,6 +211,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_swapchain_images(m_allocator)
    , m_surface(VK_NULL_HANDLE)
    , m_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+   , m_present_modes(m_allocator)
    , m_descendant(VK_NULL_HANDLE)
    , m_ancestor(VK_NULL_HANDLE)
    , m_device(VK_NULL_HANDLE)
@@ -253,6 +254,30 @@ static VkResult handle_scaling_create_info(VkDevice device, const VkSwapchainCre
    return VK_SUCCESS;
 }
 
+VkResult swapchain_base::handle_swapchain_present_modes_create_info(
+   VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info)
+{
+   const auto *swapchain_present_modes_create_info = util::find_extension<VkSwapchainPresentModesCreateInfoEXT>(
+      VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT, swapchain_create_info->pNext);
+   if (swapchain_present_modes_create_info != nullptr)
+   {
+      if (!m_present_modes.try_resize(swapchain_present_modes_create_info->presentModeCount))
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+      layer::device_private_data &device_data = layer::device_private_data::get(device);
+      auto &instance = device_data.instance_data;
+      wsi::surface_properties *props = wsi::get_surface_properties(instance, m_surface);
+      for (uint32_t i = 0; i < swapchain_present_modes_create_info->presentModeCount; i++)
+      {
+         assert(
+            props->is_compatible_present_modes(m_present_mode, swapchain_present_modes_create_info->pPresentModes[i]));
+         m_present_modes[i] = swapchain_present_modes_create_info->pPresentModes[i];
+      }
+   }
+   return VK_SUCCESS;
+}
+
 VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *swapchain_create_info)
 {
    assert(device != VK_NULL_HANDLE);
@@ -263,6 +288,8 @@ VkResult swapchain_base::init(VkDevice device, const VkSwapchainCreateInfoKHR *s
    m_surface = swapchain_create_info->surface;
 
    m_present_mode = swapchain_create_info->presentMode;
+
+   TRY(handle_swapchain_present_modes_create_info(device, swapchain_create_info));
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    const auto *image_compression_control = util::find_extension<VkImageCompressionControlEXT>(
@@ -639,8 +666,14 @@ VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
 }
 
 VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index,
-                                       bool use_image_present_semaphore, const VkFence present_fence)
+                                       bool use_image_present_semaphore,
+                                       swapchain_presentation_parameters presentation_parameters)
 {
+
+   if (presentation_parameters.switch_presentation_mode)
+   {
+      TRY(handle_switching_presentation_mode(presentation_parameters.present_mode));
+   }
 
    const VkSemaphore *wait_semaphores = &m_swapchain_images[image_index].present_semaphore;
    uint32_t sem_count = 1;
@@ -660,19 +693,20 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    queue_submit_semaphores semaphores = {
       wait_semaphores,
       sem_count,
-      (present_fence != VK_NULL_HANDLE) ? &m_swapchain_images[image_index].present_fence_wait : nullptr,
-      (present_fence != VK_NULL_HANDLE) ? 1u : 0,
+      (presentation_parameters.present_fence != VK_NULL_HANDLE) ? &m_swapchain_images[image_index].present_fence_wait :
+                                                                  nullptr,
+      (presentation_parameters.present_fence != VK_NULL_HANDLE) ? 1u : 0,
    };
    TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, semaphores));
 
-   if (present_fence != VK_NULL_HANDLE)
+   if (presentation_parameters.present_fence != VK_NULL_HANDLE)
    {
       const queue_submit_semaphores wait_semaphores = { &m_swapchain_images[image_index].present_fence_wait, 1, nullptr,
                                                         0 };
       /*
        * Here we chain wait_semaphores with present_fence through present_fence_wait.
        */
-      TRY(sync_queue_submit(m_device_data, queue, present_fence, wait_semaphores));
+      TRY(sync_queue_submit(m_device_data, queue, presentation_parameters.present_fence, wait_semaphores));
    }
 
    TRY(notify_presentation_engine(image_index));
@@ -772,6 +806,16 @@ VkResult swapchain_base::is_bind_allowed(uint32_t image_index) const
 {
    return m_swapchain_images[image_index].status != swapchain_image::UNALLOCATED ? VK_SUCCESS :
                                                                                    VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+VkResult swapchain_base::handle_switching_presentation_mode(VkPresentModeKHR swapchain_present_mode)
+{
+   assert(m_present_modes.size() > 0);
+   auto it = std::find_if(m_present_modes.begin(), m_present_modes.end(),
+                          [swapchain_present_mode](VkPresentModeKHR p) { return p == swapchain_present_mode; });
+   assert(it != m_present_modes.end());
+   m_present_mode = swapchain_present_mode;
+   return VK_SUCCESS;
 }
 
 } /* namespace wsi */
