@@ -27,7 +27,7 @@
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan.h>
 #include <wsi/surface_properties.hpp>
-
+#include <wsi/compatible_present_modes.hpp>
 namespace wsi
 {
 namespace headless
@@ -64,10 +64,10 @@ public:
 
 private:
    /* List of supported presentation modes */
-   std::array<VkPresentModeKHR, 4> supported_modes;
+   std::array<VkPresentModeKHR, 4> m_supported_modes;
 
    /* Stores compatible presentation modes */
-   std::array<present_mode_compatibility, 4> present_mode_compatibilities;
+   compatible_present_modes<4> m_compatible_present_modes;
 
    void populate_present_mode_compatibilities() override;
 

@@ -49,16 +49,17 @@ namespace wayland
 
 void surface_properties::populate_present_mode_compatibilities()
 {
-   present_mode_compatibilities = {
+   std::array<present_mode_compatibility, 2> compatible_present_modes_list = {
       present_mode_compatibility{ VK_PRESENT_MODE_FIFO_KHR, 1, { VK_PRESENT_MODE_FIFO_KHR } },
       present_mode_compatibility{ VK_PRESENT_MODE_MAILBOX_KHR, 1, { VK_PRESENT_MODE_MAILBOX_KHR } }
    };
+   m_compatible_present_modes = compatible_present_modes<2>(compatible_present_modes_list);
 }
 
 surface_properties::surface_properties(surface *wsi_surface, const util::allocator &allocator)
    : specific_surface(wsi_surface)
    , supported_formats(allocator)
-   , supported_modes({ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR })
+   , m_supported_modes({ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR })
 {
    populate_present_mode_compatibilities();
 }
@@ -92,12 +93,12 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
                                                       const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
                                                       VkSurfaceCapabilities2KHR *pSurfaceCapabilities)
 {
-   TRY(check_surface_present_mode_query_is_supported(pSurfaceInfo, supported_modes));
+   TRY(check_surface_present_mode_query_is_supported(pSurfaceInfo, m_supported_modes));
 
    /* Image count limits */
    get_surface_capabilities(physical_device, &pSurfaceCapabilities->surfaceCapabilities);
 
-   get_surface_present_mode_compatibility_common(pSurfaceInfo, pSurfaceCapabilities, present_mode_compatibilities);
+   m_compatible_present_modes.get_surface_present_mode_compatibility_common(pSurfaceInfo, pSurfaceCapabilities);
 
    auto surface_scaling_capabilities = util::find_extension<VkSurfacePresentScalingCapabilitiesEXT>(
       VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT, pSurfaceCapabilities);
@@ -245,7 +246,7 @@ VkResult surface_properties::get_surface_formats(VkPhysicalDevice physical_devic
 VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
                                                        uint32_t *pPresentModeCount, VkPresentModeKHR *pPresentModes)
 {
-   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, supported_modes);
+   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, m_supported_modes);
 }
 
 VkResult surface_properties::get_required_device_extensions(util::extension_list &extension_list)
@@ -413,7 +414,7 @@ void surface_properties::get_surface_present_scaling_and_gravity(
 
 bool surface_properties::is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b)
 {
-   return is_compatible_present_modes_common(present_mode_a, present_mode_b, present_mode_compatibilities);
+   return m_compatible_present_modes.is_compatible_present_modes(present_mode_a, present_mode_b);
 }
 
 } // namespace wayland

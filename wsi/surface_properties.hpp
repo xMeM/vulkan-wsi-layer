@@ -41,19 +41,6 @@
 namespace wsi
 {
 
-static constexpr uint32_t MAX_PRESENT_MODES = 6;
-struct present_mode_compatibility
-{
-   /* Presentation mode */
-   VkPresentModeKHR present_mode;
-
-   /* Number of presentation modes compatible */
-   uint32_t present_mode_count;
-
-   /* Stores the compatible presentation modes */
-   std::array<VkPresentModeKHR, MAX_PRESENT_MODES> compatible_present_modes;
-};
-
 /**
  * @brief The base surface property query interface.
  */
@@ -317,90 +304,6 @@ VkResult get_surface_present_modes_common(uint32_t *present_mode_count, VkPresen
    }
 
    return res;
-}
-
-/**
- * @brief Common function for handling VkSurfacePresentModeCompatibilityEXT if it exists in the pNext chain of VkSurfaceCapabilities2KHR.
- *
- * If pSurfaceInfo contains a VkSurfacePresentModeEXT struct in its pNext chain, and pSurfaceCapabilities contains a VkSurfacePresentModeCompatibilityEXT struct
- * then this function fills the VkSurfacePresentModeCompatibilityEXT struct with the presentation modes that are compatible with the presentation mode specified
- * in the VkSurfacePresentModeEXT struct.
- *
- * @param pSurfaceInfo                 Pointer to surface info that may or may not contain a VkSurfacePresentModeEXT.
- * @param pSurfaceCapabilities         Pointer to surface capabilities that may or may not contain a VkSurfacePresentModeCompatibilityEXT struct.
- * @param present_mode_compatibilities A table containing a mapping of presentation modes and what other modes they are compatible with.
- *
- */
-template <std::size_t SIZE>
-void get_surface_present_mode_compatibility_common(
-   const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo, VkSurfaceCapabilities2KHR *pSurfaceCapabilities,
-   const std::array<present_mode_compatibility, SIZE> &present_mode_compatibilities)
-{
-   auto surface_present_mode =
-      util::find_extension<VkSurfacePresentModeEXT>(VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_EXT, pSurfaceInfo);
-   auto surface_present_mode_compatibility = util::find_extension<VkSurfacePresentModeCompatibilityEXT>(
-      VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT, pSurfaceCapabilities);
-
-   if (surface_present_mode == nullptr || surface_present_mode_compatibility == nullptr)
-   {
-      return;
-   }
-
-   VkPresentModeKHR present_mode = surface_present_mode->presentMode;
-   auto it = std::find_if(present_mode_compatibilities.begin(), present_mode_compatibilities.end(),
-                          [present_mode](present_mode_compatibility p) { return p.present_mode == present_mode; });
-   if (it == present_mode_compatibilities.end())
-   {
-      WSI_LOG_ERROR("Querying compatible presentation mode support for a presentation mode that is not supported.");
-      return;
-   }
-   const present_mode_compatibility &surface_supported_compatibility = *it;
-
-   if (surface_present_mode_compatibility->pPresentModes == nullptr)
-   {
-      surface_present_mode_compatibility->presentModeCount = surface_supported_compatibility.present_mode_count;
-      return;
-   }
-
-   surface_present_mode_compatibility->presentModeCount = std::min(surface_present_mode_compatibility->presentModeCount,
-                                                                   surface_supported_compatibility.present_mode_count);
-   std::copy(surface_supported_compatibility.compatible_present_modes.begin(),
-             surface_supported_compatibility.compatible_present_modes.begin() +
-                surface_present_mode_compatibility->presentModeCount,
-             surface_present_mode_compatibility->pPresentModes);
-}
-
-/**
- * @brief Common function for handling checking whether a present mode is compatible with another.
- *
- * @param present_mode_a                 First present mode.
- * @param present_mode_b                 Second present mode to compare against.
- * @param present_mode_compatibilities   A table containing a mapping of presentation modes and what other modes they are compatible with.
- *
- * @return true if compatible, false otherwise.
- */
-template <std::size_t SIZE>
-bool is_compatible_present_modes_common(
-   VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b,
-   const std::array<present_mode_compatibility, SIZE> &present_mode_compatibilities)
-{
-   auto it = std::find_if(present_mode_compatibilities.begin(), present_mode_compatibilities.end(),
-                          [present_mode_a](present_mode_compatibility p) { return p.present_mode == present_mode_a; });
-   if (it == present_mode_compatibilities.end())
-   {
-      WSI_LOG_ERROR("Querying compatible presentation mode support for a presentation mode that is not supported.");
-      return false;
-   }
-
-   const present_mode_compatibility &present_mode_comp = *it;
-   auto present_mode_it =
-      std::find_if(present_mode_comp.compatible_present_modes.begin(), present_mode_comp.compatible_present_modes.end(),
-                   [present_mode_b](VkPresentModeKHR p) { return p == present_mode_b; });
-   if (present_mode_it == present_mode_comp.compatible_present_modes.end())
-   {
-      return false;
-   }
-   return true;
 }
 
 } /* namespace wsi */

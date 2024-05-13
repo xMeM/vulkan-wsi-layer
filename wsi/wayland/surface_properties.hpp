@@ -26,6 +26,7 @@
 
 #include "wsi/surface_properties.hpp"
 #include "util/unordered_set.hpp"
+#include "wsi/compatible_present_modes.hpp"
 
 namespace wsi
 {
@@ -84,10 +85,10 @@ private:
    surface_format_properties_map supported_formats;
 
    /* List of supported presentation modes */
-   std::array<VkPresentModeKHR, 2> supported_modes;
+   std::array<VkPresentModeKHR, 2> m_supported_modes;
 
    /* Stores compatible presentation modes */
-   std::array<present_mode_compatibility, 2> present_mode_compatibilities;
+   compatible_present_modes<2> m_compatible_present_modes;
 
    void populate_present_mode_compatibilities() override;
 
