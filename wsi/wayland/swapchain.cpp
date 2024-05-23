@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -273,11 +273,13 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
                                          image_create_info.extent.width, image_create_info.extent.height,
                                          allocation_flags };
 
-   std::array<int, MAX_PLANES> strides{};
-   std::array<int, MAX_PLANES> buffer_fds{ -1, -1, -1, -1 };
-   std::array<uint32_t, MAX_PLANES> offsets{};
-   const auto res =
-      wsialloc_alloc(m_wsi_allocator, &alloc_info, allocated_format, strides.data(), buffer_fds.data(), offsets.data());
+   wsialloc_allocate_result alloc_result = { 0 };
+   /* Clear fds for error purposes */
+   for (int i = 0; i < WSIALLOC_MAX_PLANES; ++i)
+   {
+      alloc_result.buffer_fds[i] = -1;
+   }
+   const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, &alloc_result);
    if (res != WSIALLOC_ERROR_NONE)
    {
       WSI_LOG_ERROR("Failed allocation of DMA Buffer. WSI error: %d", static_cast<int>(res));
@@ -287,10 +289,11 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
       }
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+   *allocated_format = alloc_result.format;
    auto &external_memory = image_data->external_mem;
-   external_memory.set_strides(strides);
-   external_memory.set_buffer_fds(buffer_fds);
-   external_memory.set_offsets(offsets);
+   external_memory.set_strides(alloc_result.average_row_strides);
+   external_memory.set_buffer_fds(alloc_result.buffer_fds);
+   external_memory.set_offsets(alloc_result.offsets);
    external_memory.set_memory_handle_type(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
    return VK_SUCCESS;
 }

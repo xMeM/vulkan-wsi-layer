@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -44,7 +44,7 @@
  *
  * This should only be increased when this implementation is updated to match newer versions of wsialloc.h.
  */
-#define WSIALLOC_IMPLEMENTATION_VERSION 2
+#define WSIALLOC_IMPLEMENTATION_VERSION 3
 
 /* Ensure we are implementing the wsialloc version matching the wsialloc.h header we are using. */
 #if WSIALLOC_IMPLEMENTATION_VERSION != WSIALLOC_INTERFACE_VERSION
@@ -81,7 +81,8 @@ static int find_alloc_heap_id(int fd)
 
    struct ion_heap_data heaps[ION_NUM_HEAP_IDS];
    struct ion_heap_query query = {
-      .cnt = ION_NUM_HEAP_IDS, .heaps = (uint64_t)(uintptr_t)heaps,
+      .cnt = ION_NUM_HEAP_IDS,
+      .heaps = (uint64_t)(uintptr_t)heaps,
    };
 
    int ret = ioctl(fd, ION_IOC_HEAP_QUERY, &query);
@@ -109,7 +110,9 @@ static int allocate(int fd, size_t size, uint32_t heap_id)
    assert(fd != -1);
 
    struct ion_allocation_data alloc = {
-      .len = size, .heap_id_mask = 1u << heap_id, .flags = 0,
+      .len = size,
+      .heap_id_mask = 1u << heap_id,
+      .flags = 0,
    };
    int ret = ioctl(fd, ION_IOC_ALLOC, &alloc);
    if (ret < 0)
@@ -281,13 +284,13 @@ static const fmt_spec *find_format(uint32_t fourcc)
 }
 
 static bool validate_parameters(const wsialloc_allocator *allocator, const wsialloc_allocate_info *info,
-                                const wsialloc_format *format, const int *strides, const uint32_t *offsets)
+                                wsialloc_allocate_result *result)
 {
    if (allocator == NULL)
    {
       return false;
    }
-   else if (!strides || !offsets)
+   else if (!result)
    {
       return false;
    }
@@ -304,15 +307,13 @@ static bool validate_parameters(const wsialloc_allocator *allocator, const wsial
 }
 
 wsialloc_error wsialloc_alloc(wsialloc_allocator *allocator, const wsialloc_allocate_info *info,
-                              wsialloc_format *format, int *strides, int *buffer_fds, uint32_t *offsets)
+                              wsialloc_allocate_result *result)
 {
    assert(allocator != NULL);
    assert(info != NULL);
-   assert(format != NULL);
-   assert(strides != NULL);
-   assert(offsets != NULL);
+   assert(result != NULL);
 
-   if (!validate_parameters(allocator, info, format, strides, offsets))
+   if (!validate_parameters(allocator, info, result))
    {
       return WSIALLOC_ERROR_INVALID;
    }
@@ -355,13 +356,16 @@ wsialloc_error wsialloc_alloc(wsialloc_allocator *allocator, const wsialloc_allo
 
    if (err == WSIALLOC_ERROR_NONE)
    {
-      *format = selected_format_desc.format;
-      *strides = local_strides[0];
-      *offsets = local_offsets[0];
+      result->format = selected_format_desc.format;
+      result->average_row_strides[0] = local_strides[0];
+      result->offsets[0] = local_offsets[0];
       if (!(info->flags & WSIALLOC_ALLOCATE_NO_MEMORY))
       {
-         *buffer_fds = local_fds[0];
+         result->buffer_fds[0] = local_fds[0];
       }
+
+      result->is_disjoint = false;
    }
+
    return err;
 }

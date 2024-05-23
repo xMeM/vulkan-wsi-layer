@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Arm Limited.
+ * Copyright (c) 2022-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -82,6 +82,11 @@ public:
       m_buffer_fds = buffer_fds;
    }
 
+   void set_buffer_fds(const int *buffer_fds)
+   {
+      std::copy(buffer_fds, buffer_fds + MAX_PLANES, m_buffer_fds.begin());
+   }
+
    /**
     * @brief Set the per plane stride values.
     */
@@ -90,12 +95,22 @@ public:
       m_strides = strides;
    }
 
+   void set_strides(const int *strides)
+   {
+      std::copy(strides, strides + MAX_PLANES, m_strides.begin());
+   }
+
    /**
     * @brief Set the per plane offset values.
     */
    void set_offsets(std::array<uint32_t, MAX_PLANES> offsets)
    {
       m_offsets = offsets;
+   }
+
+   void set_offsets(const uint32_t *offsets)
+   {
+      std::copy(offsets, offsets + MAX_PLANES, m_offsets.begin());
    }
 
    /**
