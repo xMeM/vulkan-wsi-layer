@@ -119,8 +119,13 @@ public:
    uint32_t get_num_planes(void);
 
    /**
-    * @brief Returns whether the external memory uses a multi-planar format where each plane is separately bound to
-    *        memory.
+    * @brief Get the number of memory planes the format uses.
+    */
+   uint32_t get_num_memories(void);
+
+   /**
+    * @brief Returns whether the external memory uses a multi-planar format where each plane is
+    * separately bound to memory or not.
     */
    bool is_disjoint(void);
 
@@ -130,6 +135,31 @@ public:
    void set_memory_handle_type(VkExternalMemoryHandleTypeFlagBits handle_type)
    {
       m_handle_type = handle_type;
+   }
+
+   /**
+    * @brief Set the number of memory planes.
+    */
+   void set_num_memories(uint32_t num_memory_planes)
+   {
+      m_num_memories = num_memory_planes;
+   }
+
+   /**
+    * @brief Set the number of format planes and set the number of memory planes
+    * if is_disjoint is false.
+    *
+    * @param is_disjoint  If memory planes are disjoined.
+    * @param planes_count The number of format planes.
+    */
+   void set_format_info(const bool is_disjoint, uint32_t planes_count)
+   {
+      m_num_planes = planes_count;
+
+      if (!is_disjoint)
+      {
+         m_num_memories = 1;
+      }
    }
 
    /**
@@ -183,11 +213,11 @@ public:
    void fill_external_info(VkExternalMemoryImageCreateInfoKHR &external_info, void *pNext);
 
 private:
-   VkResult get_fd_mem_type_index(uint32_t index, uint32_t *mem_idx);
+   VkResult get_fd_mem_type_index(int fd, uint32_t *mem_idx);
 
    VkResult import_plane_memories(void);
 
-   VkResult import_plane_memory(uint32_t index);
+   VkResult import_plane_memory(int fd, VkDeviceMemory *memory);
 
    std::array<int, MAX_PLANES> m_buffer_fds{ -1, -1, -1, -1 };
    std::array<int, MAX_PLANES> m_strides{ 0, 0, 0, 0 };
@@ -195,6 +225,7 @@ private:
    std::array<VkDeviceMemory, MAX_PLANES> m_memories = { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,
                                                          VK_NULL_HANDLE };
    uint32_t m_num_planes{ 0 };
+   uint32_t m_num_memories{ 0 };
    VkExternalMemoryHandleTypeFlagBits m_handle_type{ VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT };
    const VkDevice &m_device;
    const util::allocator &m_allocator;

@@ -31,6 +31,7 @@
 
 #include "util/log.hpp"
 #include "util/helpers.hpp"
+#include "util/drm/drm_utils.hpp"
 
 namespace wsi
 {
@@ -64,43 +65,26 @@ external_memory::~external_memory()
 
 uint32_t external_memory::get_num_planes()
 {
-   if (m_num_planes == 0)
-   {
-      for (uint32_t plane = 0; plane < MAX_PLANES; plane++)
-      {
-         if (m_strides[plane] == -1)
-         {
-            break;
-         }
-         m_num_planes++;
-      }
-   }
    return m_num_planes;
+}
+
+uint32_t external_memory::get_num_memories()
+{
+   return m_num_memories;
 }
 
 bool external_memory::is_disjoint()
 {
-   uint32_t planes = get_num_planes();
-   if (planes > 1)
-   {
-      for (uint32_t plane = 1; plane < planes; ++plane)
-      {
-         if (m_buffer_fds[plane] != m_buffer_fds[0])
-         {
-            return true;
-         }
-      }
-   }
-   return false;
+   return m_num_memories != 1;
 }
 
-VkResult external_memory::get_fd_mem_type_index(uint32_t index, uint32_t *mem_idx)
+VkResult external_memory::get_fd_mem_type_index(int fd, uint32_t *mem_idx)
 {
    auto &device_data = layer::device_private_data::get(m_device);
    VkMemoryFdPropertiesKHR mem_props = {};
    mem_props.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
 
-   TRY_LOG(device_data.disp.GetMemoryFdPropertiesKHR(m_device, m_handle_type, m_buffer_fds[index], &mem_props),
+   TRY_LOG(device_data.disp.GetMemoryFdPropertiesKHR(m_device, m_handle_type, fd, &mem_props),
            "Error querying file descriptor properties");
 
    for (*mem_idx = 0; *mem_idx < VK_MAX_MEMORY_TYPES; (*mem_idx)++)
@@ -120,25 +104,27 @@ VkResult external_memory::import_plane_memories()
 {
    if (is_disjoint())
    {
+      uint32_t memory_plane = 0;
       for (uint32_t plane = 0; plane < get_num_planes(); plane++)
       {
          auto it = std::find(std::begin(m_buffer_fds), std::end(m_buffer_fds), m_buffer_fds[plane]);
          if (std::distance(std::begin(m_buffer_fds), it) == plane)
          {
-            TRY_LOG_CALL(import_plane_memory(plane));
+            TRY_LOG_CALL(import_plane_memory(m_buffer_fds[plane], &m_memories[memory_plane]));
+            memory_plane++;
          }
       }
       return VK_SUCCESS;
    }
-   return import_plane_memory(0);
+   return import_plane_memory(m_buffer_fds[0], &m_memories[0]);
 }
 
-VkResult external_memory::import_plane_memory(uint32_t index)
+VkResult external_memory::import_plane_memory(int fd, VkDeviceMemory *memory)
 {
    uint32_t mem_index = 0;
-   TRY_LOG_CALL(get_fd_mem_type_index(index, &mem_index));
+   TRY_LOG_CALL(get_fd_mem_type_index(fd, &mem_index));
 
-   const off_t fd_size = lseek(m_buffer_fds[index], 0, SEEK_END);
+   const off_t fd_size = lseek(fd, 0, SEEK_END);
    if (fd_size < 0)
    {
       WSI_LOG_ERROR("Failed to get fd size.");
@@ -148,7 +134,7 @@ VkResult external_memory::import_plane_memory(uint32_t index)
    VkImportMemoryFdInfoKHR import_mem_info = {};
    import_mem_info.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
    import_mem_info.handleType = m_handle_type;
-   import_mem_info.fd = m_buffer_fds[index];
+   import_mem_info.fd = fd;
 
    VkMemoryAllocateInfo alloc_info = {};
    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -157,9 +143,8 @@ VkResult external_memory::import_plane_memory(uint32_t index)
    alloc_info.memoryTypeIndex = mem_index;
 
    auto &device_data = layer::device_private_data::get(m_device);
-   TRY_LOG(
-      device_data.disp.AllocateMemory(m_device, &alloc_info, m_allocator.get_original_callbacks(), &m_memories[index]),
-      "Failed to import device memory");
+   TRY_LOG(device_data.disp.AllocateMemory(m_device, &alloc_info, m_allocator.get_original_callbacks(), memory),
+           "Failed to import device memory");
 
    return VK_SUCCESS;
 }
@@ -170,20 +155,19 @@ VkResult external_memory::bind_swapchain_image_memory(const VkImage &image)
    if (is_disjoint())
    {
       util::vector<VkBindImageMemoryInfo> bind_img_mem_infos(m_allocator);
-      if (!bind_img_mem_infos.try_resize(get_num_planes()))
+      if (!bind_img_mem_infos.try_resize(get_num_memories()))
       {
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
 
       util::vector<VkBindImagePlaneMemoryInfo> bind_plane_mem_infos(m_allocator);
-      if (!bind_plane_mem_infos.try_resize(get_num_planes()))
+      if (!bind_plane_mem_infos.try_resize(get_num_memories()))
       {
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
 
-      for (uint32_t plane = 0; plane < get_num_planes(); plane++)
+      for (uint32_t plane = 0; plane < get_num_memories(); plane++)
       {
-
          bind_plane_mem_infos[plane].planeAspect = util::PLANE_FLAG_BITS[plane];
          bind_plane_mem_infos[plane].sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
          bind_plane_mem_infos[plane].pNext = nullptr;
@@ -230,7 +214,7 @@ void external_memory::fill_drm_mod_info(const void *pNext, VkImageDrmFormatModif
    drm_mod_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
    drm_mod_info.pNext = pNext;
    drm_mod_info.drmFormatModifier = modifier;
-   drm_mod_info.drmFormatModifierPlaneCount = get_num_planes();
+   drm_mod_info.drmFormatModifierPlaneCount = get_num_memories();
    drm_mod_info.pPlaneLayouts = plane_layouts.data();
 }
 

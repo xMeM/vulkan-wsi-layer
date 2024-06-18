@@ -136,12 +136,9 @@ static struct wl_buffer_listener buffer_listener = { buffer_release };
 
 VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info,
                                                    util::vector<wsialloc_format> &importable_formats,
-                                                   util::vector<uint64_t> &exportable_modifers)
+                                                   util::vector<uint64_t> &exportable_modifers,
+                                                   util::vector<VkDrmFormatModifierPropertiesEXT> &drm_format_props)
 {
-   /* Query supported modifers. */
-   util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(
-      util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-
    TRY_LOG(util::get_drm_format_properties(m_device_data.physical_device, info.format, drm_format_props),
            "Failed to get format properties");
 
@@ -299,6 +296,28 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, wayl
    external_memory.set_strides(alloc_result.average_row_strides);
    external_memory.set_buffer_fds(alloc_result.buffer_fds);
    external_memory.set_offsets(alloc_result.offsets);
+
+   uint32_t num_planes = util::drm::drm_fourcc_format_get_num_planes(alloc_result.format.fourcc);
+
+   if (!avoid_allocation)
+   {
+      uint32_t num_memory_planes = 0;
+
+      for (uint32_t i = 0; i < num_planes; ++i)
+      {
+         auto it = std::find(std::begin(alloc_result.buffer_fds) + i + 1, std::end(alloc_result.buffer_fds),
+                             alloc_result.buffer_fds[i]);
+         if (it == std::end(alloc_result.buffer_fds))
+         {
+            num_memory_planes++;
+         }
+      }
+
+      assert(alloc_result.is_disjoint == (num_memory_planes > 1));
+      external_memory.set_num_memories(num_memory_planes);
+   }
+
+   external_memory.set_format_info(alloc_result.is_disjoint, num_planes);
    external_memory.set_memory_handle_type(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
    return VK_SUCCESS;
 }
@@ -408,7 +427,13 @@ VkResult swapchain::create_swapchain_image(VkImageCreateInfo image_create_info, 
       util::vector<wsialloc_format> importable_formats(
          util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
       util::vector<uint64_t> exportable_modifiers(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-      TRY_LOG_CALL(get_surface_compatible_formats(image_create_info, importable_formats, exportable_modifiers));
+
+      /* Query supported modifers. */
+      util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(
+         util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+
+      TRY_LOG_CALL(
+         get_surface_compatible_formats(image_create_info, importable_formats, exportable_modifiers, drm_format_props));
 
       /* TODO: Handle exportable images which use ICD allocated memory in preference to an external allocator. */
       if (importable_formats.empty())
@@ -419,6 +444,14 @@ VkResult swapchain::create_swapchain_image(VkImageCreateInfo image_create_info, 
 
       wsialloc_format allocated_format = { 0 };
       TRY_LOG_CALL(allocate_wsialloc(image_create_info, image_data, importable_formats, &allocated_format, true));
+
+      for (auto &prop : drm_format_props)
+      {
+         if (prop.drmFormatModifier == allocated_format.modifier)
+         {
+            image_data->external_mem.set_num_memories(prop.drmFormatModifierPlaneCount);
+         }
+      }
 
       TRY_LOG_CALL(fill_image_create_info(
          image_create_info, m_image_creation_parameters.m_image_layout, m_image_creation_parameters.m_drm_mod_info,

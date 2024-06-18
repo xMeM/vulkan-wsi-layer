@@ -203,7 +203,8 @@ private:
     */
    VkResult get_surface_compatible_formats(const VkImageCreateInfo &info,
                                            util::vector<wsialloc_format> &importable_formats,
-                                           util::vector<uint64_t> &exportable_modifers);
+                                           util::vector<uint64_t> &exportable_modifers,
+                                           util::vector<VkDrmFormatModifierPropertiesEXT> &drm_format_props);
 };
 } // namespace wayland
 } // namespace wsi
