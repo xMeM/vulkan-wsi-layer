@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2023 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -100,16 +100,10 @@ class surface_format_properties
 {
 public:
    surface_format_properties(VkFormat format)
-      : m_surface_format
-   {
-      format, VK_COLORSPACE_SRGB_NONLINEAR_KHR
-   }
+      : m_surface_format{ format, VK_COLORSPACE_SRGB_NONLINEAR_KHR }
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
-   , m_compression
-   {
-      VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT, nullptr, VK_IMAGE_COMPRESSION_DEFAULT_EXT,
-         VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT
-   }
+      , m_compression{ VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT, nullptr, VK_IMAGE_COMPRESSION_DEFAULT_EXT,
+                       VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT }
 #endif
    {
    }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,12 +41,12 @@ int dispatch_queue(struct wl_display *display, struct wl_event_queue *queue, int
    int retval;
 
    /* Before we sleep, dispatch any pending events. prepare_read_queue will return 0 whilst there are pending
-      * events to dispatch on the queue. */
+    * events to dispatch on the queue. */
    while (0 != wl_display_prepare_read_queue(display, queue))
    {
       /* dispatch_queue_pending returns -1 on error, or the number of events dispatched otherwise. If we
-         * already dispatched some events, then we might not need to sleep, as we might have just dispatched
-         * the event we want, so return immediately. */
+       * already dispatched some events, then we might not need to sleep, as we might have just dispatched
+       * the event we want, so return immediately. */
       err = wl_display_dispatch_queue_pending(display, queue);
       if (err)
       {
@@ -60,10 +60,10 @@ int dispatch_queue(struct wl_display *display, struct wl_event_queue *queue, int
    while (true)
    {
       /* Timeout is given in milliseconds. A return value of 0, or -1 with errno set to EINTR means that we
-         * should retry as the timeout was exceeded or we were interrupted by a signal, respectively. A
-         * return value of 1 means that something happened, and we should inspect the pollfd structure to see
-         * just what that was.
-         */
+       * should retry as the timeout was exceeded or we were interrupted by a signal, respectively. A
+       * return value of 1 means that something happened, and we should inspect the pollfd structure to see
+       * just what that was.
+       */
       err = poll(&pfd, 1, timeout);
       if (0 == err)
       {
@@ -102,7 +102,7 @@ int dispatch_queue(struct wl_display *display, struct wl_event_queue *queue, int
    }
 
    /* Actually read the events from the display. A failure in read_events calls cancel_read internally for us,
-      * so we don't need to do that here. */
+    * so we don't need to do that here. */
    err = wl_display_read_events(display);
    if (0 != err)
    {

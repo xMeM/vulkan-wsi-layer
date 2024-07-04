@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Arm Limited.
+ * Copyright (c) 2021-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -37,10 +37,8 @@ namespace util
  *        exceptions don't throw them and also ensures that the memory can
  *        only be allocated by an custom_allocator.
  */
-template <typename Key, typename Value,
-	typename Hash = std::hash<Key>,
-	typename Comparator = std::equal_to<Key>,
-	typename Allocator = util::custom_allocator<std::pair<const Key, Value>>>
+template <typename Key, typename Value, typename Hash = std::hash<Key>, typename Comparator = std::equal_to<Key>,
+          typename Allocator = util::custom_allocator<std::pair<const Key, Value>>>
 class unordered_map : public std::unordered_map<Key, Value, Hash, Comparator, Allocator>, private noncopyable
 {
    using base = std::unordered_map<Key, Value, Hash, Comparator, Allocator>;
@@ -84,7 +82,7 @@ public:
       {
          return { base::insert(value) };
       }
-      catch(std::bad_alloc& e)
+      catch (std::bad_alloc &e)
       {
          return std::nullopt;
       }
@@ -104,7 +102,7 @@ public:
          base::reserve(size);
          return true;
       }
-      catch(std::bad_alloc& e)
+      catch (std::bad_alloc &e)
       {
          return false;
       }
@@ -124,7 +122,7 @@ public:
          base::rehash(count);
          return true;
       }
-      catch(std::bad_alloc& e)
+      catch (std::bad_alloc &e)
       {
          return false;
       }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -40,8 +40,8 @@ namespace wayland
 
 struct formats_vector
 {
-   util::vector<drm_format_pair> *formats{nullptr};
-   bool is_out_of_memory{false};
+   util::vector<drm_format_pair> *formats{ nullptr };
+   bool is_out_of_memory{ false };
 };
 
 namespace
@@ -120,7 +120,7 @@ static VkResult get_supported_formats_and_modifiers(wl_display *display, wl_even
 
 struct surface::init_parameters
 {
-   const util::allocator& allocator;
+   const util::allocator &allocator;
    wl_display *display;
    wl_surface *surf;
 };
@@ -242,10 +242,9 @@ bool surface::init()
    return true;
 }
 
-util::unique_ptr<surface> surface::make_surface(const util::allocator &allocator, wl_display *display,
-                                                wl_surface *surf)
+util::unique_ptr<surface> surface::make_surface(const util::allocator &allocator, wl_display *display, wl_surface *surf)
 {
-   init_parameters params {allocator, display, surf};
+   init_parameters params{ allocator, display, surf };
    auto wsi_surface = allocator.make_unique<surface>(params);
    if (wsi_surface != nullptr)
    {

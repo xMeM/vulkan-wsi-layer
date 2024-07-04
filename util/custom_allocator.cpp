@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020-2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -45,7 +45,7 @@ VWL_VKAPI_CALL(void) default_free(void *, void *pMemory) VWL_API_POST
    free(pMemory);
 }
 
-const allocator& allocator::get_generic()
+const allocator &allocator::get_generic()
 {
    static allocator generic{ VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, nullptr };
    return generic;

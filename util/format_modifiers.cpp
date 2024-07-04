@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Arm Limited.
+ * Copyright (c) 2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -51,4 +51,4 @@ VkResult get_drm_format_properties(VkPhysicalDevice physical_device, VkFormat fo
    instance_data.disp.GetPhysicalDeviceFormatProperties2KHR(physical_device, format, &format_props);
    return VK_SUCCESS;
 }
-}  /* namespace util */
+} /* namespace util */

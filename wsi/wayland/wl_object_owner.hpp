@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -77,7 +77,7 @@ struct wayland_deleter
    }
 };
 
-template<typename T>
+template <typename T>
 using wayland_owner = std::unique_ptr<T, wayland_deleter<T>>;
 
 template <typename T>

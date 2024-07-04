@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -44,10 +44,9 @@ namespace util
 class fd_owner : private noncopyable
 {
 public:
-
    fd_owner() = default;
    fd_owner(int fd)
-    : fd_handle{ fd }
+      : fd_handle{ fd }
    {
    }
 
@@ -77,7 +76,7 @@ public:
 
    bool is_valid()
    {
-       return fd_handle >= 0;
+      return fd_handle >= 0;
    }
 
 private:

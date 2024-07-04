@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Arm Limited.
+ * Copyright (c) 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -60,7 +60,7 @@ public:
    struct init_parameters;
 
    /** Constructor to allow for custom allocation, but require privately defined arguments. */
-   surface(const init_parameters&);
+   surface(const init_parameters &);
 
    /**
     * @brief Allocates and initializes a surface
@@ -109,7 +109,7 @@ public:
     *
     * The raw pointer is valid for the lifetime of the surface.
     */
-   zwp_linux_surface_synchronization_v1* get_surface_sync_interface()
+   zwp_linux_surface_synchronization_v1 *get_surface_sync_interface()
    {
       return surface_sync_interface.get();
    }

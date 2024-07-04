@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021-2022 Arm Limited.
+ * Copyright (c) 2017-2019, 2021-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,8 +27,7 @@
 #include "wsi/swapchain_base.hpp"
 #include "wl_helpers.hpp"
 
-extern "C"
-{
+extern "C" {
 #include <vulkan/vk_icd.h>
 }
 

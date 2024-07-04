@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Arm Limited.
+ * Copyright (c) 2020-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -99,7 +99,7 @@ public:
     * @return Pointer to the newly created objects or @c nullptr if allocation failed.
     */
    template <typename T, typename... arg_types>
-   T *create(size_t num_objects, arg_types &&... args) const noexcept;
+   T *create(size_t num_objects, arg_types &&...args) const noexcept;
 
    /**
     * @brief Helper method to destroy and deallocate objects constructed with allocator::create().
@@ -109,7 +109,7 @@ public:
    void destroy(size_t num_objects, T *obj) const noexcept;
 
    template <typename T, typename... Args>
-   util::unique_ptr<T> make_unique(Args &&... args) const noexcept;
+   util::unique_ptr<T> make_unique(Args &&...args) const noexcept;
 
    VkAllocationCallbacks m_callbacks{};
    VkSystemAllocationScope m_scope;
@@ -193,7 +193,7 @@ bool operator!=(const custom_allocator<T> &, const custom_allocator<U> &)
 }
 
 template <typename T, typename... arg_types>
-T *allocator::create(size_t num_objects, arg_types &&... args) const noexcept
+T *allocator::create(size_t num_objects, arg_types &&...args) const noexcept
 {
    if (num_objects < 1)
    {
@@ -282,7 +282,7 @@ public:
  * @brief Creates a util::unique_ptr object using the allocator for the deleter.
  */
 template <typename T, typename... Args>
-util::unique_ptr<T> allocator::make_unique(Args &&... args) const noexcept
+util::unique_ptr<T> allocator::make_unique(Args &&...args) const noexcept
 {
    T *object = create<T>(1, std::forward<Args>(args)...);
    return util::unique_ptr<T>(object, *this);
@@ -324,7 +324,7 @@ public:
     * @return @c false iff the operation could not be performed due to an allocation failure.
     */
    template <typename... arg_types>
-   bool try_push_back(arg_types &&... args) noexcept
+   bool try_push_back(arg_types &&...args) noexcept
    {
       try
       {
@@ -356,7 +356,7 @@ public:
     * @return @c false iff the operation could not be performed due to an allocation failure.
     */
    template <typename... arg_types>
-   bool try_resize(arg_types &&... args) noexcept
+   bool try_resize(arg_types &&...args) noexcept
    {
       try
       {

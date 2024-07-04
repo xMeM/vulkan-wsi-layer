@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Arm Limited.
+ * Copyright (c) 2021-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -38,8 +38,8 @@
 
 namespace layer
 {
-   class device_private_data;
-   class instance_private_data;
+class device_private_data;
+class instance_private_data;
 } /* namespace layer */
 
 namespace wsi

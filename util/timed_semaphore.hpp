@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019 Arm Limited.
+ * Copyright (c) 2017, 2019, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -39,8 +39,7 @@
 
 #pragma once
 
-extern "C"
-{
+extern "C" {
 #include <pthread.h>
 }
 
