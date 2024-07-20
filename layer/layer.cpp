@@ -26,9 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include <array>
-
-#include <vulkan/vk_layer.h>
-#include <vulkan/vulkan.h>
+#include <dlfcn.h>
 
 #include "private_data.hpp"
 #include "surface_api.hpp"
@@ -40,7 +38,59 @@
 #include "util/macros.hpp"
 #include "util/helpers.hpp"
 
-#define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma ide diagnostic ignored "EmptyDeclOrStmt"
+#pragma ide diagnostic ignored "ConstantFunctionResult"
+#pragma ide diagnostic ignored "UnusedParameter"
+#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
+
+struct hw_module_t;
+struct hw_device_t;
+typedef struct hw_module_methods_t {
+   int (*open)(const struct hw_module_t* module, const char* id, struct hw_device_t** device);
+} hw_module_methods_t;
+
+typedef struct hw_module_t {
+   uint32_t tag;
+   uint16_t module_api_version;
+   uint16_t hal_api_version;
+   const char *id;
+   const char *name;
+   const char *author;
+   struct hw_module_methods_t* methods;
+   void* dso;
+#ifdef __LP64__
+   uint64_t reserved[32-7];
+#else
+   uint32_t reserved[32-7];
+#endif
+} hw_module_t;
+
+typedef struct hw_device_t {
+   uint32_t tag;
+   uint32_t version;
+   struct hw_module_t* module;
+#ifdef __LP64__
+   uint64_t reserved[12];
+#else
+   uint32_t reserved[12];
+#endif
+   int (*close)(struct hw_device_t* device);
+} hw_device_t;
+
+typedef struct hwvulkan_device_t {
+   struct hw_device_t common;
+
+   PFN_vkEnumerateInstanceExtensionProperties EnumerateInstanceExtensionProperties;
+   PFN_vkCreateInstance CreateInstance;
+   PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+} hwvulkan_device_t;
+
+static PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = nullptr;
+static PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = nullptr;
+static PFN_vkCreateDevice fpCreateDevice = nullptr;
+static VkExtensionProperties* mpProperties = nullptr;
+static uint32_t mpPropertyCount = 0;
 
 namespace layer
 {
@@ -70,10 +120,9 @@ VKAPI_ATTR VkLayerDeviceCreateInfo *get_chain_info(const VkDeviceCreateInfo *pCr
 }
 
 template <typename T>
-static T get_instance_proc_addr(PFN_vkGetInstanceProcAddr fp_get_instance_proc_addr, const char *name,
-                                VkInstance instance = VK_NULL_HANDLE)
+static T get_instance_proc_addr(PFN_vkGetInstanceProcAddr fp_get_instance_proc_addr, const char *name)
 {
-   T func = reinterpret_cast<T>(fp_get_instance_proc_addr(instance, name));
+   T func = reinterpret_cast<T>(fp_get_instance_proc_addr(VK_NULL_HANDLE, name));
    if (func == nullptr)
    {
       WSI_LOG_WARNING("Failed to get address of %s", name);
@@ -86,17 +135,7 @@ static T get_instance_proc_addr(PFN_vkGetInstanceProcAddr fp_get_instance_proc_a
 VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
                                     VkInstance *pInstance)
 {
-   VkLayerInstanceCreateInfo *layer_link_info = get_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
-   VkLayerInstanceCreateInfo *loader_data_callback = get_chain_info(pCreateInfo, VK_LOADER_DATA_CALLBACK);
-   if (nullptr == layer_link_info || nullptr == layer_link_info->u.pLayerInfo || nullptr == loader_data_callback)
-   {
-      WSI_LOG_ERROR("Unexpected NULL pointer in layer initialization structures during vkCreateInstance");
-      return VK_ERROR_INITIALIZATION_FAILED;
-   }
-
-   PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layer_link_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
-   PFN_vkSetInstanceLoaderData loader_callback = loader_data_callback->u.pfnSetInstanceLoaderData;
-   if (nullptr == fpGetInstanceProcAddr || nullptr == loader_callback)
+   if (nullptr == fpGetInstanceProcAddr)
    {
       WSI_LOG_ERROR("Unexpected NULL pointer for loader callback functions during vkCreateInstance");
       return VK_ERROR_INITIALIZATION_FAILED;
@@ -105,7 +144,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
    auto fpCreateInstance = get_instance_proc_addr<PFN_vkCreateInstance>(fpGetInstanceProcAddr, "vkCreateInstance");
    if (nullptr == fpCreateInstance)
    {
-      WSI_LOG_ERROR("Unexpected NULL return value from pfnNextGetInstanceProcAddr");
+      WSI_LOG_ERROR("Unexpected NULL return value of fpCreateInstance");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -149,9 +188,6 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       modified_info.enabledExtensionCount = modified_enabled_extensions.size();
    }
 
-   /* Advance the link info for the next element on the chain. */
-   layer_link_info->u.pLayerInfo = layer_link_info->u.pLayerInfo->pNext;
-
    /* Now call create instance on the chain further down the list.
     * Note that we do not remove the extensions that the layer supports from modified_info.ppEnabledExtensionNames.
     * Layers have to abide the rule that vkCreateInstance must not generate an error for unrecognized extension names.
@@ -175,7 +211,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     * otherwise use the default callbacks.
     */
    util::allocator instance_allocator{ VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE, pAllocator };
-   result = instance_private_data::associate(*pInstance, table, loader_callback, layer_platforms_to_enable,
+   result = instance_private_data::associate(*pInstance, table, layer_platforms_to_enable,
                                              instance_allocator);
    if (result != VK_SUCCESS)
    {
@@ -209,33 +245,25 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
 VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                                   const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
 {
-   VkLayerDeviceCreateInfo *layer_link_info = get_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
    VkLayerDeviceCreateInfo *loader_data_callback = get_chain_info(pCreateInfo, VK_LOADER_DATA_CALLBACK);
-   if (nullptr == layer_link_info || nullptr == layer_link_info->u.pLayerInfo || nullptr == loader_data_callback)
+   if (nullptr == loader_data_callback)
    {
       WSI_LOG_ERROR("Unexpected NULL pointer in layer initialization structures during vkCreateDevice");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   /* Retrieve the vkGetDeviceProcAddr and the vkCreateDevice function pointers for the next layer in the chain. */
-   PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = layer_link_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
-   PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = layer_link_info->u.pLayerInfo->pfnNextGetDeviceProcAddr;
    PFN_vkSetDeviceLoaderData loader_callback = loader_data_callback->u.pfnSetDeviceLoaderData;
-   if (nullptr == fpGetInstanceProcAddr || nullptr == fpGetDeviceProcAddr || nullptr == loader_callback)
+   if (nullptr == loader_callback)
    {
       WSI_LOG_ERROR("Unexpected NULL pointer for loader callback functions during vkCreateDevice");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
-   auto fpCreateDevice = get_instance_proc_addr<PFN_vkCreateDevice>(fpGetInstanceProcAddr, "vkCreateDevice");
    if (nullptr == fpCreateDevice)
    {
-      WSI_LOG_ERROR("Unexpected NULL return value from pfnNextGetInstanceProcAddr");
+      WSI_LOG_ERROR("Unexpected NULL return value of fpCreateDevice 2");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
-
-   /* Advance the link info for the next element on the chain. */
-   layer_link_info->u.pLayerInfo = layer_link_info->u.pLayerInfo->pNext;
 
    /* Enable extra extensions if needed by the layer, similarly to what done in vkCreateInstance. */
    VkDeviceCreateInfo modified_info = *pCreateInfo;
@@ -270,12 +298,36 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
       return result;
    }
 
+   auto fpGetDeviceQueue = (PFN_vkGetDeviceQueue) fpGetDeviceProcAddr(*pDevice, "vkGetDeviceQueue");
+   std::vector<VkQueue> queues{nullptr};
+   const VkDeviceCreateInfo* deviceCreateInfo = pCreateInfo;
+   do {
+      const VkDeviceQueueCreateInfo* queueCreateInfo = deviceCreateInfo->pQueueCreateInfos;
+      if (deviceCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO) {
+         do {
+            if (queueCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO) {
+               for (int i = 0; i < queueCreateInfo->queueCount; i++) {
+                  VkQueue queue = VK_NULL_HANDLE;
+                  fpGetDeviceQueue(*pDevice, queueCreateInfo->queueFamilyIndex, i, &queue);
+                  if (queue != VK_NULL_HANDLE)
+                     queues.push_back(queue);
+               }
+            }
+
+            queueCreateInfo = (const VkDeviceQueueCreateInfo *)queueCreateInfo->pNext;
+         } while (queueCreateInfo != nullptr);
+      }
+
+      deviceCreateInfo = (const VkDeviceCreateInfo *) deviceCreateInfo->pNext;
+   } while (deviceCreateInfo != nullptr);
+
+
    /* Following the spec: use the callbacks provided to vkCreateDevice() if not nullptr, otherwise use the callbacks
     * provided to the instance (if no allocator callbacks was provided to the instance, it will use default ones).
     */
    util::allocator device_allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, pAllocator };
    result =
-      device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator);
+      device_private_data::associate(*pDevice, inst_data, physicalDevice, table, loader_callback, device_allocator, queues);
    if (result != VK_SUCCESS)
    {
       if (table.DestroyDevice != nullptr)
@@ -397,6 +449,71 @@ VWL_VKAPI_EXPORT wsi_layer_vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLay
    return VK_SUCCESS;
 }
 
+
+VWL_VKAPI_CALL(PFN_vkVoidFunction)
+VWL_VKAPI_EXPORT vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName) {
+   if (fpGetInstanceProcAddr == nullptr) {
+      void *libhardware = dlopen("libhardware.so", RTLD_NOW);
+      if (!libhardware) {
+         dprintf(2, "Unexpected NULL pointer for libhardware handle\n");
+         return nullptr;
+      }
+
+      auto hw_get_module = (int (*)(const char *, const hw_module_t **))dlsym(libhardware, "hw_get_module");
+      if (!hw_get_module) {
+         dprintf(2, "Unexpected NULL pointer for hw_get_module handle\n");
+         return nullptr;
+      }
+      hw_module_t *module;
+      int ret = hw_get_module("vulkan", (const hw_module_t **)&module);
+      if (ret) {
+         dprintf(2, "Unexpected NULL pointer for vulkan hw_module_t handle\n");
+         return nullptr;
+      }
+
+      hwvulkan_device_t *sysvk = nullptr;
+      module->methods->open(module, "vk0", (struct hw_device_t **)&sysvk);
+      if (!sysvk) {
+         dprintf(2, "Unexpected NULL pointer for vulkan hwvulkan_device_t handle\n");
+         return nullptr;
+      }
+
+      fpGetInstanceProcAddr = sysvk->GetInstanceProcAddr;
+      auto fpEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties) fpGetInstanceProcAddr(instance, "vkEnumerateInstanceExtensionProperties");
+
+      fpEnumerateInstanceExtensionProperties(nullptr, &mpPropertyCount, nullptr);
+      mpProperties = (VkExtensionProperties*) calloc(sizeof(VkExtensionProperties), mpPropertyCount + 4);
+      fpEnumerateInstanceExtensionProperties(nullptr, &mpPropertyCount, mpProperties);
+      sprintf(mpProperties[mpPropertyCount].extensionName, "VK_KHR_surface");
+      mpProperties[mpPropertyCount].specVersion = 25;
+      sprintf(mpProperties[mpPropertyCount +1].extensionName, "VK_KHR_xcb_surface");
+      mpProperties[mpPropertyCount +1].specVersion = 1;
+      sprintf(mpProperties[mpPropertyCount +2].extensionName, "VK_KHR_xlib_surface");
+      mpProperties[mpPropertyCount +2].specVersion = 1;
+      sprintf(mpProperties[mpPropertyCount +3].extensionName, "VK_KHR_get_surface_capabilities2");
+      mpProperties[mpPropertyCount +3].specVersion = 1;
+      mpPropertyCount += 4;
+   }
+
+   if ((fpGetDeviceProcAddr == nullptr || fpCreateDevice == nullptr) && instance != nullptr) {
+      fpCreateDevice = (PFN_vkCreateDevice) fpGetInstanceProcAddr(instance, "vkCreateDevice");
+      fpGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr) fpGetInstanceProcAddr(instance, "vkGetDeviceProcAddr");
+   }
+
+   return wsi_layer_vkGetInstanceProcAddr(instance, pName);
+}
+
+VWL_VKAPI_CALL(PFN_vkVoidFunction)
+VWL_VKAPI_EXPORT  vk_icdGetPhysicalDeviceProcAddr (VkInstance _instance, const char *pName) {
+   return nullptr;
+}
+
+VWL_VKAPI_CALL(VkResult) VWL_VKAPI_EXPORT vk_icdNegotiateLoaderICDInterfaceVersion (uint32_t *pSupportedVersion) {
+#define MIN(i, j) (((i) < (j)) ? (i) : (j))
+   *pSupportedVersion = MIN(*pSupportedVersion, 5u);
+   return VK_SUCCESS;
+}
+
 VWL_VKAPI_CALL(void)
 wsi_layer_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
                                           VkPhysicalDeviceFeatures2 *pFeatures) VWL_API_POST
@@ -415,6 +532,32 @@ wsi_layer_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
          instance.has_image_compression_support(physicalDevice);
    }
 #endif
+}
+
+VWL_VKAPI_CALL(VkResult) wsi_layer_vkEnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) {
+   if (pPropertyCount)
+      *pPropertyCount = mpPropertyCount;
+   if (pProperties)
+      memcpy(pProperties, mpProperties, sizeof(VkExtensionProperties) * mpPropertyCount);
+
+   return VK_SUCCESS;
+}
+
+VWL_VKAPI_CALL(VkResult) wsi_layer_vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) {
+   auto &instance = layer::instance_private_data::get(physicalDevice);
+
+   VkResult r = instance.disp.EnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pPropertyCount, pProperties);
+
+   if (pPropertyCount && pProperties) {
+      sprintf(pProperties[*pPropertyCount].extensionName, "VK_KHR_swapchain");
+      pProperties[*pPropertyCount].specVersion = 1;
+   }
+
+   if (pPropertyCount)
+      *pPropertyCount+=1;
+
+   return r;
+
 }
 
 #define GET_PROC_ADDR(func)      \
@@ -440,7 +583,7 @@ wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POS
    GET_PROC_ADDR(vkCreateImage);
    GET_PROC_ADDR(vkBindImageMemory2);
 
-   return layer::device_private_data::get(device).disp.GetDeviceProcAddr(device, funcName);
+   return fpGetDeviceProcAddr(device, funcName);
 }
 
 VWL_VKAPI_CALL(PFN_vkVoidFunction)
@@ -452,6 +595,10 @@ wsi_layer_vkGetInstanceProcAddr(VkInstance instance, const char *funcName) VWL_A
    GET_PROC_ADDR(vkDestroyInstance);
    GET_PROC_ADDR(vkCreateDevice);
    GET_PROC_ADDR(vkGetPhysicalDevicePresentRectanglesKHR);
+   GET_PROC_ADDR(vkEnumerateInstanceExtensionProperties);
+   GET_PROC_ADDR(vkEnumerateDeviceExtensionProperties);
+   if (!strcmp("vkEnumerateInstanceVersion", funcName))
+      return (PFN_vkVoidFunction) fpGetInstanceProcAddr(instance, funcName);
 
    if (!strcmp(funcName, "vkGetPhysicalDeviceFeatures2"))
    {

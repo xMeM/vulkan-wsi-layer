@@ -57,17 +57,21 @@ public:
 
    xcb_connection_t *get_connection()
    {
-      return m_connection;
+      return m_surface.connection;
    }
 
    xcb_window_t get_window()
    {
-      return m_window;
+      return m_surface.window;
+   };
+
+   VkIcdSurfaceXcb* get_surface()
+   {
+      return &m_surface;
    };
 
 private:
-   xcb_connection_t *m_connection;
-   xcb_window_t m_window;
+   VkIcdSurfaceXcb m_surface;
 
    surface_properties properties;
 };
