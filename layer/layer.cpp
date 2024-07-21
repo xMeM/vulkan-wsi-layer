@@ -193,7 +193,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     * Layers have to abide the rule that vkCreateInstance must not generate an error for unrecognized extension names.
     * Also, the loader filters the extension list to ensure that ICDs do not see extensions that they do not support.
     */
-   TRY_LOG(fpCreateInstance(&modified_info, pAllocator, pInstance), "Failed to create the instance");
+   TRY_LOG(fpCreateInstance(pCreateInfo, pAllocator, pInstance), "Failed to create the instance");
 
    instance_dispatch_table table{};
    VkResult result;
