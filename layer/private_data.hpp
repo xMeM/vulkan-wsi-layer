@@ -32,7 +32,6 @@
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
-#include <vulkan/vk_icd.h>
 #include <vulkan/vulkan_wayland.h>
 #include <vulkan/vulkan_android.h>
 #include <xcb/xcb.h>
@@ -77,8 +76,6 @@ namespace layer
    OPTIONAL(CreateHeadlessSurfaceEXT)                   \
    /* VK_KHR_wayland_surface */                         \
    OPTIONAL(CreateWaylandSurfaceKHR)                    \
-   /* VK_KHR_xcb_surface */                             \
-   OPTIONAL(CreateXcbSurfaceKHR)                        \
    /* VK_KHR_get_surface_capabilities2 */               \
    OPTIONAL(GetPhysicalDeviceSurfaceCapabilities2KHR)   \
    OPTIONAL(GetPhysicalDeviceSurfaceFormats2KHR)        \
@@ -123,7 +120,6 @@ struct instance_dispatch_table
  */
 #define DEVICE_ENTRYPOINTS_LIST(REQUIRED, OPTIONAL) \
    /* Vulkan 1.0 */                                 \
-   REQUIRED(GetDeviceProcAddr)                      \
    REQUIRED(GetDeviceQueue)                         \
    REQUIRED(QueueSubmit)                            \
    REQUIRED(QueueWaitIdle)                          \
@@ -221,7 +217,6 @@ public:
     * @return VkResult VK_SUCCESS if successful, otherwise an error.
     */
    static VkResult associate(VkInstance instance, instance_dispatch_table &table,
-                             PFN_vkSetInstanceLoaderData set_loader_data,
                              util::wsi_platform_set enabled_layer_platforms, const util::allocator &allocator);
 
    /**
@@ -358,7 +353,7 @@ private:
     * @param enabled_layer_platforms The platforms that are enabled by the layer.
     * @param alloc The allocator that the instance_private_data will use.
     */
-   instance_private_data(const instance_dispatch_table &table, PFN_vkSetInstanceLoaderData set_loader_data,
+   instance_private_data(const instance_dispatch_table &table,
                          util::wsi_platform_set enabled_layer_platforms, const util::allocator &alloc);
 
    /**
@@ -373,7 +368,6 @@ private:
     */
    bool do_icds_support_surface(VkPhysicalDevice phys_dev, VkSurfaceKHR surface);
 
-   const PFN_vkSetInstanceLoaderData SetInstanceLoaderData;
    const util::wsi_platform_set enabled_layer_platforms;
    const util::allocator allocator;
 
@@ -422,7 +416,7 @@ public:
     */
    static VkResult associate(VkDevice dev, instance_private_data &inst_data, VkPhysicalDevice phys_dev,
                              const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
-                             const util::allocator &allocator);
+                             const util::allocator &allocator, std::vector<VkQueue>& queues);
 
    static void disassociate(VkDevice dev);
 

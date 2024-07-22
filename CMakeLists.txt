@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 cmake_minimum_required(VERSION 3.4.3)
-project(VkLayer_window_system_integration)
+project(sysvk_x11)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(VULKAN_PKG_CONFIG vulkan)
@@ -162,8 +162,6 @@ if(BUILD_WSI_WAYLAND)
    endif()
    target_link_libraries(wayland_wsi drm_utils ${WAYLAND_CLIENT_LDFLAGS})
    list(APPEND LINK_WSI_LIBS wayland_wsi)
-else()
-   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_wayland_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
 
 # Headless
@@ -180,8 +178,6 @@ if(BUILD_WSI_HEADLESS)
 
    target_compile_options(wsi_headless INTERFACE "-DBUILD_WSI_HEADLESS=1")
    list(APPEND LINK_WSI_LIBS wsi_headless)
-else()
-   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_EXT_headless_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
 
 # X11 WSI
@@ -200,8 +196,7 @@ if(BUILD_WSI_X11)
 
    target_compile_options(wsi_x11 INTERFACE "-DBUILD_WSI_X11=1")
    list(APPEND LINK_WSI_LIBS wsi_x11 xcb xcb-present xcb-xfixes xcb-dri3 X11-xcb)
-else()
-   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_KHR_xcb_surface/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+   add_definitions("-DVK_USE_PLATFORM_XCB_KHR")
 endif()
 
 # Layer
@@ -229,14 +224,9 @@ if (BUILD_WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN)
    add_definitions("-DWSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN=1")
 else()
    add_definitions("-DWSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN=0")
-   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_EXT_image_compression_control_swapchain/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
 endif()
 
 target_link_libraries(${PROJECT_NAME} ${LINK_WSI_LIBS})
 
-add_custom_target(manifest_json ALL COMMAND
-   cp ${PROJECT_SOURCE_DIR}/layer/VkLayer_window_system_integration.json ${CMAKE_CURRENT_BINARY_DIR}
-   ${JSON_COMMANDS})
-
-install(TARGETS ${PROJECT_NAME} DESTINATION share/vulkan/implicit_layer.d/)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json DESTINATION share/vulkan/implicit_layer.d/)
+install(TARGETS ${PROJECT_NAME} DESTINATION share/vulkan/icd.d/)
+install(FILES sysvk_icd.json DESTINATION share/vulkan/icd.d/)

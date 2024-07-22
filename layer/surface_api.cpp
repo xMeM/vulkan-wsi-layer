@@ -164,9 +164,6 @@ wsi_layer_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
                               const VkAllocationCallbacks *pAllocator) VWL_API_POST
 {
    auto &instance_data = layer::instance_private_data::get(instance);
-
-   instance_data.disp.DestroySurfaceKHR(instance, surface, pAllocator);
-
    instance_data.remove_surface(
       surface, util::allocator{ instance_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, pAllocator });
 }

@@ -41,7 +41,7 @@
  *                          functions that need to be callable from C.
  *  VWL_VKAPI_EXPORT      - Marks that the symbol should use the "default" visibility
  */
-#define VWL_VKAPI_CALL(ret_type) extern "C" VKAPI_ATTR ret_type VKAPI_CALL
+#define VWL_VKAPI_CALL(ret_type) extern "C" [[maybe_unused]] VKAPI_ATTR ret_type VKAPI_CALL
 #define VWL_CAPI_CALL(ret_type) extern "C" ret_type
 #define VWL_API_POST noexcept
 

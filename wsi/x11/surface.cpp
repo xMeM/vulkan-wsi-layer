@@ -44,8 +44,7 @@ struct surface::init_parameters
 
 surface::surface(const init_parameters &params)
    : wsi::surface()
-   , m_connection(params.connection)
-   , m_window(params.window)
+   , m_surface({ .base = { .platform = VK_ICD_WSI_PLATFORM_XCB } , .connection = params.connection, .window = params.window })
    , properties(*this, params.allocator)
 {
 }
@@ -56,8 +55,8 @@ surface::~surface()
 
 bool surface::getWindowSizeAndDepth(VkExtent2D *windowExtent, int *depth)
 {
-   auto cookie = xcb_get_geometry(m_connection, m_window);
-   if (auto *geom = xcb_get_geometry_reply(m_connection, cookie, nullptr))
+   auto cookie = xcb_get_geometry(m_surface.connection, m_surface.window);
+   if (auto *geom = xcb_get_geometry_reply(m_surface.connection, cookie, nullptr))
    {
       windowExtent->width = static_cast<uint32_t>(geom->width);
       windowExtent->height = static_cast<uint32_t>(geom->height);

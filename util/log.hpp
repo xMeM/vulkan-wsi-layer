@@ -64,8 +64,8 @@ static constexpr bool wsi_log_enable = true;
          ::util::wsi_log_message(level, __FILE__, __LINE__, __VA_ARGS__); \
    } while (0)
 
-#define WSI_LOG_ERROR(...) WSI_LOG(1, __VA_ARGS__)
-#define WSI_LOG_WARNING(...) WSI_LOG(2, __VA_ARGS__)
+#define WSI_LOG_ERROR(...) do { dprintf(2, "(%s:%d): ", __FILE__, __LINE__); dprintf(2, __VA_ARGS__); dprintf(2, "\n"); } while (0)
+#define WSI_LOG_WARNING(...) do { dprintf(2, "(%s:%d): ", __FILE__, __LINE__); dprintf(2, __VA_ARGS__); dprintf(2, "\n"); } while (0)
 #define WSI_LOG_INFO(...) WSI_LOG(3, __VA_ARGS__)
 
 } /* namespace util */

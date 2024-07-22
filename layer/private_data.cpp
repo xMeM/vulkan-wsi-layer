@@ -78,11 +78,9 @@ VkResult device_dispatch_table::populate(VkDevice device, PFN_vkGetDeviceProcAdd
 }
 
 instance_private_data::instance_private_data(const instance_dispatch_table &table,
-                                             PFN_vkSetInstanceLoaderData set_loader_data,
                                              util::wsi_platform_set enabled_layer_platforms,
                                              const util::allocator &alloc)
    : disp{ table }
-   , SetInstanceLoaderData{ set_loader_data }
    , enabled_layer_platforms{ enabled_layer_platforms }
    , allocator{ alloc }
    , surfaces{ alloc }
@@ -103,12 +101,11 @@ static inline void *get_key(dispatchable_type dispatchable_object)
 }
 
 VkResult instance_private_data::associate(VkInstance instance, instance_dispatch_table &table,
-                                          PFN_vkSetInstanceLoaderData set_loader_data,
                                           util::wsi_platform_set enabled_layer_platforms,
                                           const util::allocator &allocator)
 {
    auto instance_data =
-      allocator.make_unique<instance_private_data>(table, set_loader_data, enabled_layer_platforms, allocator);
+      allocator.make_unique<instance_private_data>(table, enabled_layer_platforms, allocator);
 
    if (instance_data == nullptr)
    {
@@ -313,7 +310,7 @@ device_private_data::device_private_data(instance_private_data &inst_data, VkPhy
 
 VkResult device_private_data::associate(VkDevice dev, instance_private_data &inst_data, VkPhysicalDevice phys_dev,
                                         const device_dispatch_table &table, PFN_vkSetDeviceLoaderData set_loader_data,
-                                        const util::allocator &allocator)
+                                        const util::allocator &allocator, std::vector<VkQueue>& queues)
 {
    auto device_data =
       allocator.make_unique<device_private_data>(inst_data, phys_dev, dev, table, set_loader_data, allocator);
@@ -325,10 +322,9 @@ VkResult device_private_data::associate(VkDevice dev, instance_private_data &ins
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
-   const auto key = get_key(dev);
    scoped_mutex lock(g_data_lock);
 
-   auto it = g_device_data.find(key);
+   auto it = g_device_data.find(dev);
    if (it != g_device_data.end())
    {
       WSI_LOG_WARNING("Hash collision when adding new device (%p)", reinterpret_cast<void *>(dev));
@@ -336,9 +332,11 @@ VkResult device_private_data::associate(VkDevice dev, instance_private_data &ins
       g_device_data.erase(it);
    }
 
-   auto result = g_device_data.try_insert(std::make_pair(key, device_data.get()));
+   auto result = g_device_data.try_insert(std::make_pair(dev, device_data.get()));
    if (result.has_value())
    {
+      for(VkQueue& queue: queues)
+         g_device_data.try_insert(std::make_pair(queue, device_data.get()));
       device_data.release(); // NOLINT(bugprone-unused-return-value)
       return VK_SUCCESS;
    }
@@ -357,7 +355,7 @@ void device_private_data::disassociate(VkDevice dev)
    device_private_data *device_data = nullptr;
    {
       scoped_mutex lock(g_data_lock);
-      auto it = g_device_data.find(get_key(dev));
+      auto it = g_device_data.find(dev);
       if (it == g_device_data.end())
       {
          WSI_LOG_WARNING("Failed to find private data for device (%p)", reinterpret_cast<void *>(dev));
@@ -376,7 +374,7 @@ static device_private_data &get_device_private_data(dispatchable_type dispatchab
 {
    scoped_mutex lock(g_data_lock);
 
-   return *g_device_data.at(get_key(dispatchable_object));
+   return *g_device_data.at(dispatchable_object);
 }
 
 device_private_data &device_private_data::get(VkDevice device)

@@ -162,20 +162,12 @@ CreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR *pCreat
 
    auto wsi_surface = surface::make_surface(allocator, pCreateInfo->connection, pCreateInfo->window);
    if (wsi_surface == nullptr)
-   {
       return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
+
+   *pSurface = reinterpret_cast<VkSurfaceKHR>(wsi_surface->get_surface());
    auto surface_base = util::unique_ptr<wsi::surface>(std::move(wsi_surface));
-   VkResult res = instance_data.disp.CreateXcbSurfaceKHR(instance, pCreateInfo, pAllocator, pSurface);
-   if (res == VK_SUCCESS)
-   {
-      res = instance_data.add_surface(*pSurface, surface_base);
-      if (res != VK_SUCCESS)
-      {
-         instance_data.disp.DestroySurfaceKHR(instance, *pSurface, pAllocator);
-      }
-   }
-   return res;
+
+   return instance_data.add_surface(*pSurface, surface_base);
 }
 
 static bool visual_supported(xcb_visualtype_t *visual)
