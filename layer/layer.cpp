@@ -184,6 +184,23 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
       TRY_LOG_CALL(extensions.add(extra_extensions.data(), extra_extensions.size()));
       TRY_LOG_CALL(extensions.get_extension_strings(modified_enabled_extensions));
 
+      if (extensions.contains("VK_KHR_surface"))
+      {
+         extensions.remove("VK_KHR_surface");
+      }
+      if (extensions.contains("VK_KHR_xcb_surface"))
+      {
+         extensions.remove("VK_KHR_xcb_surface");
+      }
+      if (extensions.contains("VK_KHR_xlib_surface"))
+      {
+         extensions.remove("VK_KHR_xlib_surface");
+      }
+      if (extensions.contains("VK_KHR_get_surface_capabilities2"))
+      {
+         extensions.remove("VK_KHR_get_surface_capabilities2");
+      }
+
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
       modified_info.enabledExtensionCount = modified_enabled_extensions.size();
    }
@@ -193,7 +210,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     * Layers have to abide the rule that vkCreateInstance must not generate an error for unrecognized extension names.
     * Also, the loader filters the extension list to ensure that ICDs do not see extensions that they do not support.
     */
-   TRY_LOG(fpCreateInstance(pCreateInfo, pAllocator, pInstance), "Failed to create the instance");
+   TRY_LOG(fpCreateInstance(&modified_info, pAllocator, pInstance), "Failed to create the instance");
 
    instance_dispatch_table table{};
    VkResult result;
@@ -280,6 +297,11 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
       TRY_LOG_CALL(wsi::add_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
       TRY_LOG_CALL(enabled_extensions.get_extension_strings(modified_enabled_extensions));
 
+      if (enabled_extensions.contains("VK_KHR_swapchain"))
+      {
+         enabled_extensions.remove("VK_KHR_swapchain");
+      }
+
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
       modified_info.enabledExtensionCount = modified_enabled_extensions.size();
    }
@@ -342,7 +364,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
     * vkGetDeviceProcAddr for functions of disabled extensions.
     */
    result = layer::device_private_data::get(*pDevice).set_device_enabled_extensions(
-      modified_info.ppEnabledExtensionNames, modified_info.enabledExtensionCount);
+      pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
    if (result != VK_SUCCESS)
    {
       layer::device_private_data::disassociate(*pDevice);
