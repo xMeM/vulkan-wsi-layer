@@ -174,6 +174,9 @@ swapchain::~swapchain()
 
    xcb_unregister_for_special_event(m_connection, m_special_event);
 
+   set_error_state(VK_ERROR_SURFACE_LOST_KHR);
+   m_present_pending = false;
+   m_present_pending.notify_one();
    /* Call the base's teardown */
    teardown();
 }
@@ -417,13 +420,21 @@ void swapchain::present_image(uint32_t pending_index)
          m_present_pending.wait(true);
       }
    }
-   m_present_pending = true;
-   m_present_pending.notify_one();
 
    image->serial = ++m_send_sbc;
-   xcb_present_pixmap(m_connection, m_window, image->pixmap, image->serial, 0, 0, 0, 0, 0, 0, 0,
-                      XCB_PRESENT_OPTION_NONE, 0, 0, 0, 0, nullptr);
+   auto cookie = xcb_present_pixmap_checked(m_connection, m_window, image->pixmap, image->serial, 0, 0, 0, 0, 0, 0, 0,
+                                            XCB_PRESENT_OPTION_NONE, 0, 0, 0, 0, nullptr);
+   auto err = xcb_request_check(m_connection, cookie);
+   if (err != nullptr)
+   {
+      free(err);
+      unpresent_image(pending_index);
+      return set_error_state(VK_ERROR_SURFACE_LOST_KHR);
+   }
    xcb_flush(m_connection);
+
+   m_present_pending = true;
+   m_present_pending.notify_one();
 }
 
 void swapchain::destroy_image(wsi::swapchain_image &image)
