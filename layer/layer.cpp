@@ -440,6 +440,15 @@ wsi_layer_vkGetDeviceProcAddr(VkDevice device, const char *funcName) VWL_API_POS
    {
       GET_PROC_ADDR(vkGetSwapchainStatusKHR);
    }
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   if (layer::device_private_data::get(device).is_device_extension_enabled(VK_KHR_PRESENT_TIMING_EXTENSION_NAME))
+   {
+      GET_PROC_ADDR(vkSetSwapchainPresentTimingQueueSizeEXT);
+      GET_PROC_ADDR(vkGetSwapchainTimingPropertiesEXT);
+      GET_PROC_ADDR(vkGetSwapchainTimeDomainPropertiesEXT);
+      GET_PROC_ADDR(vkGetPastPresentationTimingEXT);
+   }
+#endif
    GET_PROC_ADDR(vkDestroyDevice);
 
    GET_PROC_ADDR(vkCreateImage);
