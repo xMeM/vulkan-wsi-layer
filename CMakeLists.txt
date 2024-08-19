@@ -235,6 +235,11 @@ add_library(${PROJECT_NAME} SHARED
    wsi/swapchain_base.cpp
    wsi/synchronization.cpp
    wsi/wsi_factory.cpp)
+if (VULKAN_WSI_LAYER_EXPERIMENTAL)
+   target_sources(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/layer/present_timing.cpp)
+else()
+   list(APPEND JSON_COMMANDS COMMAND sed -i '/VK_EXT_present_timing/d' ${CMAKE_CURRENT_BINARY_DIR}/VkLayer_window_system_integration.json)
+endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${WSI_DEFINES})
 target_include_directories(${PROJECT_NAME} PRIVATE

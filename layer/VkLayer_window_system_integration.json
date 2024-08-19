@@ -42,6 +42,16 @@
                 "entrypoints": [
                     "vkReleaseSwapchainImagesEXT"
                 ]
+            },
+            {
+                "name": "VK_EXT_present_timing",
+                "spec_version": "1",
+                "entrypoints": [
+                    "vkSetSwapchainPresentTimingQueueSizeEXT",
+                    "vkGetSwapchainTimingPropertiesEXT",
+                    "vkGetSwapchainTimeDomainPropertiesEXT",
+                    "vkGetPastPresentationTimingEXT"
+                ]
             }
         ],
         "disable_environment": {
