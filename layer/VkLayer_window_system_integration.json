@@ -36,6 +36,7 @@
                     "vkGetPhysicalDevicePresentRectanglesKHR"
                 ]
             },
+            {"name": "VK_KHR_present_id", "spec_version": "1"},
             {
                 "name": "VK_EXT_swapchain_maintenance1",
                 "spec_version": "1",

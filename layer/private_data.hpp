@@ -806,6 +806,13 @@ public:
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 
    /**
+    * @brief Set whether the device supports the present ID feature.
+    *
+    * @param enable Value to set m_present_id_enabled member variable.
+    */
+   void set_present_id_feature_enabled(bool enable);
+
+   /**
     * @brief Selectively enable/disable the swapchain maintenance1 features for this device.
     *
     * @param enable Value to set swapchain_maintenance1_enabled member variable.
@@ -861,6 +868,12 @@ private:
     */
    bool compression_control_enabled;
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
+   /**
+    * @brief Stores whether the device supports the present ID feature.
+    *
+    */
+   bool present_id_enabled;
 
    /**
     * @brief Stores whether the device has enabled support for the swapchain maintenance1 features.

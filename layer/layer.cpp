@@ -193,7 +193,7 @@ VKAPI_ATTR VkResult create_instance(const VkInstanceCreateInfo *pCreateInfo, con
     */
    VkResult result =
       instance_private_data::get(*pInstance)
-         .set_instance_enabled_extensions(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount);
+         .set_instance_enabled_extensions(modified_enabled_extensions.data(), modified_enabled_extensions.size());
    if (result != VK_SUCCESS)
    {
       instance_private_data::disassociate(*pInstance);
@@ -312,6 +312,13 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    }
 #endif
 
+   const auto present_id_features = util::find_extension<VkPhysicalDevicePresentIdFeaturesKHR>(
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR, pCreateInfo->pNext);
+   if (present_id_features != nullptr)
+   {
+      layer::device_private_data::get(*pDevice).set_present_id_feature_enabled(present_id_features->presentId);
+   }
+
    auto *physical_device_swapchain_maintenance1_features =
       util::find_extension<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT>(
          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT, pCreateInfo->pNext);
@@ -425,6 +432,13 @@ wsi_layer_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
          instance.has_image_compression_support(physicalDevice);
    }
 #endif
+
+   auto *present_id_features = util::find_extension<VkPhysicalDevicePresentIdFeaturesKHR>(
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR, pFeatures->pNext);
+   if (present_id_features != nullptr)
+   {
+      present_id_features->presentId = true;
+   }
 
    auto *physical_device_swapchain_maintenance1_features =
       util::find_extension<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT>(
