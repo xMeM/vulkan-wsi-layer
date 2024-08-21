@@ -128,10 +128,10 @@ struct surface::init_parameters
 surface::surface(const init_parameters &params)
    : wsi::surface()
    , wayland_display(params.display)
+   , surface_queue(nullptr)
    , wayland_surface(params.surf)
    , supported_formats(params.allocator)
    , properties(this, params.allocator)
-   , surface_queue(nullptr)
    , last_frame_callback(nullptr)
    , present_pending(false)
 {
