@@ -74,6 +74,9 @@ public:
 
    bool is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b) override;
 
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   void get_present_timing_surface_caps(VkPresentTimingSurfaceCapabilitiesEXT *present_timing_surface_caps) override;
+#endif
 private:
    surface_properties();
 

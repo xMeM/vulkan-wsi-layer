@@ -38,6 +38,10 @@
 #include "util/format_modifiers.hpp"
 #include "util/drm/drm_utils.hpp"
 
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+#include "layer/wsi_layer_experimental.hpp"
+#endif
+
 namespace wsi
 {
 
@@ -109,6 +113,13 @@ public:
       VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities) = 0;
 
    virtual bool is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b) = 0;
+
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   /**
+    * @brief Get the present timing surface capabilities for the specific VkSurface type.
+    */
+   virtual void get_present_timing_surface_caps(VkPresentTimingSurfaceCapabilitiesEXT *present_timing_surface_caps) = 0;
+#endif
 
 private:
    /**

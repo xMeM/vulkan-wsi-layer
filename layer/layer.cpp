@@ -41,6 +41,10 @@
 #include "util/macros.hpp"
 #include "util/helpers.hpp"
 
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+#include "wsi_layer_experimental.hpp"
+#endif
+
 #define VK_LAYER_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
 
 namespace layer
@@ -449,6 +453,15 @@ wsi_layer_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
    if (physical_device_swapchain_maintenance1_features != nullptr)
    {
       physical_device_swapchain_maintenance1_features->swapchainMaintenance1 = true;
+   }
+
+   auto *present_timing_features = util::find_extension<VkPhysicalDevicePresentTimingFeaturesEXT>(
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_TIMING_FEATURES_EXT, pFeatures->pNext);
+   if (present_timing_features != nullptr)
+   {
+      present_timing_features->presentTiming = VK_TRUE;
+      present_timing_features->presentAtAbsoluteTime = VK_TRUE;
+      present_timing_features->presentAtRelativeTime = VK_TRUE;
    }
 #endif
 }

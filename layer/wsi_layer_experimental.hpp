@@ -51,6 +51,8 @@
 #define VK_STRUCTURE_TYPE_PRESENT_TIMING_INFO_EXT ((VkStructureType)1000208010)
 #define VK_STRUCTURE_TYPE_PRESENT_TIMINGS_INFO_EXT ((VkStructureType)1000208011)
 
+typedef VkFlags VkPresentStageFlagsEXT;
+
 typedef struct VkPhysicalDevicePresentTimingFeaturesEXT
 {
    VkStructureType sType;
@@ -131,14 +133,14 @@ typedef struct VkPastPresentationTimingPropertiesEXT
    uint64_t timeDomainsCounter;
    uint32_t presentationTimingCount;
    VkPastPresentationTimingEXT *pPresentationTimings;
-};
+} VkPastPresentationTimingPropertiesEXT;
 
 typedef struct VkPastPresentationTimingInfoEXT
 {
    VkStructureType sType;
    const void *pNext;
    VkSwapchainKHR swapchain;
-};
+} VkPastPresentationTimingInfoEXT;
 
 typedef union VkPresentTimeEXT
 {
