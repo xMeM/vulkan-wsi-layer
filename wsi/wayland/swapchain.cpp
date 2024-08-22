@@ -464,10 +464,11 @@ VkResult swapchain::create_swapchain_image(VkImageCreateInfo image_create_info, 
    return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
 }
 
-void swapchain::present_image(uint32_t pendingIndex)
+void swapchain::present_image(const pending_present_request &pending_present)
 {
    int res;
-   wayland_image_data *image_data = reinterpret_cast<wayland_image_data *>(m_swapchain_images[pendingIndex].data);
+   wayland_image_data *image_data =
+      reinterpret_cast<wayland_image_data *>(m_swapchain_images[pending_present.image_index].data);
 
    /* if a frame is already pending, wait for a hint to present again */
    if (!m_wsi_surface->wait_next_frame_event())
@@ -508,6 +509,8 @@ void swapchain::present_image(uint32_t pendingIndex)
       /* Setting the swapchain as invalid */
       set_error_state(VK_ERROR_SURFACE_LOST_KHR);
    }
+
+   set_present_id(pending_present.present_id);
 }
 
 void swapchain::destroy_image(swapchain_image &image)

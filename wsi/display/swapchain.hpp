@@ -92,7 +92,14 @@ public:
    virtual VkResult create_and_bind_swapchain_image(VkImageCreateInfo image_create_info,
                                                     swapchain_image &image) override;
 
-   virtual void present_image(uint32_t pending_index) override;
+   /**
+    * @brief Method to present and image
+    *
+    * It sends the next image for presentation to the presentation engine.
+    *
+    * @param pending_present Information on the pending present request.
+    */
+   void present_image(const pending_present_request &pending_present) override;
 
    virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
                                               uint32_t sem_count) override;

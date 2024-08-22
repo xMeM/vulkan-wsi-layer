@@ -116,11 +116,13 @@ protected:
    VkResult create_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
 
    /**
-    * @brief Method to present an image
+    * @brief Method to present and image
     *
-    * @param pendingIndex Index of the pending image to be presented.
+    * It sends the next image for presentation to the presentation engine.
+    *
+    * @param pending_present Information on the pending present request.
     */
-   void present_image(uint32_t pendingIndex) override;
+   void present_image(const pending_present_request &pending_present) override;
 
    /**
     * @brief Method to release a swapchain image

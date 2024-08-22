@@ -63,8 +63,7 @@ void swapchain_base::page_flip_thread()
     */
    while (m_page_flip_thread_run)
    {
-
-      uint32_t image_index;
+      pending_present_request submit_info{};
       if (m_present_mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR)
       {
          /* In continuous mode the application will only make one presentation request,
@@ -82,7 +81,7 @@ void swapchain_base::page_flip_thread()
 
          /* For continuous mode there will be only one image in the swapchain.
           * This image will always be used, and there is no pending state in this case. */
-         image_index = 0;
+         submit_info.image_index = 0;
       }
       else
       {
@@ -97,13 +96,14 @@ void swapchain_base::page_flip_thread()
          /* We want to present the oldest queued for present image from our present queue,
           * which we can find at the sc->pending_buffer_pool.head index. */
          std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
-         auto pending_index = m_pending_buffer_pool.pop_front();
-         assert(pending_index.has_value());
-         image_index = *pending_index;
+
+         auto pending_submission = m_pending_buffer_pool.pop_front();
+         assert(pending_submission.has_value());
+         submit_info = *pending_submission;
       }
 
       /* We may need to wait for the payload of the present sync of the oldest pending image to be finished. */
-      while ((vk_res = image_wait_present(sc_images[image_index], timeout)) == VK_TIMEOUT)
+      while ((vk_res = image_wait_present(sc_images[submit_info.image_index], timeout)) == VK_TIMEOUT)
       {
          WSI_LOG_WARNING("Timeout waiting for image's present fences, retrying..");
       }
@@ -114,11 +114,11 @@ void swapchain_base::page_flip_thread()
          continue;
       }
 
-      call_present(image_index);
+      call_present(submit_info);
    }
 }
 
-void swapchain_base::call_present(uint32_t image_index)
+void swapchain_base::call_present(const pending_present_request &pending_present)
 {
    /* First present of the swapchain. If it has an ancestor, wait until all the
     * pending buffers from the ancestor have been presented. */
@@ -132,14 +132,14 @@ void swapchain_base::call_present(uint32_t image_index)
 
       sem_post(&m_start_present_semaphore);
 
-      present_image(image_index);
+      present_image(pending_present);
 
       m_first_present = false;
    }
    /* The swapchain has already started presenting. */
    else
    {
-      present_image(image_index);
+      present_image(pending_present);
    }
 }
 
@@ -632,7 +632,7 @@ VkResult swapchain_base::get_swapchain_status()
    return get_error_state();
 }
 
-VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
+VkResult swapchain_base::notify_presentation_engine(const pending_present_request &pending_present)
 {
    const std::lock_guard<std::recursive_mutex> lock(m_image_status_mutex);
 
@@ -642,42 +642,41 @@ VkResult swapchain_base::notify_presentation_engine(uint32_t image_index)
    const bool descendant_started_presenting = has_descendant_started_presenting();
    if (descendant_started_presenting)
    {
-      m_swapchain_images[image_index].status = swapchain_image::FREE;
+      m_swapchain_images[pending_present.image_index].status = swapchain_image::FREE;
       m_free_image_semaphore.post();
       return VK_ERROR_OUT_OF_DATE_KHR;
    }
 
-   m_swapchain_images[image_index].status = swapchain_image::PENDING;
+   m_swapchain_images[pending_present.image_index].status = swapchain_image::PENDING;
    m_started_presenting = true;
 
    if (m_page_flip_thread_run)
    {
-      bool buffer_pool_res = m_pending_buffer_pool.push_back(image_index);
+      bool buffer_pool_res = m_pending_buffer_pool.push_back(pending_present);
       (void)buffer_pool_res;
       assert(buffer_pool_res);
       m_page_flip_semaphore.post();
    }
    else
    {
-      call_present(image_index);
+      call_present(pending_present);
    }
 
    return VK_SUCCESS;
 }
 
-VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index,
-                                       bool use_image_present_semaphore,
-                                       swapchain_presentation_parameters presentation_parameters)
+VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info,
+                                       const swapchain_presentation_parameters &submit_info)
 {
 
-   if (presentation_parameters.switch_presentation_mode)
+   if (submit_info.switch_presentation_mode)
    {
-      TRY(handle_switching_presentation_mode(presentation_parameters.present_mode));
+      TRY(handle_switching_presentation_mode(submit_info.present_mode));
    }
 
-   const VkSemaphore *wait_semaphores = &m_swapchain_images[image_index].present_semaphore;
+   const VkSemaphore *wait_semaphores = &m_swapchain_images[submit_info.pending_present.image_index].present_semaphore;
    uint32_t sem_count = 1;
-   if (!use_image_present_semaphore)
+   if (!submit_info.use_image_present_semaphore)
    {
       wait_semaphores = present_info->pWaitSemaphores;
       sem_count = present_info->waitSemaphoreCount;
@@ -687,29 +686,33 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
    {
       /* If the page flip thread is not running, we need to wait for any present payload here, before setting a new present payload. */
       constexpr uint64_t WAIT_PRESENT_TIMEOUT = 1000000000; /* 1 second */
-      TRY_LOG_CALL(image_wait_present(m_swapchain_images[image_index], WAIT_PRESENT_TIMEOUT));
+      TRY_LOG_CALL(
+         image_wait_present(m_swapchain_images[submit_info.pending_present.image_index], WAIT_PRESENT_TIMEOUT));
    }
 
    queue_submit_semaphores semaphores = {
       wait_semaphores,
       sem_count,
-      (presentation_parameters.present_fence != VK_NULL_HANDLE) ? &m_swapchain_images[image_index].present_fence_wait :
-                                                                  nullptr,
-      (presentation_parameters.present_fence != VK_NULL_HANDLE) ? 1u : 0,
+      (submit_info.present_fence != VK_NULL_HANDLE) ?
+         &m_swapchain_images[submit_info.pending_present.image_index].present_fence_wait :
+         nullptr,
+      (submit_info.present_fence != VK_NULL_HANDLE) ? 1u : 0,
    };
-   TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[image_index], queue, semaphores));
+   TRY_LOG_CALL(
+      image_set_present_payload(m_swapchain_images[submit_info.pending_present.image_index], queue, semaphores));
 
-   if (presentation_parameters.present_fence != VK_NULL_HANDLE)
+   if (submit_info.present_fence != VK_NULL_HANDLE)
    {
-      const queue_submit_semaphores wait_semaphores = { &m_swapchain_images[image_index].present_fence_wait, 1, nullptr,
-                                                        0 };
+      const queue_submit_semaphores wait_semaphores = {
+         &m_swapchain_images[submit_info.pending_present.image_index].present_fence_wait, 1, nullptr, 0
+      };
       /*
        * Here we chain wait_semaphores with present_fence through present_fence_wait.
        */
-      TRY(sync_queue_submit(m_device_data, queue, presentation_parameters.present_fence, wait_semaphores));
+      TRY(sync_queue_submit(m_device_data, queue, submit_info.present_fence, wait_semaphores));
    }
 
-   TRY(notify_presentation_engine(image_index));
+   TRY(notify_presentation_engine(submit_info.pending_present));
 
    return VK_SUCCESS;
 }
@@ -816,6 +819,15 @@ VkResult swapchain_base::handle_switching_presentation_mode(VkPresentModeKHR swa
    assert(it != m_present_modes.end());
    m_present_mode = swapchain_present_mode;
    return VK_SUCCESS;
+}
+
+void swapchain_base::set_present_id(uint64_t value)
+{
+   if (value != 0)
+   {
+      assert(value > m_present_id);
+      m_present_id = value;
+   }
 }
 
 } /* namespace wsi */

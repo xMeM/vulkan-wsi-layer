@@ -161,9 +161,10 @@ VkResult swapchain::create_swapchain_image(VkImageCreateInfo image_create_info, 
    return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
 }
 
-void swapchain::present_image(uint32_t pending_index)
+void swapchain::present_image(const pending_present_request &pending_present)
 {
-   unpresent_image(pending_index);
+   set_present_id(pending_present.present_id);
+   unpresent_image(pending_present.image_index);
 }
 
 void swapchain::destroy_image(wsi::swapchain_image &image)

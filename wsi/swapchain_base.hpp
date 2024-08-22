@@ -70,6 +70,18 @@ struct swapchain_image
    VkSemaphore present_fence_wait{ VK_NULL_HANDLE };
 };
 
+struct pending_present_request
+{
+   /* The index of the pending image to use for present. */
+   uint32_t image_index;
+
+   /**
+    * Present ID assigned to the present submission.
+    * If 0, no present ID has been assigned to this request.
+    */
+   uint64_t present_id;
+};
+
 struct swapchain_presentation_parameters
 {
    /* Fence supplied by the application with VkSwapchainPresentFenceInfoEXT. */
@@ -80,6 +92,17 @@ struct swapchain_presentation_parameters
 
    /* The presentation mode to switch to. */
    VkPresentModeKHR present_mode;
+
+   /*
+    * Flag that indicates whether the presentation
+    * request will wait on the image's present_semaphore
+    * and not the semaphores that come with
+    * present_info.
+    */
+   VkBool32 use_image_present_semaphore{ true };
+
+   /* Contains details about the pending present request */
+   pending_present_request pending_present{};
 };
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
@@ -155,21 +178,14 @@ public:
     *
     * @param present_info Information about the swapchain and image to be presented.
     *
-    * @param imageIndex The index of the image to be presented.
-    *
-    * @param use_image_present_semaphore Flag that indicates whether the presentation
-    *                                    request will wait on the image's \p present_semaphore
-    *                                    and not the semaphores that come with
-    *                                    \p present_info.
-    *
     * @param presentation_parameters Presentation parameters.
     *
     * @return If queue submission fails returns error of vkQueueSubmit, if the
     * swapchain has a descendant who started presenting returns VK_ERROR_OUT_OF_DATE_KHR,
     * otherwise returns VK_SUCCESS.
     */
-   VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info, const uint32_t image_index,
-                          bool use_image_present_semaphore, swapchain_presentation_parameters presentation_parameters);
+   VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *present_info,
+                          const swapchain_presentation_parameters &presentation_parameters);
 
    /**
     * @brief Get the allocator
@@ -304,7 +320,7 @@ protected:
     * threads and we do not allow the application to acquire more images
     * than we have we eliminate race conditions.
     */
-   util::ring_buffer<uint32_t, wsi::surface_properties::MAX_SWAPCHAIN_IMAGE_COUNT> m_pending_buffer_pool;
+   util::ring_buffer<pending_present_request, wsi::surface_properties::MAX_SWAPCHAIN_IMAGE_COUNT> m_pending_buffer_pool;
 
    /**
     * @brief User provided memory allocation callbacks.
@@ -457,10 +473,9 @@ protected:
     *
     * It sends the next image for presentation to the presentation engine.
     *
-    * @param pending_index Index of the pending image to be presented.
-    *
+    * @param pending_present Information on the pending present request.
     */
-   virtual void present_image(uint32_t pending_index) = 0;
+   virtual void present_image(const pending_present_request &pending_present) = 0;
 
    /**
     * @brief Transition a presented image to free.
@@ -550,6 +565,13 @@ protected:
       m_error_state = state;
    }
 
+   /**
+    * @brief Set the present ID for the swapchain.
+    *
+    * This feature is provided by the VK_KHR_present_id extension.
+    */
+   void set_present_id(uint64_t value);
+
 private:
    std::mutex m_image_acquire_lock;
    /**
@@ -608,9 +630,9 @@ private:
     * In addition to calling the present_image function it also handles the
     * communication with the ancestor before the first presentation.
     *
-    * @param image_index Index of the image to be presented.
+    * @param pending_present_request Submission information for the present request.
     */
-   void call_present(uint32_t image_index);
+   void call_present(const pending_present_request &pending_present);
 
    /**
     * @brief Return true if the descendant has started presenting.
@@ -631,11 +653,11 @@ private:
     * thread if it is enabled or directly calls the WSI backend implementation to
     * present the image.
     *
-    * @param image_index                   Index of the image to be presented.
+    * @param pending_present_request Submission information for the present request.
     *
     * @return VK_SUCCESS on success or an error code otherwise.
     */
-   VkResult notify_presentation_engine(uint32_t image_index);
+   VkResult notify_presentation_engine(const pending_present_request &submit_info);
 
    /**
     * @brief A flag to track if swapchain has started presenting.
@@ -668,6 +690,11 @@ private:
     */
    VkResult handle_swapchain_present_modes_create_info(VkDevice device,
                                                        const VkSwapchainCreateInfoKHR *swapchain_create_info);
+
+   /**
+    * @brief Current present ID for this swapchain.
+    */
+   uint64_t m_present_id{ 0 };
 };
 
 } /* namespace wsi */

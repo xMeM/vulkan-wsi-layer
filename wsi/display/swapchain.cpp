@@ -409,10 +409,11 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    return VK_SUCCESS;
 }
 
-void swapchain::present_image(uint32_t pending_index)
+void swapchain::present_image(const pending_present_request &pending_present)
 {
    int drm_res = 0;
-   display_image_data *image_data = reinterpret_cast<display_image_data *>(m_swapchain_images[pending_index].data);
+   display_image_data *image_data =
+      reinterpret_cast<display_image_data *>(m_swapchain_images[pending_present.image_index].data);
    const auto &display = drm_display::get_display();
    if (!display.has_value())
    {
@@ -506,7 +507,9 @@ void swapchain::present_image(uint32_t pending_index)
       assert(presented_index < m_swapchain_images.size());
    }
    /* The image is on screen, change the image status to PRESENTED. */
-   m_swapchain_images[pending_index].status = swapchain_image::PRESENTED;
+   m_swapchain_images[pending_present.image_index].status = swapchain_image::PRESENTED;
+   set_present_id(pending_present.present_id);
+
    /* And release the old one. */
    if (presented_index < m_swapchain_images.size())
    {
