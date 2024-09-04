@@ -55,7 +55,7 @@ VkResult extension_list::add(const char *const *extensions, size_t count)
       if (len < sizeof(dst.extensionName))
       {
          int chars_printed = snprintf(dst.extensionName, len + 1, "%s", extensions[i]);
-         if (chars_printed == len)
+         if (chars_printed >= 0 && static_cast<size_t>(chars_printed) == len)
          {
             success = true;
          }
