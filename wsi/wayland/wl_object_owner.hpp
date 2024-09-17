@@ -27,6 +27,7 @@
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include <linux-explicit-synchronization-unstable-v1-protocol.h>
+#include <presentation-time-client-protocol.h>
 #include <memory.h>
 #include <functional>
 
@@ -53,6 +54,11 @@ static inline void wayland_object_destroy(zwp_linux_explicit_synchronization_v1 
 static inline void wayland_object_destroy(zwp_linux_surface_synchronization_v1 *obj)
 {
    zwp_linux_surface_synchronization_v1_destroy(obj);
+}
+
+static inline void wayland_object_destroy(wp_presentation *obj)
+{
+   wp_presentation_destroy(obj);
 }
 
 static inline void wayland_object_destroy(wl_callback *obj)
