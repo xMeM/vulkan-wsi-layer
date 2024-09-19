@@ -63,13 +63,21 @@ wsi_layer_vkGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDe
       wsi::surface_properties *props = wsi::get_surface_properties(instance, pSurfaceInfo->surface);
       assert(props != nullptr);
 
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+      auto *surf_caps_ext = util::find_extension<VkPresentTimingSurfaceCapabilitiesEXT>(
+         VK_STRUCTURE_TYPE_PRESENT_TIMING_SURFACE_CAPABILITIES_EXT, pSurfaceCapabilities);
+      if (surf_caps_ext != nullptr)
+      {
+         props->get_present_timing_surface_caps(surf_caps_ext);
+      }
+#endif
+
       auto shared_present_surface_cap_struct = util::find_extension<VkSharedPresentSurfaceCapabilitiesKHR>(
          VK_STRUCTURE_TYPE_SHARED_PRESENT_SURFACE_CAPABILITIES_KHR, pSurfaceCapabilities);
       if (shared_present_surface_cap_struct != nullptr)
       {
          shared_present_surface_cap_struct->sharedPresentSupportedUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
       }
-
       return props->get_surface_capabilities(physicalDevice, pSurfaceInfo, pSurfaceCapabilities);
    }
 

@@ -215,5 +215,21 @@ bool surface_properties::is_compatible_present_modes(VkPresentModeKHR present_mo
    return m_compatible_present_modes.is_compatible_present_modes(present_mode_a, present_mode_b);
 }
 
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+void surface_properties::get_present_timing_surface_caps(
+   VkPresentTimingSurfaceCapabilitiesEXT *present_timing_surface_caps)
+{
+   present_timing_surface_caps->presentTimingSupported = VK_TRUE;
+   present_timing_surface_caps->presentAtAbsoluteTimeSupported = VK_TRUE;
+   present_timing_surface_caps->presentAtRelativeTimeSupported = VK_TRUE;
+   present_timing_surface_caps->presentStageQueries =
+      VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT | VK_PRESENT_STAGE_IMAGE_LATCHED_BIT_EXT |
+      VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_OUT_BIT_EXT | VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_VISIBLE_BIT_EXT;
+   present_timing_surface_caps->presentStageTargets = VK_PRESENT_STAGE_IMAGE_LATCHED_BIT_EXT |
+                                                      VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_OUT_BIT_EXT |
+                                                      VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_VISIBLE_BIT_EXT;
+}
+#endif
+
 } /* namespace headless */
 } /* namespace wsi */
