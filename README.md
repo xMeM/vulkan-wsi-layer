@@ -15,6 +15,17 @@ The project currently implements support for `VK_EXT_headless_surface` and
 its dependencies. Experimental support for `VK_KHR_wayland_surface` can be
 enabled via a build option [as explained below](#building-with-wayland-support).
 
+### Implemented Vulkan® extensions
+
+The Vulkan® WSI Layer in addition to the window system integration extensions
+implements the following extensions:
+* Instance extensions
+  * VK_KHR_get_surface_capabilities2
+* Device extensions
+  * VK_KHR_shared_presentable_image
+  * VK_EXT_image_compression_control_swapchain
+  * VK_KHR_present_id
+
 ## Building
 
 ### Dependencies
