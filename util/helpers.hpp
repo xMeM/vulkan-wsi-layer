@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Arm Limited.
+ * Copyright (c) 2021-2022, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -97,6 +97,15 @@ T *find_extension(VkStructureType sType, void *pNext)
       entry = entry->pNext;
    }
    return reinterpret_cast<T *>(entry);
+}
+
+template <typename T>
+inline T shallow_copy_extension(const T *structure_to_copy)
+{
+   T shallow_copy = *structure_to_copy;
+   shallow_copy.pNext = nullptr;
+
+   return shallow_copy;
 }
 
 class noncopyable

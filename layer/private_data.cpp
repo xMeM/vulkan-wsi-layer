@@ -370,6 +370,18 @@ bool instance_private_data::has_image_compression_support(VkPhysicalDevice phys_
 }
 #endif
 
+bool instance_private_data::has_frame_boundary_support(VkPhysicalDevice phys_dev)
+{
+   VkPhysicalDeviceFrameBoundaryFeaturesEXT frame_boundary = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT, nullptr, VK_FALSE
+   };
+   VkPhysicalDeviceFeatures2KHR features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR, &frame_boundary };
+
+   disp.GetPhysicalDeviceFeatures2KHR(phys_dev, &features);
+
+   return frame_boundary.frameBoundary != VK_FALSE;
+}
+
 VkResult instance_private_data::set_instance_enabled_extensions(const char *const *extension_names,
                                                                 size_t extension_count)
 {
@@ -548,6 +560,16 @@ bool device_private_data::is_swapchain_compression_control_enabled() const
    return compression_control_enabled;
 }
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
+void device_private_data::set_layer_frame_boundary_handling_enabled(bool enable)
+{
+   handle_frame_boundary_events = enable;
+}
+
+bool device_private_data::should_layer_handle_frame_boundary_events() const
+{
+   return handle_frame_boundary_events;
+}
 
 void device_private_data::set_present_id_feature_enabled(bool enable)
 {

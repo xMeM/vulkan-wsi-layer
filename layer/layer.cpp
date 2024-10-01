@@ -244,17 +244,45 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
    auto &inst_data = instance_private_data::get(physicalDevice);
    util::allocator allocator{ inst_data.get_allocator(), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, pAllocator };
    util::vector<const char *> modified_enabled_extensions{ allocator };
-   util::extension_list enabled_extensions{ allocator };
 
+   util::extension_list application_requested_extensions{ allocator };
+   TRY_LOG_CALL(
+      application_requested_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
+
+   util::extension_list enabled_extensions{ allocator };
    const util::wsi_platform_set &enabled_platforms = inst_data.get_enabled_platforms();
    if (!enabled_platforms.empty())
    {
-      TRY_LOG_CALL(enabled_extensions.add(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount));
+      TRY_LOG_CALL(enabled_extensions.add(application_requested_extensions));
+
       TRY_LOG_CALL(wsi::add_device_extensions_required_by_layer(physicalDevice, enabled_platforms, enabled_extensions));
       TRY_LOG_CALL(enabled_extensions.get_extension_strings(modified_enabled_extensions));
 
       modified_info.ppEnabledExtensionNames = modified_enabled_extensions.data();
       modified_info.enabledExtensionCount = modified_enabled_extensions.size();
+   }
+
+   bool should_layer_handle_frame_boundary_events = false;
+   VkPhysicalDeviceFrameBoundaryFeaturesEXT frame_boundary;
+
+   /* Check if we should handle frame boundary feature ourselves. The conditions for handling this ourselves is:
+    * 1 - Application did not ask to enable VK_EXT_frame_boundary extension
+    * 2 - The layer has been built with instrumentation enabled
+    * 3 - The underlying layers/ICD can support the VK_EXT_frame_boundary extension */
+   if (!application_requested_extensions.contains(VK_EXT_FRAME_BOUNDARY_EXTENSION_NAME) && ENABLE_INSTRUMENTATION)
+   {
+      if (enabled_extensions.contains(VK_EXT_FRAME_BOUNDARY_EXTENSION_NAME))
+      {
+         if (inst_data.has_frame_boundary_support(physicalDevice))
+         {
+            frame_boundary.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT;
+            frame_boundary.pNext = const_cast<void *>(modified_info.pNext);
+            frame_boundary.frameBoundary = VK_TRUE;
+
+            modified_info.pNext = &frame_boundary;
+            should_layer_handle_frame_boundary_events = true;
+         }
+      }
    }
 
    /* Now call create device on the chain further down the list. */
@@ -296,8 +324,11 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
     * Store the enabled device extensions in order to return nullptr in
     * vkGetDeviceProcAddr for functions of disabled extensions.
     */
-   result = layer::device_private_data::get(*pDevice).set_device_enabled_extensions(
-      modified_info.ppEnabledExtensionNames, modified_info.enabledExtensionCount);
+   auto &device_data = layer::device_private_data::get(*pDevice);
+   device_data.set_layer_frame_boundary_handling_enabled(should_layer_handle_frame_boundary_events);
+
+   result = device_data.set_device_enabled_extensions(modified_info.ppEnabledExtensionNames,
+                                                      modified_info.enabledExtensionCount);
    if (result != VK_SUCCESS)
    {
       layer::device_private_data::disassociate(*pDevice);
@@ -311,7 +342,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT, pCreateInfo->pNext);
    if (swapchain_compression_feature != nullptr)
    {
-      layer::device_private_data::get(*pDevice).set_swapchain_compression_control_enabled(
+      device_data.set_swapchain_compression_control_enabled(
          swapchain_compression_feature->imageCompressionControlSwapchain);
    }
 #endif
@@ -320,7 +351,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR, pCreateInfo->pNext);
    if (present_id_features != nullptr)
    {
-      layer::device_private_data::get(*pDevice).set_present_id_feature_enabled(present_id_features->presentId);
+      device_data.set_present_id_feature_enabled(present_id_features->presentId);
    }
 
 #if VULKAN_WSI_LAYER_EXPERIMENTAL
@@ -329,7 +360,7 @@ VKAPI_ATTR VkResult create_device(VkPhysicalDevice physicalDevice, const VkDevic
          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT, pCreateInfo->pNext);
    if (physical_device_swapchain_maintenance1_features != nullptr)
    {
-      layer::device_private_data::get(*pDevice).set_swapchain_maintenance1_enabled(
+      device_data.set_swapchain_maintenance1_enabled(
          physical_device_swapchain_maintenance1_features->swapchainMaintenance1);
    }
 #endif

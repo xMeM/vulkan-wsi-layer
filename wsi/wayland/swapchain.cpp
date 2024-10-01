@@ -599,10 +599,10 @@ VkResult swapchain::get_free_buffer(uint64_t *timeout)
 }
 
 VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue,
-                                              const queue_submit_semaphores &semaphores)
+                                              const queue_submit_semaphores &semaphores, const void *submission_pnext)
 {
    auto image_data = reinterpret_cast<wayland_image_data *>(image.data);
-   return image_data->present_fence.set_payload(queue, semaphores);
+   return image_data->present_fence.set_payload(queue, semaphores, submission_pnext);
 }
 
 VkResult swapchain::image_wait_present(swapchain_image &, uint64_t)

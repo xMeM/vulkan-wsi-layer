@@ -97,8 +97,18 @@ protected:
     */
    void destroy_image(wsi::swapchain_image &image);
 
-   VkResult image_set_present_payload(swapchain_image &image, VkQueue queue,
-                                      const queue_submit_semaphores &semaphores) override;
+   /**
+    * @brief Sets the present payload for a swapchain image.
+    *
+    * @param[in] image       The swapchain image for which to set a present payload.
+    * @param     queue       A Vulkan queue that can be used for any Vulkan commands needed.
+    * @param[in] sem_payload Array of Vulkan semaphores that constitute the payload.
+    * @param[in] submission_pnext Chain of pointers to attach to the payload submission.
+    *
+    * @return VK_SUCCESS on success or an error code otherwise.
+    */
+   VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const queue_submit_semaphores &semaphores,
+                                      const void *submission_pnext) override;
 
    VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
 

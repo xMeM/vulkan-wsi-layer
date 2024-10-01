@@ -42,6 +42,7 @@
 #include <util/ring_buffer.hpp>
 #include "surface_properties.hpp"
 #include "wsi/synchronization.hpp"
+#include "wsi/frame_boundary.hpp"
 #include "util/helpers.hpp"
 
 namespace wsi
@@ -103,6 +104,12 @@ struct swapchain_presentation_parameters
 
    /* Contains details about the pending present request */
    pending_present_request pending_present{};
+
+   /**
+    * Flag that indicates whether a frame boundary should be passed
+    * to underlying layers/ICD if the feature is enabled.
+    */
+   VkBool32 handle_present_frame_boundary_event{ true };
 };
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
@@ -516,14 +523,16 @@ protected:
    /**
     * @brief Sets the present payload for a swapchain image.
     *
-    * @param[in] image       The swapchain image for which to set a present payload.
-    * @param     queue       A Vulkan queue that can be used for any Vulkan commands needed.
-    * @param[in] semaphores  The wait and signal semaphores and their number of elements.
+    * @param[in] image            The swapchain image for which to set a present payload.
+    * @param     queue            A Vulkan queue that can be used for any Vulkan commands needed.
+    * @param[in] semaphores       The wait and signal semaphores and their number of elements.
+    * @param[in] submission_pnext Chain of pointers to attach to the payload submission.
     *
     * @return VK_SUCCESS on success or an error code otherwise.
     */
    virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue,
-                                              const queue_submit_semaphores &semaphores) = 0;
+                                              const queue_submit_semaphores &semaphores,
+                                              const void *submission_pnext = nullptr) = 0;
 
    /**
     * @brief Waits for the present payload of an image if necessary.
@@ -695,6 +704,12 @@ private:
     * @brief Current present ID for this swapchain.
     */
    uint64_t m_present_id{ 0 };
+
+   /**
+    * @brief Handler for frame boundary events
+    *
+    */
+   frame_boundary_handler m_frame_boundary_handler;
 };
 
 } /* namespace wsi */

@@ -597,6 +597,8 @@ public:
    bool has_image_compression_support(VkPhysicalDevice phys_dev);
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 
+   bool has_frame_boundary_support(VkPhysicalDevice phys_dev);
+
    /**
     * @brief Get the instance allocator
     *
@@ -806,6 +808,20 @@ public:
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
 
    /**
+    * @brief Set whether we should handle frame boundary events.
+    *
+    * @param enable true if the layer should handle them.
+    */
+   void set_layer_frame_boundary_handling_enabled(bool enable);
+
+   /**
+    * @brief Check whether we should handle frame boundary events.
+    *
+    * @return true if supported, false otherwise.
+    */
+   bool should_layer_handle_frame_boundary_events() const;
+
+   /**
     * @brief Set whether the device supports the present ID feature.
     *
     * @param enable Value to set m_present_id_enabled member variable.
@@ -868,6 +884,11 @@ private:
     */
    bool compression_control_enabled;
 #endif /* WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN */
+
+   /**
+    * @brief Stores whether the layer should handle frame boundary events.
+    */
+   bool handle_frame_boundary_events{ false };
 
    /**
     * @brief Stores whether the device supports the present ID feature.

@@ -520,11 +520,11 @@ void swapchain::present_image(const pending_present_request &pending_present)
 }
 
 VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count)
+                                              uint32_t sem_count, const void *submission_pnext)
 {
 
    auto image_data = reinterpret_cast<display_image_data *>(image.data);
-   return image_data->present_fence.set_payload(queue, sem_payload, sem_count);
+   return image_data->present_fence.set_payload(queue, sem_payload, sem_count, submission_pnext);
 }
 
 VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)

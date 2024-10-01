@@ -126,6 +126,19 @@ provides a generic ion implementation that may work in systems that support
 linear formats. This is selected by the `-DSELECT_EXTERNAL_ALLOCATOR=ion`
 option, as shown above.
 
+### Building with frame instrumentation support
+
+The layer can be built to pass frame boundary information down to other
+layers or ICD by making use of the [VK_EXT_frame_boundary extension](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_EXT_frame_boundary.html).
+
+By enabling this feature, if application is not making use of the
+VK_EXT_frame_boundary extension, the layer will generate and pass down
+frame boundary events which enables the ability to instrument present submissions
+for applications that do not make use of this extension.
+
+In order to enable this feature `-DENABLE_INSTRUMENTATION=1` option can
+be passed at build time.
+
 ## Installation
 
 Copy the shared library `libVkLayer_window_system_integration.so` and JSON

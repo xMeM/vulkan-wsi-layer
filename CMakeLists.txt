@@ -54,14 +54,24 @@ else()
 endif()
 
 # Build Configuration options
+
+# Backend support
 option(BUILD_WSI_HEADLESS "Build with support for VK_EXT_headless_surface" ON)
 option(BUILD_WSI_WAYLAND "Build with support for VK_KHR_wayland_surface" OFF)
 option(BUILD_WSI_DISPLAY "Build with support for VK_KHR_display" OFF)
+
+set(SELECT_EXTERNAL_ALLOCATOR "none" CACHE STRING "Select an external system allocator (none, ion)")
+set(EXTERNAL_WSIALLOC_LIBRARY "" CACHE STRING "External implementation of the wsialloc interface to use")
+
+# Optional features
 option(BUILD_WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN "Build with support for VK_EXT_image_compression_control_swapchain" OFF)
 option(BUILD_WSI_DISPLAY_SUPPORT_FORMAT_MODIFIERS "Build with support for format modifiers in VK_KHR_display" ON)
 option(VULKAN_WSI_LAYER_EXPERIMENTAL "Enable the Vulkan WSI Experimental features" OFF)
-set(SELECT_EXTERNAL_ALLOCATOR "none" CACHE STRING "Select an external system allocator (none, ion)")
-set(EXTERNAL_WSIALLOC_LIBRARY "" CACHE STRING "External implementation of the wsialloc interface to use")
+
+# Enables the layer to pass frame boundary events if the ICD or layers below have support for it by
+# making use of the VK_EXT_frame_boundary extension. If the application itself makes use of the
+# VK_EXT_frame_boundary then the layer will not pass its own frame boundary events.
+option(ENABLE_INSTRUMENTATION "Pass frame boundary events by using VK_EXT_frame_boundary" OFF)
 
 if(BUILD_WSI_WAYLAND OR BUILD_WSI_DISPLAY)
    set(BUILD_DRM_UTILS true)
@@ -232,6 +242,7 @@ add_library(${PROJECT_NAME} SHARED
    util/log.cpp
    util/format_modifiers.cpp
    wsi/external_memory.cpp
+   wsi/frame_boundary.cpp
    wsi/surface_properties.cpp
    wsi/swapchain_base.cpp
    wsi/synchronization.cpp
@@ -260,6 +271,12 @@ if (BUILD_WSI_DISPLAY_SUPPORT_FORMAT_MODIFIERS)
    add_definitions("-DWSI_DISPLAY_SUPPORT_FORMAT_MODIFIERS=1")
 else()
    add_definitions("-DWSI_DISPLAY_SUPPORT_FORMAT_MODIFIERS=0")
+endif()
+
+if(ENABLE_INSTRUMENTATION)
+   add_definitions("-DENABLE_INSTRUMENTATION=1")
+else()
+   add_definitions("-DENABLE_INSTRUMENTATION=0")
 endif()
 
 target_link_libraries(${PROJECT_NAME} ${LINK_WSI_LIBS})

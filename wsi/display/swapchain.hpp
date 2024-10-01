@@ -102,7 +102,7 @@ public:
    void present_image(const pending_present_request &pending_present) override;
 
    virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count) override;
+                                              uint32_t sem_count, const void *submission_pnext) override;
    virtual VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
 
    void destroy_image(swapchain_image &image) override;
