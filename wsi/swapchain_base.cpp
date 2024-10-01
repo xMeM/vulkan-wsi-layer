@@ -223,6 +223,7 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_image_acquire_lock()
    , m_error_state(VK_NOT_READY)
    , m_started_presenting(false)
+   , m_frame_boundary_handler(m_device_data)
 {
 }
 
@@ -690,6 +691,19 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
          image_wait_present(m_swapchain_images[submit_info.pending_present.image_index], WAIT_PRESENT_TIMEOUT));
    }
 
+   void *submission_pnext = nullptr;
+   std::optional<VkFrameBoundaryEXT> frame_boundary;
+   /* Do not handle the event if it was handled before reaching this point */
+   if (submit_info.handle_present_frame_boundary_event)
+   {
+      frame_boundary = m_frame_boundary_handler.handle_frame_boundary_event(
+         present_info, &m_swapchain_images[submit_info.pending_present.image_index].image);
+      if (frame_boundary.has_value())
+      {
+         submission_pnext = &frame_boundary.value();
+      }
+   }
+
    queue_submit_semaphores semaphores = {
       wait_semaphores,
       sem_count,
@@ -698,8 +712,8 @@ VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *pr
          nullptr,
       (submit_info.present_fence != VK_NULL_HANDLE) ? 1u : 0,
    };
-   TRY_LOG_CALL(
-      image_set_present_payload(m_swapchain_images[submit_info.pending_present.image_index], queue, semaphores));
+   TRY_LOG_CALL(image_set_present_payload(m_swapchain_images[submit_info.pending_present.image_index], queue,
+                                          semaphores, submission_pnext));
 
    if (submit_info.present_fence != VK_NULL_HANDLE)
    {

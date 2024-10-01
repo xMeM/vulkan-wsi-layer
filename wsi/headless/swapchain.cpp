@@ -197,10 +197,10 @@ void swapchain::destroy_image(wsi::swapchain_image &image)
 }
 
 VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue,
-                                              const queue_submit_semaphores &semaphores)
+                                              const queue_submit_semaphores &semaphores, const void *submission_pnext)
 {
    auto data = reinterpret_cast<image_data *>(image.data);
-   return data->present_fence.set_payload(queue, semaphores);
+   return data->present_fence.set_payload(queue, semaphores, submission_pnext);
 }
 
 VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)

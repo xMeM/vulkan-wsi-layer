@@ -124,7 +124,7 @@ wsi_layer_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapc, uint64_t 
 }
 
 static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &present_info,
-                                    layer::device_private_data &device_data)
+                                    layer::device_private_data &device_data, bool &frame_boundary_event_handled)
 {
    util::vector<VkSemaphore> swapchain_semaphores{ util::allocator(device_data.get_allocator(),
                                                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) };
@@ -143,7 +143,17 @@ static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &prese
                                                swapchain_semaphores.data(),
                                                static_cast<uint32_t>(swapchain_semaphores.size()) };
 
-   TRY(wsi::sync_queue_submit(device_data, queue, VK_NULL_HANDLE, semaphores));
+   void *submission_pnext = nullptr;
+   auto frame_boundary = wsi::create_frame_boundary(present_info);
+   if (frame_boundary.has_value())
+   {
+      submission_pnext = &frame_boundary.value();
+   }
+
+   /* Notify that we don't want to pass any further frame boundary events */
+   frame_boundary_event_handled = submission_pnext != nullptr;
+
+   TRY(wsi::sync_queue_submit(device_data, queue, VK_NULL_HANDLE, semaphores, &submission_pnext));
    return VK_SUCCESS;
 }
 
@@ -163,9 +173,10 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
    /* Avoid allocating on the heap when there is only one swapchain. */
    const VkPresentInfoKHR *present_info = pPresentInfo;
    bool use_image_present_semaphore = false;
+   bool frame_boundary_event_handled = true;
    if (pPresentInfo->swapchainCount > 1)
    {
-      TRY_LOG_CALL(submit_wait_request(queue, *pPresentInfo, device_data));
+      TRY_LOG_CALL(submit_wait_request(queue, *pPresentInfo, device_data, frame_boundary_event_handled));
       use_image_present_semaphore = true;
    }
 
@@ -201,6 +212,7 @@ wsi_layer_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
       present_params.pending_present.present_id = present_id;
 
       present_params.use_image_present_semaphore = use_image_present_semaphore;
+      present_params.handle_present_frame_boundary_event = frame_boundary_event_handled;
       VkResult res = sc->queue_present(queue, present_info, present_params);
       if (pPresentInfo->pResults != nullptr)
       {
