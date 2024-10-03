@@ -170,6 +170,19 @@ surface_registry_handler(void *data, struct wl_registry *wl_registry, uint32_t n
 
       wsi_surface->explicit_sync_interface.reset(explicit_sync_interface_obj);
    }
+   else if (!strcmp(interface, wp_presentation_interface.name))
+   {
+      wp_presentation *wp_presentation_obj =
+         reinterpret_cast<wp_presentation *>(wl_registry_bind(wl_registry, name, &wp_presentation_interface, 1));
+
+      if (wp_presentation_obj == nullptr)
+      {
+         WSI_LOG_ERROR("Failed to get wp_presentation interface.");
+         return;
+      }
+
+      wsi_surface->presentation_time_interface.reset(wp_presentation_obj);
+   }
 }
 
 bool surface::init()
@@ -219,6 +232,12 @@ bool surface::init()
    if (explicit_sync_interface.get() == nullptr)
    {
       WSI_LOG_ERROR("Failed to obtain zwp_linux_explicit_synchronization_v1 interface.");
+      return false;
+   }
+
+   if (presentation_time_interface.get() == nullptr)
+   {
+      WSI_LOG_ERROR("Failed to obtain wp_presentation interface.");
       return false;
    }
 

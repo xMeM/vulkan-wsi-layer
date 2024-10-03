@@ -171,6 +171,9 @@ private:
    /** Container for the surface specific zwp_linux_surface_synchronization_v1 interface. */
    wayland_owner<zwp_linux_surface_synchronization_v1> surface_sync_interface;
 
+   /** Container for the wp_presentation interface binding */
+   wayland_owner<wp_presentation> presentation_time_interface;
+
    /**
     * Container for a callback object for the latest frame done event.
     *
