@@ -68,6 +68,7 @@ bool frame_boundary_handler::should_layer_handle_frame_boundary_events() const
 VkFrameBoundaryEXT frame_boundary_handler::create_frame_boundary(VkImage *image)
 {
    VkFrameBoundaryEXT frame_boundary{};
+   frame_boundary.pNext = nullptr;
    frame_boundary.sType = VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT;
    frame_boundary.flags = VK_FRAME_BOUNDARY_FRAME_END_BIT_EXT;
    /* Number of presented images by swapchain as the frame boundary
