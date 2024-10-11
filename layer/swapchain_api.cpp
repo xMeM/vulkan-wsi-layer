@@ -153,7 +153,7 @@ static VkResult submit_wait_request(VkQueue queue, const VkPresentInfoKHR &prese
    /* Notify that we don't want to pass any further frame boundary events */
    frame_boundary_event_handled = submission_pnext != nullptr;
 
-   TRY(wsi::sync_queue_submit(device_data, queue, VK_NULL_HANDLE, semaphores, &submission_pnext));
+   TRY(wsi::sync_queue_submit(device_data, queue, VK_NULL_HANDLE, semaphores, submission_pnext));
    return VK_SUCCESS;
 }
 
