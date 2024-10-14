@@ -28,6 +28,9 @@
 
 #pragma once
 
+#ifndef __STDC_VERSION__
+#define __STDC_VERSION__ 0
+#endif
 #include <wayland-client.h>
 
 #include "wsi/surface.hpp"
