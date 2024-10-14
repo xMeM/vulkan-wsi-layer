@@ -31,6 +31,9 @@ extern "C" {
 #include <vulkan/vk_icd.h>
 }
 
+#ifndef __STDC_VERSION__
+#define __STDC_VERSION__ 0
+#endif
 #include <wayland-client.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include "util/wsialloc/wsialloc.h"

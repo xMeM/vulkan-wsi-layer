@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, 2021 Arm Limited.
+ * Copyright (c) 2017-2019, 2021, 2024 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,7 +25,12 @@
 #pragma once
 
 #include <stdint.h>
+
+#ifndef __STDC_VERSION__
+#define __STDC_VERSION__ 0
+#endif
 #include <wayland-client.h>
+
 #include "util/custom_allocator.hpp"
 
 /**
