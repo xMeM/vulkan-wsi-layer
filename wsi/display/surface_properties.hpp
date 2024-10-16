@@ -28,6 +28,7 @@
 
 #include "wsi/surface_properties.hpp"
 #include "drm_display.hpp"
+#include "wsi/compatible_present_modes.hpp"
 
 namespace wsi
 {
@@ -42,10 +43,13 @@ class surface_properties : public wsi::surface_properties
 public:
    surface_properties();
 
-   surface_properties(surface &wsi_surface);
+   surface_properties(surface *wsi_surface);
 
    VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
                                      VkSurfaceCapabilitiesKHR *pSurfaceCapabilities) override;
+   VkResult get_surface_capabilities(VkPhysicalDevice physical_device,
+                                     const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                     VkSurfaceCapabilities2KHR *pSurfaceCapabilities) override;
 
    VkResult get_surface_formats(VkPhysicalDevice physical_device, uint32_t *surfaceFormatCount,
                                 VkSurfaceFormatKHR *surfaceFormats,
@@ -68,8 +72,19 @@ public:
 
    static surface_properties &get_instance();
 
+   bool is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b) override;
+
 private:
    surface *const m_specific_surface;
+
+   /* List of supported presentation modes */
+   std::array<VkPresentModeKHR, 1> m_supported_modes;
+
+   /* Stores compatible presentation modes */
+   compatible_present_modes<1> m_compatible_present_modes;
+
+   void get_surface_present_scaling_and_gravity(VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities) override;
+   void populate_present_mode_compatibilities() override;
 };
 
 } /* namespace display */

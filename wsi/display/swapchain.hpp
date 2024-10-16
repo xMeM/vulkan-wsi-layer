@@ -89,8 +89,9 @@ public:
    virtual VkResult bind_swapchain_image(VkDevice &device, const VkBindImageMemoryInfo *bind_image_mem_info,
                                          const VkBindImageMemorySwapchainInfoKHR *bind_sc_info) override;
 
-   virtual VkResult create_and_bind_swapchain_image(VkImageCreateInfo image_create_info,
-                                                    swapchain_image &image) override;
+   VkResult allocate_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
+
+   virtual VkResult create_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image) override;
 
    /**
     * @brief Method to present and image
@@ -101,21 +102,25 @@ public:
     */
    void present_image(const pending_present_request &pending_present) override;
 
-   virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count, const void *submission_pnext) override;
+   virtual VkResult image_set_present_payload(swapchain_image &image, VkQueue queue,
+                                              const queue_submit_semaphores &semaphores,
+                                              const void *submission_pnext) override;
+
    virtual VkResult image_wait_present(swapchain_image &image, uint64_t timeout) override;
 
    void destroy_image(swapchain_image &image) override;
 
 private:
-   VkResult allocate_image(VkImageCreateInfo &image_create_info, display_image_data *image_data, VkImage *image);
+   VkResult allocate_image(VkImageCreateInfo &image_create_info, display_image_data *image_data);
 
    VkResult allocate_wsialloc(VkImageCreateInfo &image_create_info, display_image_data *image_data,
-                              util::vector<wsialloc_format> &importable_formats, wsialloc_format *allocated_format);
+                              util::vector<wsialloc_format> &importable_formats, wsialloc_format *allocated_format,
+                              bool avoid_allocation);
 
    VkResult get_surface_compatible_formats(const VkImageCreateInfo &info,
                                            util::vector<wsialloc_format> &importable_formats,
-                                           util::vector<uint64_t> &exportable_modifers);
+                                           util::vector<uint64_t> &exportable_modifers,
+                                           util::vector<VkDrmFormatModifierPropertiesEXT> &drm_format_props);
 
    VkResult create_framebuffer(const VkImageCreateInfo &image_create_info, swapchain_image &image,
                                display_image_data *image_data);
