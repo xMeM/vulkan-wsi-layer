@@ -1,4 +1,4 @@
-# Copyright (c) 2019, 2022 Arm Limited.
+# Copyright (c) 2019-2024 Arm Limited.
 #
 # SPDX-License-Identifier: MIT
 #
@@ -45,7 +45,7 @@ build_vulkan_wsi_layer:
     - cd Vulkan-Loader
     - mkdir build
     - cd build/
-    - ../scripts/update_deps.py
+    - ../scripts/update_deps.py --cmake_var VULKAN_HEADERS_ENABLE_MODULE=OFF
     # Build the Vulkan loader.
     - cmake -C helper.cmake ..
     - make
