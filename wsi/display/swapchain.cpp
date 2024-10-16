@@ -99,12 +99,9 @@ VkResult swapchain::bind_swapchain_image(VkDevice &device, const VkBindImageMemo
 
 VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info,
                                                    util::vector<wsialloc_format> &importable_formats,
-                                                   util::vector<uint64_t> &exportable_modifers)
+                                                   util::vector<uint64_t> &exportable_modifers,
+                                                   util::vector<VkDrmFormatModifierPropertiesEXT> &drm_format_props)
 {
-   /* Query supported modifers. */
-   util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(
-      util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-
    TRY_LOG(util::get_drm_format_properties(m_device_data.physical_device, info.format, drm_format_props),
            "Failed to get format properties");
 
@@ -218,10 +215,14 @@ VkResult swapchain::get_surface_compatible_formats(const VkImageCreateInfo &info
 
 VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, display_image_data *image_data,
                                       util::vector<wsialloc_format> &importable_formats,
-                                      wsialloc_format *allocated_format)
+                                      wsialloc_format *allocated_format, bool avoid_allocation)
 {
    bool is_protected_memory = (image_create_info.flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0;
    uint64_t allocation_flags = is_protected_memory ? WSIALLOC_ALLOCATE_PROTECTED : 0;
+   if (avoid_allocation)
+   {
+      allocation_flags |= WSIALLOC_ALLOCATE_NO_MEMORY;
+   }
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
    if (m_image_compression_control_params.flags & VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT)
@@ -233,12 +234,13 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, disp
    wsialloc_allocate_info alloc_info = { importable_formats.data(), static_cast<unsigned>(importable_formats.size()),
                                          image_create_info.extent.width, image_create_info.extent.height,
                                          allocation_flags };
-
-   std::array<int, MAX_PLANES> strides{};
-   std::array<int, MAX_PLANES> buffer_fds{ -1, -1, -1, -1 };
-   std::array<uint32_t, MAX_PLANES> offsets{};
-   const auto res =
-      wsialloc_alloc(m_wsi_allocator, &alloc_info, allocated_format, strides.data(), buffer_fds.data(), offsets.data());
+   wsialloc_allocate_result alloc_result = { 0 };
+   /* Clear buffer_fds and average_row_strides for error purposes */
+   for (int i = 0; i < WSIALLOC_MAX_PLANES; ++i)
+   {
+      alloc_result.buffer_fds[i] = -1;
+   }
+   const auto res = wsialloc_alloc(m_wsi_allocator, &alloc_info, &alloc_result);
    if (res != WSIALLOC_ERROR_NONE)
    {
       WSI_LOG_ERROR("Failed allocation of DMA Buffer. WSI error: %d", static_cast<int>(res));
@@ -248,10 +250,33 @@ VkResult swapchain::allocate_wsialloc(VkImageCreateInfo &image_create_info, disp
       }
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
+   *allocated_format = alloc_result.format;
    auto &external_memory = image_data->external_mem;
-   external_memory.set_strides(strides);
-   external_memory.set_buffer_fds(buffer_fds);
-   external_memory.set_offsets(offsets);
+   external_memory.set_strides(alloc_result.average_row_strides);
+   external_memory.set_buffer_fds(alloc_result.buffer_fds);
+   external_memory.set_offsets(alloc_result.offsets);
+
+   uint32_t num_planes = util::drm::drm_fourcc_format_get_num_planes(alloc_result.format.fourcc);
+
+   if (!avoid_allocation)
+   {
+      uint32_t num_memory_planes = 0;
+
+      for (uint32_t i = 0; i < num_planes; ++i)
+      {
+         auto it = std::find(std::begin(alloc_result.buffer_fds) + i + 1, std::end(alloc_result.buffer_fds),
+                             alloc_result.buffer_fds[i]);
+         if (it == std::end(alloc_result.buffer_fds))
+         {
+            num_memory_planes++;
+         }
+      }
+
+      assert(alloc_result.is_disjoint == (num_memory_planes > 1));
+      external_memory.set_num_memories(num_memory_planes);
+   }
+
+   external_memory.set_format_info(alloc_result.is_disjoint, num_planes);
    external_memory.set_memory_handle_type(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
    return VK_SUCCESS;
 }
@@ -276,43 +301,16 @@ static VkResult fill_image_create_info(VkImageCreateInfo &image_create_info,
    return VK_SUCCESS;
 }
 
-VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, display_image_data *image_data, VkImage *image)
+VkResult swapchain::allocate_image(VkImageCreateInfo &image_create_info, display_image_data *image_data)
 {
    util::vector<wsialloc_format> importable_formats(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
    auto &m_allocated_format = m_image_creation_parameters.m_allocated_format;
-   if (m_image_create_info.format != VK_FORMAT_UNDEFINED)
+   if (!importable_formats.try_push_back(m_allocated_format))
    {
-      if (!importable_formats.try_push_back(m_allocated_format))
-      {
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      TRY_LOG_CALL(allocate_wsialloc(m_image_create_info, image_data, importable_formats, &m_allocated_format));
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
-   else
-   {
-      util::vector<uint64_t> exportable_modifiers(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
-      TRY_LOG_CALL(get_surface_compatible_formats(image_create_info, importable_formats, exportable_modifiers));
+   TRY_LOG_CALL(allocate_wsialloc(m_image_create_info, image_data, importable_formats, &m_allocated_format, false));
 
-      /* TODO: Handle exportable images which use ICD allocated memory in preference to an external allocator. */
-      if (importable_formats.empty())
-      {
-         WSI_LOG_ERROR("Export/Import not supported.");
-         return VK_ERROR_INITIALIZATION_FAILED;
-      }
-
-      wsialloc_format allocated_format = { 0 };
-      TRY_LOG_CALL(allocate_wsialloc(image_create_info, image_data, importable_formats, &allocated_format));
-
-      TRY_LOG_CALL(fill_image_create_info(
-         image_create_info, m_image_creation_parameters.m_image_layout, m_image_creation_parameters.m_drm_mod_info,
-         m_image_creation_parameters.m_external_info, *image_data, allocated_format.modifier));
-
-      m_image_create_info = image_create_info;
-      m_allocated_format = allocated_format;
-   }
-
-   TRY_LOG(m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), image),
-           "Image creation failed");
    return VK_SUCCESS;
 }
 
@@ -377,20 +375,14 @@ VkResult swapchain::create_framebuffer(const VkImageCreateInfo &image_create_inf
    return ret_code;
 }
 
-VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image)
+VkResult swapchain::allocate_and_bind_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image)
 {
-   /* Create image_data */
-   auto image_data = m_allocator.create<display_image_data>(1, m_device, m_allocator);
-   if (image_data == nullptr)
-   {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
-
    std::unique_lock<std::recursive_mutex> image_status_lock(m_image_status_mutex);
-   image.data = image_data;
    image.status = swapchain_image::FREE;
+   assert(image.data != nullptr);
+   auto image_data = static_cast<display_image_data *>(image.data);
+   TRY_LOG(allocate_image(image_create_info, image_data), "Failed to allocate image");
 
-   TRY_LOG(allocate_image(image_create_info, image_data, &image.image), "Failed to allocate image");
    image_status_lock.unlock();
 
    TRY_LOG(create_framebuffer(image_create_info, image, image_data), "Failed to create framebuffer");
@@ -407,6 +399,58 @@ VkResult swapchain::create_and_bind_swapchain_image(VkImageCreateInfo image_crea
    image_data->present_fence = std::move(present_fence.value());
 
    return VK_SUCCESS;
+}
+
+VkResult swapchain::create_swapchain_image(VkImageCreateInfo image_create_info, swapchain_image &image)
+{
+   /* Create image_data */
+   auto image_data = m_allocator.create<display_image_data>(1, m_device, m_allocator);
+   if (image_data == nullptr)
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+   image.data = image_data;
+
+   if (m_image_create_info.format == VK_FORMAT_UNDEFINED)
+   {
+      util::vector<wsialloc_format> importable_formats(
+         util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+      util::vector<uint64_t> exportable_modifiers(util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+
+      /* Query supported modifers. */
+      util::vector<VkDrmFormatModifierPropertiesEXT> drm_format_props(
+         util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+
+      TRY_LOG_CALL(
+         get_surface_compatible_formats(image_create_info, importable_formats, exportable_modifiers, drm_format_props));
+
+      /* TODO: Handle exportable images which use ICD allocated memory in preference to an external allocator. */
+      if (importable_formats.empty())
+      {
+         WSI_LOG_ERROR("Export/Import not supported.");
+         return VK_ERROR_INITIALIZATION_FAILED;
+      }
+
+      wsialloc_format allocated_format = { 0 };
+      TRY_LOG_CALL(allocate_wsialloc(image_create_info, image_data, importable_formats, &allocated_format, true));
+
+      for (auto &prop : drm_format_props)
+      {
+         if (prop.drmFormatModifier == allocated_format.modifier)
+         {
+            image_data->external_mem.set_num_memories(prop.drmFormatModifierPlaneCount);
+         }
+      }
+
+      TRY_LOG_CALL(fill_image_create_info(
+         image_create_info, m_image_creation_parameters.m_image_layout, m_image_creation_parameters.m_drm_mod_info,
+         m_image_creation_parameters.m_external_info, *image_data, allocated_format.modifier));
+
+      m_image_create_info = image_create_info;
+      m_image_creation_parameters.m_allocated_format = allocated_format;
+   }
+
+   return m_device_data.disp.CreateImage(m_device, &m_image_create_info, get_allocation_callbacks(), &image.image);
 }
 
 void swapchain::present_image(const pending_present_request &pending_present)
@@ -519,12 +563,11 @@ void swapchain::present_image(const pending_present_request &pending_present)
    return;
 }
 
-VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue, const VkSemaphore *sem_payload,
-                                              uint32_t sem_count, const void *submission_pnext)
+VkResult swapchain::image_set_present_payload(swapchain_image &image, VkQueue queue,
+                                              const queue_submit_semaphores &semaphores, const void *submission_pnext)
 {
-
    auto image_data = reinterpret_cast<display_image_data *>(image.data);
-   return image_data->present_fence.set_payload(queue, sem_payload, sem_count, submission_pnext);
+   return image_data->present_fence.set_payload(queue, semaphores, submission_pnext);
 }
 
 VkResult swapchain::image_wait_present(swapchain_image &image, uint64_t timeout)

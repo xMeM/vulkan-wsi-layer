@@ -38,7 +38,6 @@ namespace display
 surface::surface(drm_display_mode *display_mode, VkExtent2D extent)
    : m_display_mode(display_mode)
    , m_extent(extent)
-   , m_surface_properties(*this)
 {
 }
 

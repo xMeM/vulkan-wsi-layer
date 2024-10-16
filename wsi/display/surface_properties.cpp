@@ -37,13 +37,22 @@ namespace display
 
 constexpr int max_core_1_0_formats = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
 
-surface_properties::surface_properties()
-   : m_specific_surface(nullptr)
+void surface_properties::populate_present_mode_compatibilities()
 {
+   std::array<present_mode_compatibility, 1> compatible_present_modes_list = { present_mode_compatibility{
+      VK_PRESENT_MODE_FIFO_KHR, 1, { VK_PRESENT_MODE_FIFO_KHR } } };
+   m_compatible_present_modes = compatible_present_modes<1>(compatible_present_modes_list);
 }
 
-surface_properties::surface_properties(surface &wsi_surface)
-   : m_specific_surface(&wsi_surface)
+surface_properties::surface_properties(surface *wsi_surface)
+   : m_specific_surface(wsi_surface)
+   , m_supported_modes({ VK_PRESENT_MODE_FIFO_KHR })
+{
+   populate_present_mode_compatibilities();
+}
+
+surface_properties::surface_properties()
+   : surface_properties(nullptr)
 {
 }
 
@@ -66,6 +75,29 @@ VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_
    /* Composite alpha */
    pSurfaceCapabilities->supportedCompositeAlpha =
       static_cast<VkCompositeAlphaFlagBitsKHR>(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR | VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
+
+   return VK_SUCCESS;
+}
+
+VkResult surface_properties::get_surface_capabilities(VkPhysicalDevice physical_device,
+                                                      const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                                      VkSurfaceCapabilities2KHR *pSurfaceCapabilities)
+{
+   TRY(check_surface_present_mode_query_is_supported(pSurfaceInfo, m_supported_modes));
+
+   /* Image count limits */
+   get_surface_capabilities(physical_device, &pSurfaceCapabilities->surfaceCapabilities);
+
+   m_compatible_present_modes.get_surface_present_mode_compatibility_common(pSurfaceInfo, pSurfaceCapabilities);
+
+   auto surface_scaling_capabilities = util::find_extension<VkSurfacePresentScalingCapabilitiesEXT>(
+      VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT, pSurfaceCapabilities);
+   if (surface_scaling_capabilities != nullptr)
+   {
+      get_surface_present_scaling_and_gravity(surface_scaling_capabilities);
+      surface_scaling_capabilities->minScaledImageExtent = pSurfaceCapabilities->surfaceCapabilities.minImageExtent;
+      surface_scaling_capabilities->maxScaledImageExtent = pSurfaceCapabilities->surfaceCapabilities.maxImageExtent;
+   }
 
    return VK_SUCCESS;
 }
@@ -154,9 +186,7 @@ VkResult surface_properties::get_surface_present_modes(VkPhysicalDevice physical
    UNUSED(physical_device);
    UNUSED(surface);
 
-   static const std::array<VkPresentModeKHR, 1> modes = { VK_PRESENT_MODE_FIFO_KHR };
-
-   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, modes);
+   return get_surface_present_modes_common(pPresentModeCount, pPresentModes, m_supported_modes);
 }
 
 VWL_VKAPI_CALL(VkResult)
@@ -515,6 +545,19 @@ surface_properties &surface_properties::get_instance()
    static surface_properties instance;
 
    return instance;
+}
+
+void surface_properties::get_surface_present_scaling_and_gravity(
+   VkSurfacePresentScalingCapabilitiesEXT *scaling_capabilities)
+{
+   scaling_capabilities->supportedPresentScaling = VK_PRESENT_SCALING_ONE_TO_ONE_BIT_EXT;
+   scaling_capabilities->supportedPresentGravityX = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
+   scaling_capabilities->supportedPresentGravityY = VK_PRESENT_GRAVITY_MIN_BIT_EXT;
+}
+
+bool surface_properties::is_compatible_present_modes(VkPresentModeKHR present_mode_a, VkPresentModeKHR present_mode_b)
+{
+   return m_compatible_present_modes.is_compatible_present_modes(present_mode_a, present_mode_b);
 }
 
 } /* namespace display */
