@@ -224,6 +224,9 @@ swapchain_base::swapchain_base(layer::device_private_data &dev_data, const VkAll
    , m_error_state(VK_NOT_READY)
    , m_started_presenting(false)
    , m_frame_boundary_handler(m_device_data)
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   , m_presentation_timing(m_allocator)
+#endif
 {
 }
 
@@ -669,6 +672,22 @@ VkResult swapchain_base::notify_presentation_engine(const pending_present_reques
 VkResult swapchain_base::queue_present(VkQueue queue, const VkPresentInfoKHR *present_info,
                                        const swapchain_presentation_parameters &submit_info)
 {
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   if (submit_info.present_timing_info)
+   {
+      wsi::swapchain_presentation_entry presentation_entry = {};
+      presentation_entry.present_id = submit_info.pending_present.present_id;
+      if ((m_presentation_timing.size()) >= m_presentation_timing.capacity())
+      {
+         return VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT;
+      }
+
+      if (!m_presentation_timing.try_push_back(presentation_entry))
+      {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+   }
+#endif
 
    if (submit_info.switch_presentation_mode)
    {
@@ -843,5 +862,49 @@ void swapchain_base::set_present_id(uint64_t value)
       m_present_id = value;
    }
 }
+
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+VkResult swapchain_base::presentation_timing_queue_set_size(size_t queue_size)
+{
+   if (presentation_timing_get_num_outstanding_results() > queue_size)
+   {
+      return VK_NOT_READY;
+   }
+
+   util::vector<swapchain_presentation_entry> presentation_timing(
+      util::allocator(m_allocator, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE));
+   if (!presentation_timing.try_reserve(queue_size))
+   {
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   for (auto iter : m_presentation_timing)
+   {
+      if (iter.is_outstanding)
+      {
+         if (!presentation_timing.try_push_back(iter))
+         {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+      }
+   }
+   m_presentation_timing.swap(presentation_timing);
+   return VK_SUCCESS;
+}
+
+size_t swapchain_base::presentation_timing_get_num_outstanding_results()
+{
+   size_t num_outstanding = 0;
+
+   for (const auto &iter : m_presentation_timing)
+   {
+      if (iter.is_outstanding)
+      {
+         num_outstanding++;
+      }
+   }
+   return num_outstanding;
+}
+#endif
 
 } /* namespace wsi */

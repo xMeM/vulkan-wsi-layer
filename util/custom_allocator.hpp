@@ -368,6 +368,30 @@ public:
          return false;
       }
    }
+
+   /**
+    * @brief Like std::vector::reserve but doesn't throw on out of memory errors.
+    *
+    * @param size The new capacity of the container. Same as std::vector::reserve.
+    * @return true If the container was resized successfuly.
+    * @return false If the host has run out of memory or when there is a length error.
+    */
+   bool try_reserve(size_t size) noexcept
+   {
+      try
+      {
+         base::reserve(size);
+         return true;
+      }
+      catch (std::bad_alloc &e)
+      {
+         return false;
+      }
+      catch (const std::length_error &e)
+      {
+         return false;
+      }
+   }
 };
 
 } /* namespace util */

@@ -110,7 +110,28 @@ struct swapchain_presentation_parameters
     * to underlying layers/ICD if the feature is enabled.
     */
    VkBool32 handle_present_frame_boundary_event{ true };
+
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   /**
+    * Pointer to the present timing info.
+    */
+   const VkPresentTimingInfoEXT *present_timing_info{ nullptr };
+#endif
 };
+
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+struct swapchain_presentation_entry
+{
+   /**
+    * Whether this entry is an outstanding result or not.
+    */
+   bool is_outstanding{ false };
+   /**
+    * The present id.
+    */
+   uint64_t present_id{ 0 };
+};
+#endif
 
 #if WSI_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN
 struct image_compression_control_params
@@ -273,6 +294,18 @@ public:
     * @return VK_SUCCESS on success, an error code otherwise.
     */
    VkResult is_bind_allowed(uint32_t image_index) const;
+
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   /**
+    * @brief Set the size for the presentation timing queue
+    *
+    * @param queue_size The new queue size to set.
+    *
+    * @return VK_SUCCESS on success, VK_ERROR_OUT_OF_HOST_MEMORY when there is not enough memory, VK_NOT_READY otherwise.
+    * .
+    */
+   VkResult presentation_timing_queue_set_size(size_t queue_size);
+#endif
 
 protected:
    layer::device_private_data &m_device_data;
@@ -710,6 +743,20 @@ private:
     *
     */
    frame_boundary_handler m_frame_boundary_handler;
+
+#if VULKAN_WSI_LAYER_EXPERIMENTAL
+   /**
+    * @brief Queue for presentation timings.
+    */
+   util::vector<swapchain_presentation_entry> m_presentation_timing;
+
+   /**
+    * @brief Get the size of the presentation timing queue
+    *
+    * @return queue size of the presentation timestamp queue.
+    */
+   size_t presentation_timing_get_num_outstanding_results();
+#endif
 };
 
 } /* namespace wsi */

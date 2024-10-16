@@ -29,6 +29,7 @@
  */
 #include <cassert>
 #include "wsi_layer_experimental.hpp"
+#include "wsi/swapchain_base.hpp"
 
 #if VULKAN_WSI_LAYER_EXPERIMENTAL
 
@@ -38,8 +39,9 @@
 VWL_VKAPI_CALL(VkResult)
 wsi_layer_vkSetSwapchainPresentTimingQueueSizeEXT(VkDevice device, VkSwapchainKHR swapchain, uint32_t size) VWL_API_POST
 {
-   VkResult result = VK_SUCCESS;
-   return result;
+   assert(swapchain != VK_NULL_HANDLE);
+   auto *sc = reinterpret_cast<wsi::swapchain_base *>(swapchain);
+   return sc->presentation_timing_queue_set_size(size);
 }
 
 /**
